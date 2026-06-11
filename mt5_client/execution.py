@@ -17,6 +17,16 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     """
     symbol = signal["symbol"]
 
+    # 0. Cek apakah sudah ada posisi yang masih terbuka (aktif) untuk symbol ini
+    # Jika ada, batalkan OP baru agar tidak terjadi multi OP
+    positions = mt5.positions_get(symbol=symbol)
+    if positions is None:
+        print(f"❌ Eksekusi dibatalkan: Gagal mengambil daftar posisi untuk {symbol}, error: {mt5.last_error()}")
+        return False
+    elif len(positions) > 0:
+        print(f"⚠️ Eksekusi di-skip: Masih ada {len(positions)} posisi terbuka untuk {symbol}. Menunggu OP sebelumnya close (kena TP/SL).")
+        return False
+
     # 1. Pastikan symbol terpilih
     if not mt5.symbol_select(symbol, True):
         print(f"❌ Eksekusi dibatalkan: Gagal select symbol {symbol}")
