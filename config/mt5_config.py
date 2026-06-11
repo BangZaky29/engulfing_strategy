@@ -1,0 +1,43 @@
+# =====================================================
+# config/mt5_config.py
+# Konfigurasi MT5: symbol, timeframe, EMA
+# =====================================================
+
+import os
+from dataclasses import dataclass, field
+
+
+@dataclass
+class MT5Config:
+    """Konfigurasi koneksi dan data MT5."""
+    symbol: str = field(default_factory=lambda: os.getenv("MT5_SYMBOL", "XAUUSD"))
+    timeframes: list = field(default_factory=lambda: [x.strip() for x in os.getenv("MT5_TIMEFRAMES", "M1,M5").split(",")])
+    strategy_timeframe: str = field(default_factory=lambda: os.getenv("STRATEGY_TIMEFRAME", "M1"))
+    candle_count: int = field(default_factory=lambda: int(os.getenv("MT5_CANDLE_COUNT", "50")))
+
+    # Mapping label → konstanta MT5 (di-resolve saat runtime)
+    _TF_MAP = {
+        "M1": 1, "M5": 5, "M15": 15, "M30": 30,
+        "H1": 16385, "H4": 16388, "D1": 16408,
+        "W1": 32769, "MN1": 49153,
+    }
+
+    def get_mt5_timeframe(self, label: str) -> int:
+        """Konversi label timeframe ke konstanta MT5."""
+        return self._TF_MAP.get(label, 1)  # Default M1
+
+
+
+@dataclass
+class EMAConfig:
+    """Konfigurasi Exponential Moving Average."""
+    fast: int = field(default_factory=lambda: int(os.getenv("EMA_FAST", "10")))
+    slow: int = field(default_factory=lambda: int(os.getenv("EMA_SLOW", "20")))
+    offset: int = field(default_factory=lambda: int(os.getenv("EMA_OFFSET", "-2")))
+
+    @property
+    def labels(self) -> dict:
+        return {
+            "fast": f"EMA_{self.fast}",
+            "slow": f"EMA_{self.slow}",
+        }
