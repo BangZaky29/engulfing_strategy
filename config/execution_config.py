@@ -1,6 +1,6 @@
 # =====================================================
 # config/execution_config.py
-# Konfigurasi eksekusi MT5 (Lot, TP, Slippage, dll)
+# Konfigurasi eksekusi MT5 (Lot, SL, TP, Slippage, dll)
 # =====================================================
 
 import os
@@ -10,11 +10,9 @@ from dataclasses import dataclass, field
 @dataclass
 class ExecutionConfig:
     """Konfigurasi parameter trading/eksekusi."""
+
     lot_size: float = field(
         default_factory=lambda: float(os.getenv("EXECUTION_LOT_SIZE", "0.01"))
-    )
-    tp_points: int = field(
-        default_factory=lambda: int(os.getenv("EXECUTION_TP_POINTS", "100"))
     )
     slippage: int = field(
         default_factory=lambda: int(os.getenv("EXECUTION_SLIPPAGE", "20"))
@@ -22,17 +20,44 @@ class ExecutionConfig:
     magic_number: int = field(
         default_factory=lambda: int(os.getenv("EXECUTION_MAGIC_NUMBER", "777777"))
     )
-    sl_buffer_percent: float = field(
-        default_factory=lambda: float(os.getenv("EXECUTION_SL_BUFFER_PERCENT", "105"))
+
+    # === SL — Metode Ring % ===
+    sl_ring_pct: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_SL_RING_PCT", "80"))
     )
     """
-    Persentase posisi SL di luar High/Low candle engulfing (C2).
+    Posisi SL sebagai % dari ring C2, dihitung MENJAUH dari Close.
 
     Konsep Ring:
-      Candle Hijau (Bullish) : 0% = Close  | 100% = Low
-      Candle Merah (Bearish) : 0% = Close  | 100% = High
+      Candle Hijau (Bullish/BUY)  : 0% = Close | 100% = Low
+        ring_range  = Close - Low
+        sl_distance = ring_range * (sl_ring_pct / 100)
+        sl_price    = Close - sl_distance
 
-    Dengan sl_buffer_percent = 105:
-      BUY  -> SL = Low  - (Close - Low)  * 0.05   (5% di bawah Low)
-      SELL -> SL = High + (High - Close) * 0.05   (5% di atas High)
+      Candle Merah (Bearish/SELL) : 0% = Close | 100% = High
+        ring_range  = High - Close
+        sl_distance = ring_range * (sl_ring_pct / 100)
+        sl_price    = Close + sl_distance
+
+    Contoh sl_ring_pct=80, Close=3300, Low=3290 (ring=10):
+      sl_distance = 10 * 0.80 = 8
+      sl_price    = 3300 - 8  = 3292  ← 80% menjauh dari Close, dekat Low
+    """
+
+    # === TP — Rasio Risk:Reward dari Entry ===
+    tp_rr_ratio: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_TP_RR_RATIO", "1.0"))
+    )
+    """
+    Rasio TP terhadap jarak Entry → SL (Risk:Reward).
+
+      sl_from_entry = |entry_price - sl_price|
+      tp_distance   = sl_from_entry * tp_rr_ratio
+
+    Contoh tp_rr_ratio=1.0 (1:1):
+      entry=3300.50, sl=3292.00 → sl_from_entry=8.50
+      tp_price = 3300.50 + 8.50 = 3309.00
+
+    Contoh tp_rr_ratio=1.5 (1:1.5):
+      tp_price = 3300.50 + (8.50 * 1.5) = 3313.25
     """

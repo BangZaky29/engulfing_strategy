@@ -61,44 +61,76 @@ def detect_engulfing(
     # -----------------------------------------------------------------
     # [F1] Ring Length: panjang ring C2 minimal X pts
     # -----------------------------------------------------------------
-    ring_ok, c2_ring_pts, c2_ring_price, _ = check_ring_length(
-        curr_close, curr_high, curr_low, curr_is_bullish,
-        point, digits, cfg, verbose
-    )
-    if not ring_ok:
-        return None
+    if not cfg.filter_f1_ring_enabled:
+        if verbose:
+            print("   [--] [F1] Ring Filter: DISABLED (bypass)")
+        # Tetap hitung ring_range untuk keperluan build_signal
+        if curr_is_bullish:
+            c2_ring_price = curr_close - curr_low
+        else:
+            c2_ring_price = curr_high - curr_close
+        c2_ring_pts = round(c2_ring_price / point)
+    else:
+        ring_ok, c2_ring_pts, c2_ring_price, _ = check_ring_length(
+            curr_close, curr_high, curr_low, curr_is_bullish,
+            point, digits, cfg, verbose
+        )
+        if not ring_ok:
+            return None
 
     # -----------------------------------------------------------------
     # [F2] Anti-Doji: body minimal X% dari full ring
     # -----------------------------------------------------------------
-    body_ok, body_ring_pct = check_body_thickness(
-        curr_body, curr_high, curr_low,
-        point, digits, cfg, verbose
-    )
-    if not body_ok:
-        return None
+    if not cfg.filter_f2_doji_enabled:
+        if verbose:
+            print("   [--] [F2] Doji Filter: DISABLED (bypass)")
+        body_ring_pct = 0.0
+    else:
+        body_ok, body_ring_pct = check_body_thickness(
+            curr_body, curr_high, curr_low,
+            point, digits, cfg, verbose
+        )
+        if not body_ok:
+            return None
 
     # -----------------------------------------------------------------
     # [F3] Pola Engulfing: warna C1->C2, menelan, ratio
     # -----------------------------------------------------------------
-    pattern_ok, pattern_type, engulf_ratio = check_engulf_pattern(
-        prev_open, prev_body, prev_is_bullish,
-        curr_open, curr_close, curr_body, curr_is_bullish,
-        point, digits, cfg, verbose
-    )
-    if not pattern_ok or pattern_type is None:
-        return None
+    if not cfg.filter_f3_pattern_enabled:
+        if verbose:
+            print("   [--] [F3] Pattern Filter: DISABLED (bypass)")
+        # Tetap tentukan pattern_type dari warna C1->C2
+        if not prev_is_bullish and curr_is_bullish:
+            pattern_type = "bullish_engulfing"
+        elif prev_is_bullish and not curr_is_bullish:
+            pattern_type = "bearish_engulfing"
+        else:
+            pattern_type = "bullish_engulfing" if curr_is_bullish else "bearish_engulfing"
+        engulf_ratio = 0.0
+    else:
+        pattern_ok, pattern_type, engulf_ratio = check_engulf_pattern(
+            prev_open, prev_body, prev_is_bullish,
+            curr_open, curr_close, curr_body, curr_is_bullish,
+            point, digits, cfg, verbose
+        )
+        if not pattern_ok or pattern_type is None:
+            return None
 
     # -----------------------------------------------------------------
     # [F4] EMA Position: Close C2 di sisi benar EMA
+    # (gunakan flag filter_f4_ema_enabled ATAU ema_filter_enabled lama)
     # -----------------------------------------------------------------
-    ema_ok = check_ema_position(
-        pattern_type, curr_close,
-        ema_fast, ema_slow,
-        digits, cfg, verbose
-    )
-    if not ema_ok:
-        return None
+    if not cfg.filter_f4_ema_enabled:
+        if verbose:
+            print("   [--] [F4] EMA Filter: DISABLED (bypass)")
+    else:
+        ema_ok = check_ema_position(
+            pattern_type, curr_close,
+            ema_fast, ema_slow,
+            digits, cfg, verbose
+        )
+        if not ema_ok:
+            return None
 
     # -----------------------------------------------------------------
     # [OK] Semua filter lolos -> bangun sinyal
