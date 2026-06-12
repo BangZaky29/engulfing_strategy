@@ -144,3 +144,9 @@ SELECT
 FROM engulfing_signals es
 ORDER BY es.signal_time DESC
 LIMIT 50;
+
+-- =====================================================
+-- 6. Enable Realtime for engulfing_signals
+-- =====================================================
+ALTER PUBLICATION supabase_realtime ADD TABLE engulfing_signals;
+

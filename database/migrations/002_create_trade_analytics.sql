@@ -37,3 +37,7 @@ CREATE POLICY "Allow service role full access on trade_analytics"
 CREATE POLICY "Allow public read access on trade_analytics"
     ON trade_analytics FOR SELECT
     USING (true);
+
+-- Enable Realtime for trade_analytics
+ALTER PUBLICATION supabase_realtime ADD TABLE trade_analytics;
+
