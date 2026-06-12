@@ -40,3 +40,14 @@ class EngulfingConfig:
     min_body_ring_pct: float = field(
         default_factory=lambda: float(os.getenv("ENGULFING_MIN_BODY_RING_PCT", "20"))
     )
+
+    # ─── EMA Position Filter (syarat OP) ─────────────────────────────
+    # BUY  : Close C2 harus di ATAS  EMA referensi
+    # SELL : Close C2 harus di BAWAH EMA referensi
+    # ema_filter_source: "slow" = EMA_20 (default) | "fast" = EMA_10
+    ema_filter_enabled: bool = field(
+        default_factory=lambda: os.getenv("ENGULFING_EMA_FILTER_ENABLED", "true").lower() == "true"
+    )
+    ema_filter_source: str = field(
+        default_factory=lambda: os.getenv("ENGULFING_EMA_FILTER_SOURCE", "slow").lower()
+    )
