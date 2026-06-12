@@ -69,6 +69,10 @@ def get_closed_candles(mt5_cfg: MT5Config = None,
         "symbol": mt5_cfg.symbol,
         "timeframe": tf_label,
 
+        # Info MT5 (untuk konversi point)
+        "point": float(info.point),    # ukuran 1 MT5 point  (XAUUSD = 0.01)
+        "digits": int(info.digits),    # jumlah desimal harga (XAUUSD = 2)
+
         # C2 (candle terakhir yg close)
         "timestamp": c2["time"],
         "open_": float(c2["open"]),
