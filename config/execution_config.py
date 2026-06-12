@@ -22,3 +22,17 @@ class ExecutionConfig:
     magic_number: int = field(
         default_factory=lambda: int(os.getenv("EXECUTION_MAGIC_NUMBER", "777777"))
     )
+    sl_buffer_percent: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_SL_BUFFER_PERCENT", "105"))
+    )
+    """
+    Persentase posisi SL di luar High/Low candle engulfing (C2).
+
+    Konsep Ring:
+      Candle Hijau (Bullish) : 0% = Close  | 100% = Low
+      Candle Merah (Bearish) : 0% = Close  | 100% = High
+
+    Dengan sl_buffer_percent = 105:
+      BUY  -> SL = Low  - (Close - Low)  * 0.05   (5% di bawah Low)
+      SELL -> SL = High + (High - Close) * 0.05   (5% di atas High)
+    """

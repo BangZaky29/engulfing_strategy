@@ -45,6 +45,40 @@ def detect_engulfing(candle_data: dict, cfg: EngulfingConfig = None,
     ema_fast = candle_data["ema_fast"]
     ema_slow = candle_data["ema_slow"]
 
+    # =====================================================
+    # Pre-filter C2: Panjang Ring & Anti-Doji
+    # =====================================================
+
+    # [1] Hitung ring C2 sesuai warna:
+    #     Hijau → ring = Close - Low  | Merah → ring = High - Close
+    if curr_is_bullish:
+        c2_ring = curr_close - curr_low       # 0% = Close, 100% = Low
+    else:
+        c2_ring = curr_high - curr_close      # 0% = Close, 100% = High
+
+    # [2] Filter panjang minimal ring C2
+    if c2_ring < cfg.min_ring_points:
+        if verbose:
+            print(
+                f"   ⏩ C2 ring terlalu pendek: {c2_ring:.5f} < min {cfg.min_ring_points} point. Skip."
+            )
+        return None
+
+    # [3] Anti-Doji: body C2 minimal X% dari full ring (High - Low)
+    c2_full_ring = curr_high - curr_low       # 100% = High - Low
+    if c2_full_ring > 0:
+        body_ring_pct = (curr_body / c2_full_ring) * 100
+    else:
+        body_ring_pct = 0.0
+
+    if body_ring_pct < cfg.min_body_ring_pct:
+        if verbose:
+            print(
+                f"   ⏩ C2 body terlalu tipis (Doji): "
+                f"body={body_ring_pct:.1f}% < min {cfg.min_body_ring_pct}% dari full ring. Skip."
+            )
+        return None
+
     # --- Check patterns ---
     signal = None
 
@@ -76,6 +110,8 @@ def detect_engulfing(candle_data: dict, cfg: EngulfingConfig = None,
         print(
             f"   {emoji} {signal['pattern_type'].upper()} terdeteksi! "
             f"Ratio: {signal['engulf_ratio']:.2f}x | "
+            f"Ring C2: {c2_ring:.5f} pt | "
+            f"Body%: {body_ring_pct:.1f}% | "
             f"Confidence: {signal['confidence_score']:.1f}% | "
             f"EMA: {signal['ema_trend']}"
         )

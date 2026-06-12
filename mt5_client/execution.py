@@ -45,26 +45,45 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
 
     pattern = signal["pattern_type"]
 
-    # Cari Highest High dan Lowest Low dari 2 candle trigger (C1 dan C2)
-    highest_high = max(signal["prev_high"], signal["curr_high"])
-    lowest_low = min(signal["prev_low"], signal["curr_low"])
+    # =====================================================
+    # Hitung SL berdasarkan konsep "Ring" (SL_BUFFER_PERCENT)
+    #
+    # Candle Hijau (Bullish Engulfing / BUY):
+    #   Ring: 0% = Close (C2), 100% = Low (C2)
+    #   Range = curr_close - curr_low
+    #   SL = Low - (Range * (buffer - 100) / 100)
+    #   Contoh buffer=105 → SL = Low - Range * 0.05  (5% di bawah Low)
+    #
+    # Candle Merah (Bearish Engulfing / SELL):
+    #   Ring: 0% = Close (C2), 100% = High (C2)
+    #   Range = curr_high - curr_close
+    #   SL = High + (Range * (buffer - 100) / 100)
+    #   Contoh buffer=105 → SL = High + Range * 0.05  (5% di atas High)
+    # =====================================================
+    buffer_extra = (exec_cfg.sl_buffer_percent - 100.0) / 100.0  # e.g. 0.05 untuk 105%
+
+    curr_close = signal["curr_close"]
+    curr_low   = signal["curr_low"]
+    curr_high  = signal["curr_high"]
 
     # 2. Setup Parameter Order
     if pattern == "bullish_engulfing":
         order_type = mt5.ORDER_TYPE_BUY
         price = ask
-        # SL di ekor terbawah (Lowest Low C1/C2)
-        sl_price = lowest_low
-        # TP 100 point ke atas
+        # Ring: SL = Low - (Close - Low) * buffer_extra
+        ring_range = curr_close - curr_low   # jarak 0%→100% untuk candle hijau
+        sl_price = curr_low - (ring_range * buffer_extra)
+        # TP n-point ke atas
         tp_price = price + (exec_cfg.tp_points * point)
         comment = "Engulf_BUY"
 
     elif pattern == "bearish_engulfing":
         order_type = mt5.ORDER_TYPE_SELL
         price = bid
-        # SL di head teratas (Highest High C1/C2)
-        sl_price = highest_high
-        # TP 100 point ke bawah
+        # Ring: SL = High + (High - Close) * buffer_extra
+        ring_range = curr_high - curr_close  # jarak 0%→100% untuk candle merah
+        sl_price = curr_high + (ring_range * buffer_extra)
+        # TP n-point ke bawah
         tp_price = price - (exec_cfg.tp_points * point)
         comment = "Engulf_SELL"
 
@@ -90,7 +109,8 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
 
     print(f"\n🚀 Mengirim Eksekusi {comment} ...")
     print(f"   Harga OP : {round(price, digits)}")
-    print(f"   SL       : {round(sl_price, digits)} (Jarak: {abs(round(price - sl_price, digits))} harga)")
+    print(f"   SL       : {round(sl_price, digits)} "
+          f"(Ring {exec_cfg.sl_buffer_percent}% | Jarak: {abs(round(price - sl_price, digits))} harga)")
     print(f"   TP       : {round(tp_price, digits)} ({exec_cfg.tp_points} point)")
 
     # Kirim order
