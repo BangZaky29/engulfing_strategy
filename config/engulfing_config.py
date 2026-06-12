@@ -24,12 +24,18 @@ class EngulfingConfig:
     )
 
     # ─── Syarat Panjang Ring C2 ───────────────────────────────────────
-    # Panjang minimal ring C2 dalam satuan point (harga mentah, bukan pip).
-    # Candle Hijau : ring = Close - Low
+    # Panjang minimal & maksimal ring C2 dalam satuan point (harga mentah, bukan pip).
     # Candle Merah : ring = High  - Close
-    # Default = 10 point (misal XAUUSD: 10 × 0.01 = $0.10)
+    # Candle Hijau : ring = Close - Low
+    # Min  → ring terlalu pendek  : SKIP
+    # Max  → ring terlalu panjang : SKIP (candle terlalu volatile)
+    # Default min = 10 pts  (XAUUSD: $0.10)
+    # Default max = 700 pts (XAUUSD: $7.00)
     min_ring_points: float = field(
         default_factory=lambda: float(os.getenv("ENGULFING_MIN_RING_POINTS", "10"))
+    )
+    max_ring_points: float = field(
+        default_factory=lambda: float(os.getenv("ENGULFING_MAX_RING_POINTS", "700"))
     )
 
     # ─── Anti-Doji: Minimal Ketebalan Body C2 ────────────────────────
