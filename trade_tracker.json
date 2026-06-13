@@ -1,1 +1,11 @@
-{}
+{
+    "701610392": {
+        "symbol": "XAUUSD",
+        "mode": "BUY",
+        "tf": "M5",
+        "op_price": 4215.43,
+        "sl_price": 4212.898,
+        "tp_price": 4217.962,
+        "timestamp": "20260613_035001"
+    }
+}
