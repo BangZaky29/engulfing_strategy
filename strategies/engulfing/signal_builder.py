@@ -19,6 +19,65 @@ def build_signal(
     confidence = calc_confidence(engulf_ratio, pattern_type, ema_fast, ema_slow, curr_close, cfg)
     ema_trend  = get_ema_trend(ema_fast, ema_slow)
 
+    # 1. EMA Position relative to C2 (High, Low, Close)
+    ema_ref = ema_slow if cfg.ema_filter_source == "slow" else ema_fast
+    curr_high = candle_data["high_"]
+    curr_low = candle_data["low_"]
+    
+    if curr_low > ema_ref:
+        c2_ema_relation = "above"
+    elif curr_high < ema_ref:
+        c2_ema_relation = "below"
+    else:
+        c2_ema_relation = "cross"
+
+    # 2. Ring size in points
+    point = candle_data.get("point", 0.01)
+    is_bullish = candle_data["is_bullish"]
+    if is_bullish:
+        c2_ring_price = curr_close - curr_low
+    else:
+        c2_ring_price = curr_high - curr_close
+    c2_ring_pts = round(c2_ring_price / point)
+
+    # 3. Body thickness in points and percentages
+    curr_body = candle_data["body_size"]
+    curr_body_pts = round(curr_body / point)
+    
+    # Body pct relative to C2 ring
+    c2_body_pct = round((curr_body_pts / c2_ring_pts) * 100) if c2_ring_pts > 0 else 0
+    c2_wick_pct = max(0, 100 - c2_body_pct)
+
+    # 4. Close coverage
+    prev_open = candle_data["prev_open"]
+    prev_high = candle_data["prev_high"]
+    prev_low = candle_data["prev_low"]
+    
+    if pattern_type == "bullish_engulfing":
+        if curr_close > prev_high:
+            c2_close_coverage = "high_c1"
+        else:
+            c2_close_coverage = "open_c1"
+    else:  # bearish_engulfing
+        if curr_close < prev_low:
+            c2_close_coverage = "low_c1"
+        else:
+            c2_close_coverage = "open_c1"
+
+    # Save details into notes as JSON string
+    import json
+    raw_notes = generate_notes(pattern_type, engulf_ratio, ema_trend, confidence)
+    notes_payload = {
+        "c2_ema_relation": c2_ema_relation,
+        "c2_ring_pts": c2_ring_pts,
+        "c2_body_pts": curr_body_pts,
+        "c2_body_pct": c2_body_pct,
+        "c2_wick_pct": c2_wick_pct,
+        "c2_close_coverage": c2_close_coverage,
+        "raw_notes": raw_notes
+    }
+    notes_str = json.dumps(notes_payload)
+
     return {
         "symbol":         candle_data["symbol"],
         "timeframe":      candle_data["timeframe"],
@@ -41,7 +100,7 @@ def build_signal(
             (pattern_type == "bullish_engulfing" and ema_trend == "bullish")
             or (pattern_type == "bearish_engulfing" and ema_trend == "bearish")
         ),
-        "notes": generate_notes(pattern_type, engulf_ratio, ema_trend, confidence),
+        "notes": notes_str,
     }
 
 
