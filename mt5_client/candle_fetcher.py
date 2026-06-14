@@ -10,8 +10,8 @@ from config.mt5_config import MT5Config, EMAConfig
 from mt5_client.indicators import get_ema
 
 
-def get_closed_candles(mt5_cfg: MT5Config = None,
-                       ema_cfg: EMAConfig = None,
+def get_closed_candles(mt5_cfg: MT5Config | None = None,
+                       ema_cfg: EMAConfig | None = None,
                        tf_label: str = "M1",
                        verbose: bool = False) -> dict | None:
     """
@@ -24,9 +24,9 @@ def get_closed_candles(mt5_cfg: MT5Config = None,
         ema_cfg = EMAConfig()
 
     # Ambil rates dari MT5
-    rates = mt5.copy_rates_from_pos(mt5_cfg.symbol, mt5_cfg.get_mt5_timeframe(tf_label), 0, mt5_cfg.candle_count)
-    tick = mt5.symbol_info_tick(mt5_cfg.symbol)
-    info = mt5.symbol_info(mt5_cfg.symbol)
+    rates = mt5.copy_rates_from_pos(mt5_cfg.symbol, mt5_cfg.get_mt5_timeframe(tf_label), 0, mt5_cfg.candle_count)  # type: ignore
+    tick = mt5.symbol_info_tick(mt5_cfg.symbol)  # type: ignore
+    info = mt5.symbol_info(mt5_cfg.symbol)  # type: ignore
 
     if rates is None or len(rates) < 3 or tick is None or info is None:
         if verbose:
@@ -86,8 +86,8 @@ def get_closed_candles(mt5_cfg: MT5Config = None,
                 cross_count += 1
                 
         # Side Strength
-        closes_above = sum(closes > emas)
-        closes_below = sum(closes < emas)
+        closes_above = int((closes > emas).sum())
+        closes_below = int((closes < emas).sum())
         side_strength = abs(closes_above - closes_below) / lookback_period
         
     else:
@@ -112,8 +112,8 @@ def get_closed_candles(mt5_cfg: MT5Config = None,
         "timeframe": tf_label,
 
         # Info MT5 (untuk konversi point)
-        "point": float(info.point),    # ukuran 1 MT5 point  (XAUUSD = 0.01)
-        "digits": int(info.digits),    # jumlah desimal harga (XAUUSD = 2)
+        "point": info.point,           # ukuran 1 MT5 point  (XAUUSD = 0.01)
+        "digits": info.digits,         # jumlah desimal harga (XAUUSD = 2)
 
         # C2 (candle terakhir yg close)
         "timestamp": c2["time"],
@@ -145,6 +145,6 @@ def get_closed_candles(mt5_cfg: MT5Config = None,
         "avg_range_20": float(avg_range_20),
         "ema_now": float(ema_now),
         "ema_20_ago": float(ema_20_ago),
-        "cross_count_20": int(cross_count),
-        "side_strength_20": float(side_strength),
+        "cross_count_20": cross_count,
+        "side_strength_20": side_strength,
     }
