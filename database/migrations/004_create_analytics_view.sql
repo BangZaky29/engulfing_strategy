@@ -21,7 +21,8 @@ SELECT
     es.engulf_ratio,
     es.ema_trend,
     es.confidence_score,
-    es.signal_time
+    es.signal_time,
+    es.notes
 FROM trade_analytics ta
 LEFT JOIN engulfing_signals es 
     ON ta.symbol = es.symbol 
