@@ -61,36 +61,29 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     curr_high  = signal["curr_high"]
 
     # =====================================================
-    # Hitung SL — Metode Ring %
-    #
-    # sl_ring_pct = % menjauh dari Close ke arah Low/High
-    #   Default 80 → SL berada 80% perjalanan dari Close menuju Low/High
-    #
-    # Contoh BUY (Close=3300, Low=3290, sl_ring_pct=80):
-    #   ring_range  = 3300 - 3290 = 10
-    #   sl_distance = 10 * 0.80   =  8
-    #   sl_price    = 3300 - 8    = 3292  ← dekat Low, masih di dalam ring
-    #
-    # Contoh SELL (Close=3300, High=3310, sl_ring_pct=80):
-    #   ring_range  = 3310 - 3300 = 10
-    #   sl_distance = 10 * 0.80   =  8
-    #   sl_price    = 3300 + 8    = 3308  ← dekat High, masih di dalam ring
+    # Ambil Dynamic SL & RR dari Payload Sinyal (Jika Ada)
+    # Jika tidak ada (versi lama), fallback ke exec_cfg
     # =====================================================
-    sl_pct = exec_cfg.sl_ring_pct / 100.0   # e.g. 80 → 0.80
+    rr_ratio = signal.get("rr_ratio", exec_cfg.tp_rr_ratio)
+    sl_price_payload = signal.get("sl_price")
+    sl_pct_fallback = exec_cfg.sl_ring_pct / 100.0
 
     # 2. Setup Parameter Order
     if pattern == "bullish_engulfing":
         order_type  = mt5.ORDER_TYPE_BUY
         price       = ask
 
-        # SL — Ring BUY: Close → Low
-        ring_range  = curr_close - curr_low
-        sl_distance = ring_range * sl_pct
-        sl_price    = curr_close - sl_distance      # SL 80% menjauh dari Close ke Low
+        # SL
+        if sl_price_payload is not None:
+            sl_price = sl_price_payload
+        else:
+            ring_range  = curr_close - curr_low
+            sl_distance = ring_range * sl_pct_fallback
+            sl_price    = curr_close - sl_distance
 
-        # TP — 1:1 RR dari Entry
-        sl_from_entry = abs(price - sl_price)       # jarak entry (ask) ke SL
-        tp_price      = price + (sl_from_entry * exec_cfg.tp_rr_ratio)
+        # TP
+        sl_from_entry = abs(price - sl_price)
+        tp_price      = price + (sl_from_entry * rr_ratio)
 
         comment = "Engulf_BUY"
 
@@ -98,14 +91,17 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         order_type  = mt5.ORDER_TYPE_SELL
         price       = bid
 
-        # SL — Ring SELL: Close → High
-        ring_range  = curr_high - curr_close
-        sl_distance = ring_range * sl_pct
-        sl_price    = curr_close + sl_distance      # SL 80% menjauh dari Close ke High
+        # SL
+        if sl_price_payload is not None:
+            sl_price = sl_price_payload
+        else:
+            ring_range  = curr_high - curr_close
+            sl_distance = ring_range * sl_pct_fallback
+            sl_price    = curr_close + sl_distance
 
-        # TP — 1:1 RR dari Entry
-        sl_from_entry = abs(price - sl_price)       # jarak entry (bid) ke SL
-        tp_price      = price - (sl_from_entry * exec_cfg.tp_rr_ratio)
+        # TP
+        sl_from_entry = abs(price - sl_price)
+        tp_price      = price - (sl_from_entry * rr_ratio)
 
         comment = "Engulf_SELL"
 
@@ -133,9 +129,10 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     print(f"\n🚀 Mengirim Eksekusi {comment} ...")
     print(f"   Pair      : {symbol}")
     print(f"   Harga OP  : {round(price,    digits)}")
-    print(f"   Ring      : {round(ring_range, digits)} | SL_PCT={exec_cfg.sl_ring_pct}% | sl_distance={round(sl_distance, digits)}")
-    print(f"   SL        : {round(sl_price,  digits)} (jarak dari entry: {round(sl_from_entry, digits)})")
-    print(f"   TP        : {round(tp_price,  digits)} (RR {exec_cfg.tp_rr_ratio}:1 | jarak: {round(sl_from_entry * exec_cfg.tp_rr_ratio, digits)})")
+    ring_pts = round(abs(curr_close - curr_low) / point) if pattern == "bullish_engulfing" else round(abs(curr_high - curr_close) / point)
+    print(f"   Ring      : {ring_pts} pts | SL_Price={sl_price_payload}")
+    print(f"   SL        : {round(sl_price, digits)} (jarak dari entry: {round(sl_from_entry, digits)})")
+    print(f"   TP        : {round(tp_price, digits)} (RR {rr_ratio}:1 | jarak: {round(abs(tp_price - price), digits)})")
 
     # 5. Kirim order
     result = mt5.order_send(request)  # type: ignore
