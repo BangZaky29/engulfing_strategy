@@ -52,6 +52,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         return None
 
     digits = symbol_info.digits
+    point  = symbol_info.point
     ask    = tick.ask
     bid    = tick.bid
 
@@ -129,7 +130,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     print(f"\n🚀 Mengirim Eksekusi {comment} ...")
     print(f"   Pair      : {symbol}")
     print(f"   Harga OP  : {round(price,    digits)}")
-    ring_pts = round(abs(curr_close - curr_low) / point) if pattern == "bullish_engulfing" else round(abs(curr_high - curr_close) / point)
+    ring_pts = round(abs(curr_high - curr_low) / point)
     print(f"   Ring      : {ring_pts} pts | SL_Price={sl_price_payload}")
     print(f"   SL        : {round(sl_price, digits)} (jarak dari entry: {round(sl_from_entry, digits)})")
     print(f"   TP        : {round(tp_price, digits)} (RR {rr_ratio}:1 | jarak: {round(abs(tp_price - price), digits)})")
