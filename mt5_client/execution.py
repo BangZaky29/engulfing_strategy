@@ -10,7 +10,7 @@ from config.execution_config import ExecutionConfig
 from mt5_client.trade_monitor import add_tracked_trade
 
 
-def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: ExecutionConfig, ema_cfg: EMAConfig) -> bool:
+def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: ExecutionConfig, ema_cfg: EMAConfig) -> int | None:
     """
     Eksekusi OP berdasarkan sinyal Engulfing.
 
@@ -32,24 +32,24 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     symbol = signal["symbol"]
 
     # 0. Cek apakah sudah ada posisi yang masih terbuka (aktif) untuk symbol ini
-    positions = mt5.positions_get(symbol=symbol)
+    positions = mt5.positions_get(symbol=symbol)  # type: ignore
     if positions is None:
-        print(f"❌ Eksekusi dibatalkan: Gagal mengambil daftar posisi untuk {symbol}, error: {mt5.last_error()}")
-        return False
+        print(f"❌ Eksekusi dibatalkan: Gagal mengambil daftar posisi untuk {symbol}, error: {mt5.last_error()}")  # type: ignore
+        return None
     elif len(positions) > 0:
         print(f"⚠️ Eksekusi di-skip: Masih ada {len(positions)} posisi terbuka untuk {symbol}. Menunggu OP sebelumnya close (kena TP/SL).")
-        return False
+        return None
 
     # 1. Pastikan symbol terpilih
-    if not mt5.symbol_select(symbol, True):
+    if not mt5.symbol_select(symbol, True):  # type: ignore
         print(f"❌ Eksekusi dibatalkan: Gagal select symbol {symbol}")
-        return False
+        return None
 
-    symbol_info = mt5.symbol_info(symbol)
-    tick = mt5.symbol_info_tick(symbol)
+    symbol_info = mt5.symbol_info(symbol)  # type: ignore
+    tick = mt5.symbol_info_tick(symbol)  # type: ignore
     if symbol_info is None or tick is None:
         print(f"❌ Eksekusi dibatalkan: Gagal ambil tick {symbol}")
-        return False
+        return None
 
     digits = symbol_info.digits
     ask    = tick.ask
@@ -111,7 +111,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
 
     else:
         print(f"❌ Pola tidak dikenali: {pattern}")
-        return False
+        return None
 
     # 3. Request ke MT5
     request = {
@@ -138,15 +138,15 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     print(f"   TP        : {round(tp_price,  digits)} (RR {exec_cfg.tp_rr_ratio}:1 | jarak: {round(sl_from_entry * exec_cfg.tp_rr_ratio, digits)})")
 
     # 5. Kirim order
-    result = mt5.order_send(request)
+    result = mt5.order_send(request)  # type: ignore
 
     if result is None:
-        print(f"❌ Eksekusi gagal! mt5.order_send() me-return None. Error: {mt5.last_error()}")
-        return False
+        print(f"❌ Eksekusi gagal! mt5.order_send() me-return None. Error: {mt5.last_error()}")  # type: ignore
+        return None
 
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         print(f"❌ Eksekusi ditolak MT5! Retcode: {result.retcode} ({result.comment})")
-        return False
+        return None
 
     print(f"✅ EKSEKUSI SUKSES! Ticket: #{result.order} | Volume: {result.volume}")
 
@@ -167,4 +167,4 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     except Exception as e:
         print(f"⚠️ Gagal menambahkan tracker: {e}")
 
-    return True
+    return result.order

@@ -104,13 +104,25 @@ def main():
                     if signal:
                         total_signals += 1
 
-                        # Simpan sinyal ke Supabase
-                        SignalRepo.upsert(signal)
-
                         # =====================================================
                         # Eksekusi Order di MT5
                         # =====================================================
-                        execute_engulfing_order(signal, mt5_cfg, exec_cfg, ema_cfg)
+                        ticket_id = execute_engulfing_order(signal, mt5_cfg, exec_cfg, ema_cfg)
+
+                        # Flag is_confirmed menandakan OP dieksekusi di market
+                        signal["is_confirmed"] = bool(ticket_id)
+                        
+                        if ticket_id:
+                            import json
+                            try:
+                                notes_obj = json.loads(signal["notes"])
+                                notes_obj["ticket_id"] = ticket_id
+                                signal["notes"] = json.dumps(notes_obj)
+                            except:
+                                pass
+
+                        # Simpan sinyal ke Supabase
+                        SignalRepo.upsert(signal)
 
                         # Update statistik harian
                         today = datetime.now().strftime("%Y-%m-%d")
