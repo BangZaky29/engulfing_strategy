@@ -45,20 +45,60 @@ def get_closed_candles(mt5_cfg: MT5Config = None,
     ema_slow = get_ema(df, span=ema_cfg.slow, offset=ema_cfg.offset)
     spread = round(tick.ask - tick.bid, info.digits)
 
-    # Body & wick C2
+    # Body & wick C2 (Engulfing Candle / C1 in new rules)
     body_c2 = abs(c2["close"] - c2["open"])
     upper_wick_c2 = c2["high"] - max(c2["open"], c2["close"])
     lower_wick_c2 = min(c2["open"], c2["close"]) - c2["low"]
     is_bullish_c2 = c2["close"] > c2["open"]
 
-    # Body C1
+    # Body C1 (Engulfed Candle / C2 in new rules)
     body_c1 = abs(c1["close"] - c1["open"])
     is_bullish_c1 = c1["close"] > c1["open"]
+
+    # --- Market State (20 Candles Lookback) ---
+    lookback_period = 20
+    # Cek apakah df cukup panjang
+    if len(df) >= lookback_period + 3:
+        # iloc[-2] adalah candle terakhir yg close
+        lookback_df = df.iloc[-(lookback_period + 2):-2]
+        
+        # Average Range
+        avg_range_20 = (lookback_df["high"] - lookback_df["low"]).mean()
+        
+        # EMA series untuk seluruh df (span=20 default)
+        ema_series = df["close"].ewm(span=20, adjust=False).mean()
+        
+        # EMA slope point = abs(EMA now - EMA 20 ago)
+        ema_now = ema_series.iloc[-2]
+        ema_20_ago = ema_series.iloc[-(lookback_period + 2)]
+        
+        # Cross Count
+        # cross terjadi jika close[i] > ema[i] dan close[i-1] < ema[i-1] (atau sebaliknya)
+        closes = lookback_df["close"].values
+        emas = ema_series.iloc[-(lookback_period + 2):-2].values
+        
+        cross_count = 0
+        for i in range(1, len(closes)):
+            if (closes[i] > emas[i] and closes[i-1] < emas[i-1]) or \
+               (closes[i] < emas[i] and closes[i-1] > emas[i-1]):
+                cross_count += 1
+                
+        # Side Strength
+        closes_above = sum(closes > emas)
+        closes_below = sum(closes < emas)
+        side_strength = abs(closes_above - closes_below) / lookback_period
+        
+    else:
+        avg_range_20 = 0.0
+        ema_now = 0.0
+        ema_20_ago = 0.0
+        cross_count = 0
+        side_strength = 0.0
 
     if verbose:
         warna = "🟩 Hijau" if is_bullish_c2 else "🟥 Merah"
         print(
-            f"✅ {mt5_cfg.symbol} {tf_label} | C2: {c2['time']} {warna} "
+            f"✅ {mt5_cfg.symbol} {tf_label} | C1(New): {c2['time']} {warna} "
             f"O:{c2['open']:.2f} H:{c2['high']:.2f} L:{c2['low']:.2f} C:{c2['close']:.2f} "
             f"| Spread: {spread}"
         )
@@ -98,4 +138,11 @@ def get_closed_candles(mt5_cfg: MT5Config = None,
         # Indikator
         "ema_fast": float(ema_fast),
         "ema_slow": float(ema_slow),
+        
+        # Market State (20 Lookback)
+        "avg_range_20": float(avg_range_20),
+        "ema_now": float(ema_now),
+        "ema_20_ago": float(ema_20_ago),
+        "cross_count_20": int(cross_count),
+        "side_strength_20": float(side_strength),
     }

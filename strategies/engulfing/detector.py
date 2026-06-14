@@ -1,161 +1,112 @@
 # =====================================================
 # strategies/engulfing/detector.py
 # Orchestrator: jalankan semua filter secara berurutan
-#
-# Urutan Filter:
-#   [F1] Ring Length   -> f1_ring.py
-#   [F2] Anti-Doji     -> f2_doji.py
-#   [F3] Pola Engulf   -> f3_pattern.py  (warna + menelan + ratio)
-#   [F4] EMA Position  -> f4_ema.py
 # =====================================================
 
+import os
 from config.engulfing_config import EngulfingConfig
-from .filters import (
-    check_ring_length,
-    check_body_thickness,
-    check_engulf_pattern,
-    check_ema_position,
-)
+from .filters import check_engulfing_trigger, calculate_scoring
 from .signal_builder import build_signal
 
 
 def detect_engulfing(
     candle_data: dict,
-    cfg: EngulfingConfig = None,
+    cfg: EngulfingConfig | None = None,
     verbose: bool = False,
 ) -> dict | None:
-    """
-    Jalankan semua filter secara berurutan.
-    Return sinyal jika semua filter lolos, None jika gagal.
-    """
     if cfg is None:
         cfg = EngulfingConfig()
 
     # --- Unpack data ---
-    prev_open       = candle_data["prev_open"]
-    prev_is_bullish = candle_data["prev_is_bullish"]
-    prev_body       = candle_data["prev_body_size"]
-
-    curr_open       = candle_data["open_"]
-    curr_close      = candle_data["close_"]
-    curr_high       = candle_data["high_"]
-    curr_low        = candle_data["low_"]
-    curr_is_bullish = candle_data["is_bullish"]
-    curr_body       = candle_data["body_size"]
-
-    ema_fast        = candle_data["ema_fast"]
-    ema_slow        = candle_data["ema_slow"]
+    # C1 adalah candle engulfing yg baru close
+    c1_open       = candle_data["open_"]
+    c1_close      = candle_data["close_"]
+    c1_high       = candle_data["high_"]
+    c1_low        = candle_data["low_"]
+    c1_is_bullish = candle_data["is_bullish"]
+    
+    # C2 adalah candle yg ditelan
+    c2_open       = candle_data["prev_open"]
+    c2_close      = candle_data["prev_close"]
+    c2_high       = candle_data["prev_high"]
+    c2_low        = candle_data["prev_low"]
+    c2_is_bullish = candle_data["prev_is_bullish"]
 
     point  = candle_data.get("point", 0.01)
     digits = candle_data.get("digits", 2)
 
-    warna_c2 = "Hijau [BUY]"  if curr_is_bullish else "Merah [SELL]"
-    warna_c1 = "Hijau [BUY]"  if prev_is_bullish else "Merah [SELL]"
+    # Market State Data
+    avg_range_20 = candle_data.get("avg_range_20", 0.0)
+    ema_now = candle_data.get("ema_now", 0.0)
+    ema_20_ago = candle_data.get("ema_20_ago", 0.0)
+    cross_count = candle_data.get("cross_count_20", 0)
+    side_strength = candle_data.get("side_strength_20", 0.0)
+
+    warna_c1 = "Hijau [BUY]" if c1_is_bullish else "Merah [SELL]"
+    warna_c2 = "Hijau [BUY]" if c2_is_bullish else "Merah [SELL]"
 
     # --- Header verbose ---
     if verbose:
         print(f"   {'-'*52}")
-        print(f"   [FILTER] C2={warna_c2}  C1={warna_c1}")
+        print(f"   [FILTER] C1(Engulf)={warna_c1}  C2(Ditela)={warna_c2}")
         print(f"   {'-'*52}")
 
     # -----------------------------------------------------------------
-    # [F1] Ring Length: panjang ring C2 minimal X pts
+    # [F1] Engulfing Trigger
     # -----------------------------------------------------------------
-    if not cfg.filter_f1_ring_enabled:
-        if verbose:
-            print("   [--] [F1] Ring Filter: DISABLED (bypass)")
-        # Tetap hitung ring_range untuk keperluan build_signal
-        if curr_is_bullish:
-            c2_ring_price = curr_close - curr_low
-        else:
-            c2_ring_price = curr_high - curr_close
-        c2_ring_pts = round(c2_ring_price / point)
+    if not cfg.filter_f1_trigger_enabled:
+        if verbose: print("   [--] [F1] Trigger: DISABLED (bypass)")
+        pattern_type = "bullish_engulfing" if c1_is_bullish else "bearish_engulfing"
     else:
-        ring_ok, c2_ring_pts, c2_ring_price, _ = check_ring_length(
-            curr_close, curr_high, curr_low, curr_is_bullish,
-            point, digits, cfg, verbose
+        is_valid, pattern_type = check_engulfing_trigger(
+            c1_open, c1_close, c2_open, c2_close, verbose
         )
-        if not ring_ok:
+        if not is_valid or pattern_type is None:
             return None
 
     # -----------------------------------------------------------------
-    # [F2] Anti-Doji: body minimal X% dari full ring
+    # [F2] Scoring & Metrics
     # -----------------------------------------------------------------
-    if not cfg.filter_f2_doji_enabled:
-        if verbose:
-            print("   [--] [F2] Doji Filter: DISABLED (bypass)")
-        body_ring_pct = 0.0
+    if not cfg.filter_f2_scoring_enabled:
+        if verbose: print("   [--] [F2] Scoring: DISABLED (bypass)")
+        scoring_res = {
+            "range_pts": 0, "body_pct": 100, "wick_pct": 0, "cp_pct": 100,
+            "ema_label": "None", "market_state": "Normal", "total_score": 100,
+            "grade": "A+", "action_str": "BUY TREND" if c1_is_bullish else "SELL TREND"
+        }
     else:
-        body_ok, body_ring_pct = check_body_thickness(
-            curr_body, curr_high, curr_low,
-            point, digits, cfg, verbose
+        scoring_res = calculate_scoring(
+            c1_open, c1_close, c1_high, c1_low,
+            c2_open, c2_close, c2_high, c2_low,
+            avg_range_20, ema_now, ema_20_ago,
+            cross_count, side_strength, pattern_type, point,
+            cfg, verbose
         )
-        if not body_ok:
-            return None
 
-    # -----------------------------------------------------------------
-    # [F3] Pola Engulfing: warna C1->C2, menelan, ratio
-    # -----------------------------------------------------------------
-    if not cfg.filter_f3_pattern_enabled:
+    # Filtering Grade Minimal
+    grade_mapping = {"A+": 7, "A": 6, "B+": 5, "B": 4, "C+": 3, "C": 2, "D": 1}
+    min_allowed = grade_mapping.get(cfg.min_grade_allowed, 3) # default C+
+    grade_str = str(scoring_res.get("grade", "D"))
+    curr_grade = grade_mapping.get(grade_str, 1)
+    
+    if curr_grade < min_allowed:
         if verbose:
-            print("   [--] [F3] Pattern Filter: DISABLED (bypass)")
-        # Tetap tentukan pattern_type dari warna C1->C2
-        if not prev_is_bullish and curr_is_bullish:
-            pattern_type = "bullish_engulfing"
-        elif prev_is_bullish and not curr_is_bullish:
-            pattern_type = "bearish_engulfing"
-        else:
-            pattern_type = "bullish_engulfing" if curr_is_bullish else "bearish_engulfing"
-        engulf_ratio = 0.0
-    else:
-        pattern_ok, pattern_type, engulf_ratio = check_engulf_pattern(
-            prev_open, prev_body, prev_is_bullish,
-            curr_open, curr_close, curr_body, curr_is_bullish,
-            point, digits, cfg, verbose
-        )
-        if not pattern_ok or pattern_type is None:
-            return None
-
-    # -----------------------------------------------------------------
-    # [F4] EMA Position: Close C2 di sisi benar EMA
-    # (gunakan flag filter_f4_ema_enabled ATAU ema_filter_enabled lama)
-    # -----------------------------------------------------------------
-    if not cfg.filter_f4_ema_enabled:
-        if verbose:
-            print("   [--] [F4] EMA Filter: DISABLED (bypass)")
-    else:
-        ema_ok = check_ema_position(
-            pattern_type, curr_close,
-            ema_fast, ema_slow,
-            digits, cfg, verbose
-        )
-        if not ema_ok:
-            return None
+            print(f"   >> SKIP: Grade {scoring_res['grade']} di bawah batas {cfg.min_grade_allowed}")
+        return None
 
     # -----------------------------------------------------------------
     # [OK] Semua filter lolos -> bangun sinyal
     # -----------------------------------------------------------------
     signal = build_signal(
-        candle_data, pattern_type, engulf_ratio,
-        ema_fast, ema_slow, curr_close, cfg
+        candle_data, pattern_type, scoring_res, cfg
     )
 
     if verbose:
-        label     = "[BUY]" if pattern_type == "bullish_engulfing" else "[SELL]"
-        ema_ref   = ema_slow if cfg.ema_filter_source == "slow" else ema_fast
-        ema_label = f"EMA_{cfg.ema_filter_source.upper()}"
+        sl_pts = signal.get("sl_pts", 0)
+        sl_price = signal.get("sl_price", 0.0)
         print(f"   {'-'*52}")
-        print(f"   {label} {pattern_type.upper()} LOLOS SEMUA FILTER!")
-        print(
-            f"      Ring  : {c2_ring_pts} pts"
-            f" | Body: {body_ring_pct:.1f}%"
-            f" | Ratio: {signal['engulf_ratio']:.2f}x"
-        )
-        print(
-            f"      EMA   : Close_C2={curr_close:.{digits}f}"
-            f" vs {ema_label}={ema_ref:.{digits}f}"
-            f" | Confidence: {signal['confidence_score']:.1f}%"
-        )
+        print(f"   {pattern_type.upper()} LOLOS SEMUA FILTER!")
+        print(f"   Engulfing | {signal['symbol']} | {signal['timeframe']} | {scoring_res['action_str']} | Grade : {scoring_res['grade']} | B : {scoring_res['body_pct']}% | CP : {scoring_res['cp_pct']}% | RR : {signal['rr_ratio']} | SL : {sl_price} ({sl_pts}pts)")
         print(f"   {'-'*52}")
 
     return signal

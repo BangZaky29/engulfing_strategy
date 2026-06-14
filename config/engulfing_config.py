@@ -10,54 +10,25 @@ from dataclasses import dataclass, field
 @dataclass
 class EngulfingConfig:
     """Threshold dan parameter untuk engulfing detection."""
-    min_body_ratio: float = field(
-        default_factory=lambda: float(os.getenv("ENGULFING_MIN_BODY_RATIO", "1.2"))
+    filter_f1_trigger_enabled: bool = field(
+        default_factory=lambda: os.getenv("FILTER_F1_TRIGGER_ENABLED", "true").lower() == "true"
     )
-    min_body_pips: float = field(
-        default_factory=lambda: float(os.getenv("ENGULFING_MIN_BODY_PIPS", "0.5"))
+    filter_f2_scoring_enabled: bool = field(
+        default_factory=lambda: os.getenv("FILTER_F2_SCORING_ENABLED", "true").lower() == "true"
     )
-    confidence_ema_bonus: float = field(
-        default_factory=lambda: float(os.getenv("ENGULFING_EMA_BONUS", "20"))
+    filter_market_state_enabled: bool = field(
+        default_factory=lambda: os.getenv("FILTER_MARKET_STATE_ENABLED", "false").lower() == "true"
     )
-    confidence_ratio_bonus: float = field(
-        default_factory=lambda: float(os.getenv("ENGULFING_RATIO_BONUS", "15"))
+    filter_ema_scoring_enabled: bool = field(
+        default_factory=lambda: os.getenv("FILTER_EMA_SCORING_ENABLED", "false").lower() == "true"
     )
-
-    # --- Toggle Filter ---
-    # true  = filter aktif (default)
-    # false = filter di-bypass (sinyal tetap lolos meski tidak memenuhi syarat)
-    filter_f1_ring_enabled: bool = field(
-        default_factory=lambda: os.getenv("FILTER_F1_RING_ENABLED", "true").lower() == "true"
-    )
-
-    # ─── Syarat Panjang Ring C2 ───────────────────────────────────────
-    min_ring_points: float = field(
-        default_factory=lambda: float(os.getenv("ENGULFING_MIN_RING_POINTS", "10"))
-    )
-    max_ring_points: float = field(
-        default_factory=lambda: float(os.getenv("ENGULFING_MAX_RING_POINTS", "700"))
-    )
-
-    filter_f2_doji_enabled: bool = field(
-        default_factory=lambda: os.getenv("FILTER_F2_DOJI_ENABLED", "true").lower() == "true"
-    )
-
-    # ─── Anti-Doji: Minimal Ketebalan Body C2 ────────────────────────
-    min_body_ring_pct: float = field(
-        default_factory=lambda: float(os.getenv("ENGULFING_MIN_BODY_RING_PCT", "20"))
-    )
-
-    filter_f3_pattern_enabled: bool = field(
-        default_factory=lambda: os.getenv("FILTER_F3_PATTERN_ENABLED", "true").lower() == "true"
-    )
-
-    # ─── EMA Position Filter ─────────────────────────────────────────
-    filter_f4_ema_enabled: bool = field(
-        default_factory=lambda: os.getenv("FILTER_F4_EMA_ENABLED", "true").lower() == "true"
-    )
-    ema_filter_enabled: bool = field(
-        default_factory=lambda: os.getenv("ENGULFING_EMA_FILTER_ENABLED", "true").lower() == "true"
-    )
-    ema_filter_source: str = field(
-        default_factory=lambda: os.getenv("ENGULFING_EMA_FILTER_SOURCE", "slow").lower()
-    )
+    
+    score_weight_body: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_BODY", "40")))
+    score_weight_range: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_RANGE", "30")))
+    score_weight_ema: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_EMA", "20")))
+    score_weight_cp: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_CP", "10")))
+    score_bonus_trend: float = field(default_factory=lambda: float(os.getenv("SCORE_BONUS_TREND", "5")))
+    score_penalty_sideways: float = field(default_factory=lambda: float(os.getenv("SCORE_PENALTY_SIDEWAYS", "-15")))
+    
+    min_grade_allowed: str = field(default_factory=lambda: os.getenv("MIN_GRADE_ALLOWED", "C+"))
+    ema_source: int = field(default_factory=lambda: int(os.getenv("ENGULFING_EMA_SOURCE", "20")))

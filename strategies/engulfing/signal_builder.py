@@ -1,80 +1,53 @@
 # =====================================================
 # strategies/engulfing/signal_builder.py
-# Build sinyal, hitung confidence, generate notes
+# Build sinyal dan notes payload
 # =====================================================
 
+import json
 from config.engulfing_config import EngulfingConfig
 
 
 def build_signal(
     candle_data: dict,
     pattern_type: str,
-    engulf_ratio: float,
-    ema_fast: float,
-    ema_slow: float,
-    curr_close: float,
+    scoring_res: dict,
     cfg: EngulfingConfig,
 ) -> dict:
     """Build dict sinyal lengkap untuk disimpan ke DB / dikirim ke execution."""
-    confidence = calc_confidence(engulf_ratio, pattern_type, ema_fast, ema_slow, curr_close, cfg)
-    ema_trend  = get_ema_trend(ema_fast, ema_slow)
-
-    # 1. EMA Position relative to C2 (High, Low, Close)
-    ema_ref = ema_slow if cfg.ema_filter_source == "slow" else ema_fast
-    curr_high = candle_data["high_"]
-    curr_low = candle_data["low_"]
     
-    if curr_low > ema_ref:
-        c2_ema_relation = "above"
-    elif curr_high < ema_ref:
-        c2_ema_relation = "below"
-    else:
-        c2_ema_relation = "cross"
+    c1_open       = candle_data["open_"]
+    c1_close      = candle_data["close_"]
+    c1_high       = candle_data["high_"]
+    c1_low        = candle_data["low_"]
+    point         = candle_data.get("point", 0.01)
 
-    # 2. Ring size in points
-    point = candle_data.get("point", 0.01)
-    is_bullish = candle_data["is_bullish"]
-    if is_bullish:
-        c2_ring_price = curr_close - curr_low
-    else:
-        c2_ring_price = curr_high - curr_close
-    c2_ring_pts = round(c2_ring_price / point)
-
-    # 3. Body thickness in points and percentages
-    curr_body = candle_data["body_size"]
-    curr_body_pts = round(curr_body / point)
-    
-    # Body pct relative to C2 ring
-    c2_body_pct = round((curr_body_pts / c2_ring_pts) * 100) if c2_ring_pts > 0 else 0
-    c2_wick_pct = max(0, 100 - c2_body_pct)
-
-    # 4. Close coverage
-    prev_open = candle_data["prev_open"]
-    prev_high = candle_data["prev_high"]
-    prev_low = candle_data["prev_low"]
+    # 1. Calculate SL pts and SL price
+    import os
+    sl_pct = float(os.getenv("EXECUTION_SL_PCT", "75"))
+    range_c1_price = c1_high - c1_low
+    sl_distance_price = range_c1_price * (sl_pct / 100.0)
     
     if pattern_type == "bullish_engulfing":
-        if curr_close > prev_high:
-            c2_close_coverage = "high_c1"
-        else:
-            c2_close_coverage = "open_c1"
-    else:  # bearish_engulfing
-        if curr_close < prev_low:
-            c2_close_coverage = "low_c1"
-        else:
-            c2_close_coverage = "open_c1"
+        sl_price = c1_low - sl_distance_price
+    else:
+        sl_price = c1_high + sl_distance_price
+        
+    sl_pts = round(sl_distance_price / point) if point > 0 else 0
+
+    # 2. Calculate RR Ratio
+    rr_ratio = float(os.getenv("EXECUTION_TP_RR_RATIO", "1.5"))
 
     # Save details into notes as JSON string
-    import json
-    raw_notes = generate_notes(pattern_type, engulf_ratio, ema_trend, confidence)
     notes_payload = {
-        "c2_ema_relation": c2_ema_relation,
-        "c2_ring_pts": c2_ring_pts,
-        "c2_body_pts": curr_body_pts,
-        "c2_body_pct": c2_body_pct,
-        "c2_wick_pct": c2_wick_pct,
-        "c2_close_coverage": c2_close_coverage,
-        "raw_notes": raw_notes
+        "grade": scoring_res["grade"],
+        "action_str": scoring_res["action_str"],
+        "body_pct": scoring_res["body_pct"],
+        "cp_pct": scoring_res["cp_pct"],
+        "rr_ratio": rr_ratio,
+        "sl_pts": sl_pts,
+        "sl_price": round(sl_price, 2),
+        "total_score": scoring_res["total_score"],
+        "market_state": scoring_res["market_state"]
     }
     notes_str = json.dumps(notes_payload)
 
@@ -91,97 +64,17 @@ def build_signal(
         "curr_close":     candle_data["close_"],
         "curr_high":      candle_data["high_"],
         "curr_low":       candle_data["low_"],
-        "engulf_ratio":   round(engulf_ratio, 3),
-        "ema_fast_value": ema_fast,
-        "ema_slow_value": ema_slow,
-        "ema_trend":      ema_trend,
-        "confidence_score": round(confidence, 1),
-        "is_confirmed": (
-            (pattern_type == "bullish_engulfing" and ema_trend == "bullish")
-            or (pattern_type == "bearish_engulfing" and ema_trend == "bearish")
-        ),
+        "engulf_ratio":   0.0, # deprecated
+        "ema_fast_value": candle_data.get("ema_now", 0.0),
+        "ema_slow_value": candle_data.get("ema_20_ago", 0.0),
+        "ema_trend":      scoring_res["market_state"],
+        "confidence_score": scoring_res["total_score"],
+        "is_confirmed": True,
         "notes": notes_str,
+        
+        # Ekstra return fields agar bisa dipakai oleh print di detector.py
+        "rr_ratio": rr_ratio,
+        "sl_pts": sl_pts,
+        "sl_price": round(sl_price, 2)
     }
 
-
-def calc_confidence(
-    engulf_ratio: float,
-    pattern_type: str,
-    ema_fast: float,
-    ema_slow: float,
-    curr_close: float,
-    cfg: EngulfingConfig,
-) -> float:
-    """
-    Confidence score 0–100 berdasarkan:
-      1. Base score dari engulf ratio       (40–60)
-      2. Bonus EMA trend alignment          (+cfg.confidence_ema_bonus)
-      3. Bonus close di sisi benar EMA      (+10)
-      4. Bonus ratio besar (>=1.5x / >=2x) (+cfg.confidence_ratio_bonus)
-    """
-    # Base: 40–60 tergantung seberapa besar ratio
-    base = min(60, 40 + (engulf_ratio - 1.0) * 20)
-
-    # Bonus: EMA fast vs slow alignment
-    ema_bonus = 0
-    if pattern_type == "bullish_engulfing" and ema_fast > ema_slow:
-        ema_bonus = cfg.confidence_ema_bonus
-    elif pattern_type == "bearish_engulfing" and ema_fast < ema_slow:
-        ema_bonus = cfg.confidence_ema_bonus
-
-    # Bonus: posisi Close vs EMA fast
-    close_bonus = 0
-    if pattern_type == "bullish_engulfing" and curr_close > ema_fast:
-        close_bonus = 10
-    elif pattern_type == "bearish_engulfing" and curr_close < ema_fast:
-        close_bonus = 10
-
-    # Bonus: ratio besar
-    ratio_bonus = 0
-    if engulf_ratio >= 2.0:
-        ratio_bonus = cfg.confidence_ratio_bonus
-    elif engulf_ratio >= 1.5:
-        ratio_bonus = cfg.confidence_ratio_bonus * 0.5
-
-    return min(100, max(0, base + ema_bonus + close_bonus + ratio_bonus))
-
-
-def get_ema_trend(ema_fast: float, ema_slow: float) -> str:
-    """Return 'bullish' | 'bearish' | 'neutral' berdasarkan EMA cross."""
-    if ema_fast > ema_slow:
-        return "bullish"
-    elif ema_fast < ema_slow:
-        return "bearish"
-    return "neutral"
-
-
-def generate_notes(
-    pattern_type: str,
-    engulf_ratio: float,
-    ema_trend: str,
-    confidence: float,
-) -> str:
-    """Generate string catatan singkat tentang kualitas sinyal."""
-    parts = []
-    label = "Bullish" if pattern_type == "bullish_engulfing" else "Bearish"
-    parts.append(f"Pola {label} Engulfing terdeteksi")
-    parts.append(f"Engulf ratio: {engulf_ratio:.2f}x")
-    parts.append(f"EMA trend: {ema_trend}")
-
-    if confidence >= 80:
-        parts.append("⚠️ HIGH CONFIDENCE")
-    elif confidence >= 50:
-        parts.append("Sinyal moderate")
-    else:
-        parts.append("Sinyal lemah")
-
-    aligned = (
-        (pattern_type == "bullish_engulfing" and ema_trend == "bullish")
-        or (pattern_type == "bearish_engulfing" and ema_trend == "bearish")
-    )
-    if aligned:
-        parts.append("✅ EMA sejalan")
-    elif ema_trend != "neutral":
-        parts.append("⚠️ EMA berlawanan")
-
-    return " | ".join(parts)
