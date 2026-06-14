@@ -29,6 +29,8 @@ class EngulfingConfig:
     score_weight_cp: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_CP", "10")))
     score_bonus_trend: float = field(default_factory=lambda: float(os.getenv("SCORE_BONUS_TREND", "5")))
     score_penalty_sideways: float = field(default_factory=lambda: float(os.getenv("SCORE_PENALTY_SIDEWAYS", "-15")))
+    score_penalty_counter_trend: float = field(default_factory=lambda: float(os.getenv("SCORE_PENALTY_COUNTER_TREND", "-10")))
+    market_lookback: int = field(default_factory=lambda: int(os.getenv("MARKET_LOOKBACK", "20")))
     
     min_grade_allowed: str = field(default_factory=lambda: os.getenv("MIN_GRADE_ALLOWED", "C+"))
     ema_source: int = field(default_factory=lambda: int(os.getenv("ENGULFING_EMA_SOURCE", "20")))

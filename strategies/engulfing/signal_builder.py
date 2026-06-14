@@ -47,7 +47,8 @@ def build_signal(
         "sl_pts": sl_pts,
         "sl_price": round(sl_price, 2),
         "total_score": scoring_res["total_score"],
-        "market_state": scoring_res["market_state"]
+        "market_state": scoring_res["market_state"],
+        "score_breakdown": scoring_res.get("score_breakdown", "")
     }
     notes_str = json.dumps(notes_payload)
 

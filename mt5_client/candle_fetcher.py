@@ -55,8 +55,9 @@ def get_closed_candles(mt5_cfg: MT5Config = None,
     body_c1 = abs(c1["close"] - c1["open"])
     is_bullish_c1 = c1["close"] > c1["open"]
 
+    import os
     # --- Market State (20 Candles Lookback) ---
-    lookback_period = 20
+    lookback_period = int(os.getenv("MARKET_LOOKBACK", "20"))
     # Cek apakah df cukup panjang
     if len(df) >= lookback_period + 3:
         # iloc[-2] adalah candle terakhir yg close
@@ -73,14 +74,15 @@ def get_closed_candles(mt5_cfg: MT5Config = None,
         ema_20_ago = ema_series.iloc[-(lookback_period + 2)]
         
         # Cross Count
-        # cross terjadi jika close[i] > ema[i] dan close[i-1] < ema[i-1] (atau sebaliknya)
+        # cross terjadi jika body candle memotong EMA: (Open < EMA && Close > EMA) || (Open > EMA && Close < EMA)
         closes = lookback_df["close"].values
+        opens = lookback_df["open"].values
         emas = ema_series.iloc[-(lookback_period + 2):-2].values
         
         cross_count = 0
-        for i in range(1, len(closes)):
-            if (closes[i] > emas[i] and closes[i-1] < emas[i-1]) or \
-               (closes[i] < emas[i] and closes[i-1] > emas[i-1]):
+        for i in range(len(closes)):
+            if (opens[i] < emas[i] and closes[i] > emas[i]) or \
+               (opens[i] > emas[i] and closes[i] < emas[i]):
                 cross_count += 1
                 
         # Side Strength

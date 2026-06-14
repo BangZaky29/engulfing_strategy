@@ -55,25 +55,34 @@ def calculate_scoring(
         ema_label = "Below"
 
     # === 6. Market State ===
-    # Default = Normal
-    market_state = "Normal"
+    from .f4_market_state import evaluate_market_state
+    market_state = "NORMAL"
+    direction = "BUY" if pattern_type == "bullish_engulfing" else "SELL"
+    action_type = "REVERSAL"
+    
     if cfg.filter_market_state_enabled and point > 0:
-        slope_point = abs(ema_now - ema_20_ago) / point
-        # Perhitungan slope ratio, cross ratio, dll bisa dilanjutkan di sini
-        # Sesuai instruksi, kita bypass logika detail ini jika dinonaktifkan
-        # Jika dihidupkan, asumsi sementara: slope besar = trend, banyak cross = sideways
-        slope_ratio = slope_point / (avg_range_20 / point) if avg_range_20 > 0 else 0
+        market_state = evaluate_market_state(
+            ema_now, ema_20_ago, avg_range_20, 
+            cross_count, side_strength, point, cfg.market_lookback
+        )
         
-        if slope_ratio > 0.5 and side_strength > 0.6:
-            market_state = "Trending"
-        elif cross_count > 5 or slope_ratio < 0.1:
-            market_state = "Sideways"
-
     market_state_score = 0
-    if market_state == "Trending":
-        market_state_score = cfg.score_bonus_trend
-    elif market_state == "Sideways":
+    if market_state == "SIDEWAYS":
         market_state_score = cfg.score_penalty_sideways
+    elif market_state == "TRENDING_UP":
+        if direction == "BUY":
+            market_state_score = cfg.score_bonus_trend
+            action_type = "TREND"
+        else:
+            market_state_score = cfg.score_penalty_counter_trend
+            action_type = "REVERSAL"
+    elif market_state == "TRENDING_DOWN":
+        if direction == "SELL":
+            market_state_score = cfg.score_bonus_trend
+            action_type = "TREND"
+        else:
+            market_state_score = cfg.score_penalty_counter_trend
+            action_type = "REVERSAL"
 
     # === 7. Scoring Grade ===
     body_score = (body_pct / 100) * cfg.score_weight_body
@@ -86,13 +95,15 @@ def calculate_scoring(
     cp_score = (capped_cp / 100) * cfg.score_weight_cp
     
     if cfg.filter_ema_scoring_enabled:
-        raw_score = body_score + range_score + ema_score_pts + cp_score + market_state_score
-        total_score = raw_score
+        base_score = body_score + range_score + ema_score_pts + cp_score
     else:
         # EMA is Info Only, hitung skor tanpa EMA tapi normalkan kembali ke skala 100
         active_max_weight = cfg.score_weight_body + cfg.score_weight_range + cfg.score_weight_cp
-        raw_score = body_score + range_score + cp_score + market_state_score
-        total_score = (raw_score / active_max_weight) * 100 if active_max_weight > 0 else 0
+        raw_score = body_score + range_score + cp_score
+        base_score = (raw_score / active_max_weight) * 100 if active_max_weight > 0 else 0
+
+    # Total Score adalah Base Score ditambah (atau dikurangi) oleh Market State Modifier
+    total_score = base_score + market_state_score
 
     # Konversi Grade
     if total_score >= 95: grade = "A+"
@@ -104,9 +115,10 @@ def calculate_scoring(
     else: grade = "D"
 
     # Penentuan Action
-    action_type = "TREND" if market_state == "Trending" else "REVERSAL"
-    direction = "BUY" if pattern_type == "bullish_engulfing" else "SELL"
     action_str = f"{direction} {action_type}"
+
+    # Score Breakdown String
+    score_breakdown = f"B:{body_score:.1f}|R:{range_score:.1f}|C:{cp_score:.1f}|E:{ema_score_pts:.1f}|M:{market_state_score:+.0f}"
 
     if verbose:
         print(f"   [F2] Scoring Summary:")
@@ -126,5 +138,6 @@ def calculate_scoring(
         "market_state": market_state,
         "total_score": round(total_score, 1),
         "grade": grade,
-        "action_str": action_str
+        "action_str": action_str,
+        "score_breakdown": score_breakdown
     }
