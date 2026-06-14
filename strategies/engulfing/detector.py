@@ -5,7 +5,7 @@
 
 import os
 from config.engulfing_config import EngulfingConfig
-from .filters import check_engulfing_trigger, calculate_scoring
+from .filters import check_engulfing_trigger, calculate_scoring, check_pattern_size, evaluate_market_state
 from .signal_builder import build_signal
 
 
@@ -65,14 +65,25 @@ def detect_engulfing(
             return None
 
     # -----------------------------------------------------------------
-    # [F2] Scoring & Metrics
+    # [F3] Pattern Size & RR Dinamis
+    # -----------------------------------------------------------------
+    rr_ratio = 1.5
+    if not cfg.filter_f3_pattern_enabled:
+        if verbose: print("   [--] [F3] Pattern Size: DISABLED (bypass)")
+    else:
+        valid_f3, rr_ratio = check_pattern_size(c1_high, c1_low, point, cfg, verbose)
+        if not valid_f3:
+            return None
+
+    # -----------------------------------------------------------------
+    # [F2] Scoring & Metrics (Includes F4 Market State implicitly)
     # -----------------------------------------------------------------
     if not cfg.filter_f2_scoring_enabled:
         if verbose: print("   [--] [F2] Scoring: DISABLED (bypass)")
         scoring_res = {
             "range_pts": 0, "body_pct": 100, "wick_pct": 0, "cp_pct": 100,
             "ema_label": "None", "market_state": "Normal", "total_score": 100,
-            "grade": "A+", "action_str": "BUY TREND" if c1_is_bullish else "SELL TREND"
+            "grade": "A+", "action_str": "BUY" if c1_is_bullish else "SELL"
         }
     else:
         scoring_res = calculate_scoring(
@@ -98,7 +109,7 @@ def detect_engulfing(
     # [OK] Semua filter lolos -> bangun sinyal
     # -----------------------------------------------------------------
     signal = build_signal(
-        candle_data, pattern_type, scoring_res, cfg
+        candle_data, pattern_type, scoring_res, rr_ratio, cfg
     )
 
     if verbose:

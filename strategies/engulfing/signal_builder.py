@@ -11,6 +11,7 @@ def build_signal(
     candle_data: dict,
     pattern_type: str,
     scoring_res: dict,
+    rr_ratio: float,
     cfg: EngulfingConfig,
 ) -> dict:
     """Build dict sinyal lengkap untuk disimpan ke DB / dikirim ke execution."""
@@ -22,8 +23,20 @@ def build_signal(
     point         = candle_data.get("point", 0.01)
 
     # 1. Calculate SL pts and SL price
-    import os
-    sl_pct = float(os.getenv("EXECUTION_SL_PCT", "75"))
+    # Dynamic SL Percentage based on Grade
+    grade = scoring_res.get("grade", "D")
+    if grade == "A+":
+        sl_pct = 100.0
+    elif grade == "A":
+        sl_pct = 75.0
+    elif grade == "B+":
+        sl_pct = 50.0
+    elif grade == "B":
+        sl_pct = 50.0
+    else:
+        # C+ and below
+        sl_pct = 50.0
+
     range_c1_price = c1_high - c1_low
     sl_distance_price = range_c1_price * (sl_pct / 100.0)
     
@@ -34,8 +47,7 @@ def build_signal(
         
     sl_pts = round(sl_distance_price / point) if point > 0 else 0
 
-    # 2. Calculate RR Ratio
-    rr_ratio = float(os.getenv("EXECUTION_TP_RR_RATIO", "1.5"))
+    # 2. (RR Ratio is now provided by F3 filter via arguments)
 
     # Save details into notes as JSON string
     notes_payload = {
@@ -43,6 +55,7 @@ def build_signal(
         "action_str": scoring_res["action_str"],
         "body_pct": scoring_res["body_pct"],
         "cp_pct": scoring_res["cp_pct"],
+        "sl_pct_used": sl_pct,
         "rr_ratio": rr_ratio,
         "sl_pts": sl_pts,
         "sl_price": round(sl_price, 2),

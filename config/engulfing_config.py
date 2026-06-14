@@ -22,6 +22,9 @@ class EngulfingConfig:
     filter_ema_scoring_enabled: bool = field(
         default_factory=lambda: os.getenv("FILTER_EMA_SCORING_ENABLED", "false").lower() == "true"
     )
+    filter_f3_pattern_enabled: bool = field(
+        default_factory=lambda: os.getenv("FILTER_F3_PATTERN_ENABLED", "true").lower() == "true"
+    )
     
     score_weight_body: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_BODY", "40")))
     score_weight_range: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_RANGE", "30")))
@@ -34,3 +37,9 @@ class EngulfingConfig:
     
     min_grade_allowed: str = field(default_factory=lambda: os.getenv("MIN_GRADE_ALLOWED", "C+"))
     ema_source: int = field(default_factory=lambda: int(os.getenv("ENGULFING_EMA_SOURCE", "20")))
+
+    # F3 Pattern & Ring Size Config
+    min_ring_c1_points: int = field(default_factory=lambda: int(os.getenv("MIN_RING_C1_POINTS", "100")))
+    normal_ring_c1_points: int = field(default_factory=lambda: int(os.getenv("NORMAL_RING_C1_POINTS", "250")))
+    large_ring_c1_points: int = field(default_factory=lambda: int(os.getenv("LARGE_RING_C1_POINTS", "450")))
+    max_ring_c1_points: int = field(default_factory=lambda: int(os.getenv("MAX_RING_C1_POINTS", "1500")))
