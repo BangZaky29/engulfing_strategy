@@ -82,3 +82,14 @@ CREATE TABLE public.whatsapp_sessions (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT whatsapp_sessions_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.report_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  report_type text NOT NULL,
+  report_date date NOT NULL,
+  file_url text NOT NULL,
+  total_trades integer DEFAULT 0,
+  win_rate double precision DEFAULT 0,
+  total_profit double precision DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT report_history_pkey PRIMARY KEY (id)
+);
