@@ -37,13 +37,16 @@ def build_signal(
         # C+ and below
         sl_pct = 50.0
 
-    range_c1_price = c1_high - c1_low
-    sl_distance_price = range_c1_price * (sl_pct / 100.0)
-    
     if pattern_type == "bullish_engulfing":
-        sl_price = c1_low - sl_distance_price
+        # BUY: SL distance is based on Close - Low
+        range_ref = c1_close - c1_low
+        sl_distance_price = range_ref * (sl_pct / 100.0)
+        sl_price = c1_close - sl_distance_price
     else:
-        sl_price = c1_high + sl_distance_price
+        # SELL: SL distance is based on High - Close
+        range_ref = c1_high - c1_close
+        sl_distance_price = range_ref * (sl_pct / 100.0)
+        sl_price = c1_close + sl_distance_price
         
     sl_pts = round(sl_distance_price / point) if point > 0 else 0
 

@@ -68,12 +68,11 @@ def detect_engulfing(
     # [F3] Pattern Size & RR Dinamis
     # -----------------------------------------------------------------
     rr_ratio = 1.5
+    valid_f3 = True
     if not cfg.filter_f3_pattern_enabled:
         if verbose: print("   [--] [F3] Pattern Size: DISABLED (bypass)")
     else:
         valid_f3, rr_ratio = check_pattern_size(c1_high, c1_low, point, cfg, verbose)
-        if not valid_f3:
-            return None
 
     # -----------------------------------------------------------------
     # [F2] Scoring & Metrics (Includes F4 Market State implicitly)
@@ -99,25 +98,36 @@ def detect_engulfing(
     min_allowed = grade_mapping.get(cfg.min_grade_allowed, 3) # default C+
     grade_str = str(scoring_res.get("grade", "D"))
     curr_grade = grade_mapping.get(grade_str, 1)
-    
-    if curr_grade < min_allowed:
-        if verbose:
-            print(f"   >> SKIP: Grade {scoring_res['grade']} di bawah batas {cfg.min_grade_allowed}")
-        return None
+
+    # Tentukan alasan skip jika ada
+    skip_reason = None
+    if not valid_f3:
+        pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
+        skip_reason = f"Pattern size invalid ({pattern_size_pts} pts)"
+    elif curr_grade < min_allowed:
+        skip_reason = f"Grade {grade_str} di bawah batas {cfg.min_grade_allowed}"
 
     # -----------------------------------------------------------------
-    # [OK] Semua filter lolos -> bangun sinyal
+    # Build sinyal (baik dikonfirmasi maupun dilewati)
     # -----------------------------------------------------------------
     signal = build_signal(
         candle_data, pattern_type, scoring_res, rr_ratio, cfg
     )
 
-    if verbose:
-        sl_pts = signal.get("sl_pts", 0)
-        sl_price = signal.get("sl_price", 0.0)
-        print(f"   {'-'*52}")
-        print(f"   {pattern_type.upper()} LOLOS SEMUA FILTER!")
-        print(f"   Engulfing | {signal['symbol']} | {signal['timeframe']} | {scoring_res['action_str']} | Grade : {scoring_res['grade']} | B : {scoring_res['body_pct']}% | CP : {scoring_res['cp_pct']}% | RR : {signal['rr_ratio']} | SL : {sl_price} ({sl_pts}pts)")
-        print(f"   {'-'*52}")
+    if skip_reason:
+        signal["is_confirmed"] = False
+        signal["skip_reason"] = skip_reason
+        if verbose:
+            print(f"   >> SKIP: {skip_reason}")
+    else:
+        signal["is_confirmed"] = True
+        signal["skip_reason"] = None
+        if verbose:
+            sl_pts = signal.get("sl_pts", 0)
+            sl_price = signal.get("sl_price", 0.0)
+            print(f"   {'-'*52}")
+            print(f"   {pattern_type.upper()} LOLOS SEMUA FILTER!")
+            print(f"   Engulfing | {signal['symbol']} | {signal['timeframe']} | {scoring_res['action_str']} | Grade : {scoring_res['grade']} | B : {scoring_res['body_pct']}% | CP : {scoring_res['cp_pct']}% | RR : {signal['rr_ratio']} | SL : {sl_price} ({sl_pts}pts)")
+            print(f"   {'-'*52}")
 
     return signal

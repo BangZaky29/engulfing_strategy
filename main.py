@@ -102,37 +102,43 @@ def main():
                     signal = detect_engulfing(candle_data, cfg=engulf_cfg, verbose=True)
 
                     if signal:
-                        total_signals += 1
+                        # Cek apakah sinyal ini dilewati (skipped)
+                        if signal.get("skip_reason"):
+                            SignalRepo.upsert(signal)
+                        else:
+                            total_signals += 1
 
-                        # =====================================================
-                        # Eksekusi Order di MT5
-                        # =====================================================
-                        ticket_id = execute_engulfing_order(signal, mt5_cfg, exec_cfg, ema_cfg)
+                            # =====================================================
+                            # Eksekusi Order di MT5
+                            # =====================================================
+                            ticket_id, exec_skip_reason = execute_engulfing_order(signal, mt5_cfg, exec_cfg, ema_cfg)
 
-                        # Flag is_confirmed menandakan OP dieksekusi di market
-                        signal["is_confirmed"] = bool(ticket_id)
-                        
-                        if ticket_id:
-                            import json
-                            try:
-                                notes_obj = json.loads(signal["notes"])
-                                notes_obj["ticket_id"] = ticket_id
-                                signal["notes"] = json.dumps(notes_obj)
-                            except:
-                                pass
+                            # Flag is_confirmed menandakan OP dieksekusi di market
+                            signal["is_confirmed"] = bool(ticket_id)
+                            
+                            if ticket_id:
+                                import json
+                                try:
+                                    notes_obj = json.loads(signal["notes"])
+                                    notes_obj["ticket_id"] = ticket_id
+                                    signal["notes"] = json.dumps(notes_obj)
+                                except:
+                                    pass
+                            else:
+                                signal["skip_reason"] = exec_skip_reason or "Eksekusi MT5 gagal"
 
-                        # Simpan sinyal ke Supabase
-                        SignalRepo.upsert(signal)
+                            # Simpan sinyal ke Supabase
+                            SignalRepo.upsert(signal)
 
-                        # Update statistik harian
-                        today = datetime.now().strftime("%Y-%m-%d")
-                        StatsRepo.update_daily(
-                            symbol=signal["symbol"],
-                            timeframe=signal["timeframe"],
-                            date_str=today,
-                            pattern_type=signal["pattern_type"],
-                            confidence=signal["confidence_score"]
-                        )
+                            # Update statistik harian
+                            today = datetime.now().strftime("%Y-%m-%d")
+                            StatsRepo.update_daily(
+                                symbol=signal["symbol"],
+                                timeframe=signal["timeframe"],
+                                date_str=today,
+                                pattern_type=signal["pattern_type"],
+                                confidence=signal["confidence_score"]
+                            )
 
             # Status counter
             print(f"   📊 Total: {total_candles} candles | {total_signals} signals", end='\r')
