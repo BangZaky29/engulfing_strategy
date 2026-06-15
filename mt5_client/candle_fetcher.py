@@ -8,6 +8,7 @@ import pandas as pd
 
 from config.mt5_config import MT5Config, EMAConfig
 from mt5_client.indicators import get_ema
+from mt5_client.error_helper import get_last_error
 
 
 def get_closed_candles(mt5_cfg: MT5Config | None = None,
@@ -30,7 +31,7 @@ def get_closed_candles(mt5_cfg: MT5Config | None = None,
 
     if rates is None or len(rates) < 3 or tick is None or info is None:
         if verbose:
-            print(f"❌ Gagal ambil data {mt5_cfg.symbol}. error={mt5.last_error()}")
+            print(f"❌ Gagal ambil data {mt5_cfg.symbol}. error={get_last_error()}")
         return None
 
     df = pd.DataFrame(rates)

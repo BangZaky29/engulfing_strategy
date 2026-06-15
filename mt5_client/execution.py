@@ -10,16 +10,7 @@ from config.execution_config import ExecutionConfig
 from mt5_client.trade_monitor import add_tracked_trade
 
 
-def get_last_error() -> str:
-    try:
-        err = mt5.last_error()
-        if err is not None:
-            return str(err)
-        return "No error details available"
-    except AttributeError:
-        return "last_error attribute not found in MetaTrader5 module"
-    except Exception as e:
-        return f"Gagal mengambil last_error: {e}"
+from mt5_client.error_helper import get_last_error
 
 
 def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: ExecutionConfig, ema_cfg: EMAConfig) -> tuple[int | None, str | None]:

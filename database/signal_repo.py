@@ -39,7 +39,7 @@ class SignalRepo:
                 "engulf_ratio": signal.get("engulf_ratio"),
                 "ema_fast_value": signal.get("ema_fast_value"),
                 "ema_slow_value": signal.get("ema_slow_value"),
-                "ema_trend": signal.get("ema_trend"),
+                "ema_trend": (signal.get("ema_trend")[:10] if signal.get("ema_trend") else None),
                 "confidence_score": signal.get("confidence_score"),
                 "is_confirmed": signal.get("is_confirmed", False),
                 "skip_reason": signal.get("skip_reason"),
