@@ -160,17 +160,63 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                     state_name = "EXPIRED" if h_order.state == mt5.ORDER_STATE_EXPIRED else "CANCELED"
                     print(f"🧹 PENDING ORDER {ticket} KADALUWARSA/DIBATALKAN ({state_name}). Menghapus dari tracker.")
                     
-                    # Kirim log pembatalan ke Supabase agar WA bot men-trigger notifikasi
+                    # 1. Tentukan pesan dan file name
+                    if h_order.state == mt5.ORDER_STATE_EXPIRED:
+                        msg = f"⏳ PENDING ORDER EXPIRED! Batas waktu {expire_candles} candle terlewati tanpa tersentuh harga."
+                    else:
+                        msg = f"🧹 PENDING ORDER DIBATALKAN (OVERRIDE)! Dibatalkan karena ada trigger baru yang aktif atau manual cancel."
+                        
+                    # 2. Ambil screenshot chart pending order sebelum dihapus
+                    public_url = None
+                    try:
+                        tf_const = mt5_cfg.get_mt5_timeframe(info['tf'])
+                        rates = mt5.copy_rates_from_pos(info['symbol'], tf_const, 0, mt5_cfg.candle_count)  # type: ignore
+                        if rates is not None and len(rates) > 0:
+                            new_filename = f"{info['mode']}_{state_name}_{info['symbol']}_{info['tf']}_{ticket}.png"
+                            new_path = os.path.join(TEMP_DIR, new_filename)
+                            
+                            img_path = generate_screenshot(
+                                rates=rates,
+                                ticket_id=ticket,
+                                op_price=info['op_price'],
+                                sl_price=info['sl_price'],
+                                tp_price=info['tp_price'],
+                                ema_cfg=ema_cfg,
+                                mode=info['mode'],
+                                entry_time=None,
+                                entry_price=None,
+                                exit_time=None,
+                                exit_price=None,
+                                tf_label=info['tf'],
+                                output_dir=TEMP_DIR,
+                                num_candles=30
+                            )
+                            
+                            if img_path and os.path.exists(img_path):
+                                os.rename(img_path, new_path)
+                                folder_date = get_indonesian_date_str().replace('/', '-')
+                                success, uploaded_url = upload_screenshot(new_path, "order_expired", folder_date, new_filename)
+                                if success:
+                                    public_url = uploaded_url
+                                    try:
+                                        os.remove(new_path)
+                                    except:
+                                        pass
+                    except Exception as e:
+                        print(f"⚠️ Gagal generate/upload SS untuk active log {ticket}: {e}")
+                    
+                    # 3. Kirim log pembatalan ke Supabase agar WA bot men-trigger notifikasi
                     try:
                         log_data = {
                             "ticket_id": ticket,
                             "symbol": info['symbol'],
                             "mode": info['mode'],
-                            "message": f"⏳ PENDING ORDER EXPIRED! Batas waktu {expire_candles} candle terlewati tanpa tersentuh harga.",
+                            "message": msg,
                             "op_price": info['op_price'],
                             "sl_price": info['sl_price'],
                             "tp_price": info['tp_price'],
-                            "trading_session": session_str
+                            "trading_session": session_str,
+                            "image_url": public_url
                         }
                         supabase = get_supabase()
                         supabase.table("trade_active_logs").insert(log_data).execute()
