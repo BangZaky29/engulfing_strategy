@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS engulfing_signals (
     
     -- Metadata
     is_confirmed BOOLEAN DEFAULT FALSE,
+    ticket_id BIGINT,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
 

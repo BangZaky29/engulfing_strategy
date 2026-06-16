@@ -117,6 +117,7 @@ def main():
                             signal["is_confirmed"] = bool(ticket_id)
                             
                             if ticket_id:
+                                signal["ticket_id"] = ticket_id
                                 import json
                                 try:
                                     notes_obj = json.loads(signal["notes"])

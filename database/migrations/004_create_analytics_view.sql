@@ -25,16 +25,7 @@ SELECT
     es.notes
 FROM trade_analytics ta
 LEFT JOIN engulfing_signals es 
-    ON ta.symbol = es.symbol 
-    AND ta.timeframe = es.timeframe 
-    -- Menghubungkan trade dengan sinyal terakhir yang muncul TEPAT sebelum atau sama dengan waktu OP
-    AND es.signal_time = (
-        SELECT MAX(es2.signal_time) 
-        FROM engulfing_signals es2 
-        WHERE es2.symbol = ta.symbol 
-          AND es2.timeframe = ta.timeframe 
-          AND es2.signal_time <= ta.entry_time
-    );
+    ON ta.ticket_id = es.ticket_id;
 
 -- Mengaktifkan Realtime untuk view ini tidak diperlukan karena view adalah virtual,
 -- kita mengambil data dari view saat frontend diload.

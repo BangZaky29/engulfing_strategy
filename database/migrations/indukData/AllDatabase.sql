@@ -41,6 +41,7 @@ CREATE TABLE public.engulfing_signals (
   ema_trend character varying,
   confidence_score double precision,
   is_confirmed boolean DEFAULT false,
+  ticket_id bigint,
   notes text,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT engulfing_signals_pkey PRIMARY KEY (id)

@@ -42,6 +42,7 @@ class SignalRepo:
                 "ema_trend": (signal.get("ema_trend")[:10] if signal.get("ema_trend") else None),
                 "confidence_score": signal.get("confidence_score"),
                 "is_confirmed": signal.get("is_confirmed", False),
+                "ticket_id": signal.get("ticket_id"),
                 "skip_reason": signal.get("skip_reason"),
                 "notes": signal.get("notes", ""),
             }

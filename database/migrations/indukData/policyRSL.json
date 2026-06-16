@@ -1,0 +1,72 @@
+[
+    {
+        "schemaname": "public",
+        "tablename": "candles",
+        "policyname": "Allow service role full access on candles",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "ALL",
+        "qual": "true",
+        "with_check": "true"
+    },
+    {
+        "schemaname": "public",
+        "tablename": "engulfing_signals",
+        "policyname": "Allow service role full access on engulfing_signals",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "ALL",
+        "qual": "true",
+        "with_check": "true"
+    },
+    {
+        "schemaname": "public",
+        "tablename": "engulfing_stats",
+        "policyname": "Allow service role full access on engulfing_stats",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "ALL",
+        "qual": "true",
+        "with_check": "true"
+    },
+    {
+        "schemaname": "public",
+        "tablename": "trade_analytics",
+        "policyname": "Allow public read access on trade_analytics",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "true",
+        "with_check": null
+    },
+    {
+        "schemaname": "public",
+        "tablename": "trade_analytics",
+        "policyname": "Allow service role full access on trade_analytics",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "ALL",
+        "qual": "true",
+        "with_check": "true"
+    },
+    {
+        "schemaname": "public",
+        "tablename": "whatsapp_auth_keys",
+        "policyname": "Allow public full access on whatsapp_auth_keys",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "ALL",
+        "qual": "true",
+        "with_check": "true"
+    },
+    {
+        "schemaname": "public",
+        "tablename": "whatsapp_sessions",
+        "policyname": "Allow public full access on whatsapp_sessions",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "ALL",
+        "qual": "true",
+        "with_check": "true"
+    }
+]
