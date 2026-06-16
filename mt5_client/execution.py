@@ -8,7 +8,7 @@ import time
 import MetaTrader5 as mt5
 from config.mt5_config import MT5Config, EMAConfig
 from config.execution_config import ExecutionConfig
-from mt5_client.trade_monitor import add_tracked_trade
+from mt5_client.trade_monitor import add_tracked_trade, load_tracked_trades, save_tracked_trades
 
 
 from mt5_client.error_helper import get_last_error
@@ -57,6 +57,31 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             res = mt5.order_send(cancel_req)  # type: ignore
             if res and res.retcode == mt5.TRADE_RETCODE_DONE:
                 print(f"🧹 PENDING ORDER LAMA ({old_order.ticket}) DIBATALKAN karena ada trigger baru!")
+                
+                # Kirim log pembatalan ke Supabase agar WA bot men-trigger notifikasi
+                try:
+                    from database.supabase_client import get_supabase
+                    supabase = get_supabase()
+                    data_tracker = load_tracked_trades()
+                    old_info = data_tracker.get(str(old_order.ticket), {})
+                    log_data = {
+                        "ticket_id": old_order.ticket,
+                        "symbol": symbol,
+                        "mode": old_info.get("mode", "BUY"),
+                        "message": f"🧹 PENDING ORDER OVERRIDDEN! Dibatalkan karena ada trigger baru (sinyal ke-2) yang aktif.",
+                        "op_price": old_info.get("op_price"),
+                        "sl_price": old_info.get("sl_price"),
+                        "tp_price": old_info.get("tp_price"),
+                        "trading_session": old_info.get("trading_session", "Unknown")
+                    }
+                    supabase.table("trade_active_logs").insert(log_data).execute()
+                    
+                    # Hapus dari tracker agar tidak dicek oleh trade_monitor
+                    if str(old_order.ticket) in data_tracker:
+                        del data_tracker[str(old_order.ticket)]
+                        save_tracked_trades(data_tracker)
+                except Exception as ex:
+                    print(f"⚠️ Gagal memproses log override ke Supabase: {ex}")
             else:
                 print(f"⚠️ Gagal membatalkan pending order lama ({old_order.ticket}): {get_last_error()}")
 
@@ -180,7 +205,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             "H1": 3600, "H4": 14400, "D1": 86400
         }
         tf_seconds = tf_seconds_map.get(signal["timeframe"], 300)
-        expire_time = int(time.time()) + (exec_cfg.pending_order_expire_candles * tf_seconds)
+        expire_time = int(tick.time) + (exec_cfg.pending_order_expire_candles * tf_seconds)
         request["expiration"] = expire_time
 
     # 4. Log sebelum kirim

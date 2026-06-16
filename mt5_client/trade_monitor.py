@@ -130,7 +130,30 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
             if hist_orders is not None and len(hist_orders) > 0:
                 h_order = hist_orders[0]
                 if h_order.state in [mt5.ORDER_STATE_EXPIRED, mt5.ORDER_STATE_CANCELED]:
-                    print(f"🧹 PENDING ORDER {ticket} KADALUWARSA/DIBATALKAN. Menghapus dari tracker.")
+                    from config.execution_config import ExecutionConfig
+                    exec_cfg = ExecutionConfig()
+                    expire_candles = exec_cfg.pending_order_expire_candles
+                    
+                    state_name = "EXPIRED" if h_order.state == mt5.ORDER_STATE_EXPIRED else "CANCELED"
+                    print(f"🧹 PENDING ORDER {ticket} KADALUWARSA/DIBATALKAN ({state_name}). Menghapus dari tracker.")
+                    
+                    # Kirim log pembatalan ke Supabase agar WA bot men-trigger notifikasi
+                    try:
+                        log_data = {
+                            "ticket_id": ticket,
+                            "symbol": info['symbol'],
+                            "mode": info['mode'],
+                            "message": f"⏳ PENDING ORDER EXPIRED! Batas waktu {expire_candles} candle terlewati tanpa tersentuh harga.",
+                            "op_price": info['op_price'],
+                            "sl_price": info['sl_price'],
+                            "tp_price": info['tp_price'],
+                            "trading_session": session_str
+                        }
+                        supabase = get_supabase()
+                        supabase.table("trade_active_logs").insert(log_data).execute()
+                    except Exception as ex:
+                        print(f"⚠️ Gagal menyimpan log expired ke Supabase: {ex}")
+
                     keys_to_remove.append(ticket_str)
                     continue
 
