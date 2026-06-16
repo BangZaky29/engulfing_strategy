@@ -6,7 +6,7 @@
 import json
 import os
 import MetaTrader5 as mt5
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import locale
 
 from database.supabase_storage import upload_screenshot
@@ -86,6 +86,29 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
         
         status = info.get("status", "ACTIVE")
         session_str = info.get("trading_session", info.get("session", "Unknown"))
+        
+        # Fallback calculation if session is Unknown and timestamp is present
+        if session_str == "Unknown" and "timestamp" in info:
+            try:
+                dt_local = datetime.strptime(info["timestamp"], "%Y%m%d_%H%M%S")
+                dt_local = dt_local.astimezone()  # Local machine timezone
+                wib_tz = timezone(timedelta(hours=7))
+                dt_wib = dt_local.astimezone(wib_tz)
+                hour = dt_wib.hour
+                
+                sessions = []
+                if 7 <= hour < 16:
+                    sessions.append("Asia")
+                if 14 <= hour < 23:
+                    sessions.append("Euro")
+                if 19 <= hour <= 23 or 0 <= hour < 4:
+                    sessions.append("NY")
+                session_str = "/".join(sessions) if sessions else "Off-Market"
+                
+                info["trading_session"] = session_str
+                save_tracked_trades(data)
+            except Exception as ex:
+                print(f"⚠️ Gagal menghitung session fallback untuk ticket {ticket}: {ex}")
         
         # 1. State Machine: PENDING -> ACTIVE
         if status == "PENDING":
@@ -171,21 +194,25 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
             # Belum ada di history, mungkin mt5 butuh waktu sync. Skip dulu.
             continue
             
-        # Hitung total profit dan dapatkan waktu entry & exit
+        # Hitung total profit dan dapatkan waktu entry & exit serta volume (lot size)
         total_profit = 0.0
         entry_time = None
         entry_price = None
         exit_time = None
         exit_price = None
+        trade_volume = None
         
         for d in deals:
             if d.entry == mt5.DEAL_ENTRY_IN:
                 entry_time = d.time
                 entry_price = d.price
+                trade_volume = float(d.volume) if hasattr(d, "volume") else None
             elif d.entry == mt5.DEAL_ENTRY_OUT:
                 exit_time = d.time
                 exit_price = d.price
                 total_profit += d.profit
+                if trade_volume is None and hasattr(d, "volume"):
+                    trade_volume = float(d.volume)
         
         # Tentukan RESULT (LOSS / PROFIT)
         result_str = "PROFIT" if total_profit > 0 else "LOSS"
@@ -241,6 +268,8 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "op_price": info['op_price'],
                                 "sl_price": info['sl_price'],
                                 "tp_price": info['tp_price'],
+                                "exit_price": exit_price,
+                                "volume": trade_volume,
                                 "profit": total_profit,
                                 "entry_time": datetime.utcfromtimestamp(entry_time).isoformat() if entry_time else None,
                                 "exit_time": datetime.utcfromtimestamp(exit_time).isoformat() if exit_time else None,

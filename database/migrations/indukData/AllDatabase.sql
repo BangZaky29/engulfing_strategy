@@ -41,9 +41,11 @@ CREATE TABLE public.engulfing_signals (
   ema_trend character varying,
   confidence_score double precision,
   is_confirmed boolean DEFAULT false,
-  ticket_id bigint,
   notes text,
   created_at timestamp with time zone DEFAULT now(),
+  skip_reason text,
+  ticket_id bigint,
+  trading_session character varying,
   CONSTRAINT engulfing_signals_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.engulfing_stats (
@@ -73,6 +75,7 @@ CREATE TABLE public.trade_analytics (
   exit_time timestamp with time zone,
   image_url text NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
+  trading_session character varying,
   CONSTRAINT trade_analytics_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.whatsapp_sessions (
@@ -81,6 +84,8 @@ CREATE TABLE public.whatsapp_sessions (
   qr_code text,
   session_data jsonb DEFAULT '{}'::jsonb,
   updated_at timestamp with time zone DEFAULT now(),
+  owner_id text,
+  locked_at timestamp with time zone,
   CONSTRAINT whatsapp_sessions_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.report_history (
@@ -93,4 +98,26 @@ CREATE TABLE public.report_history (
   total_profit double precision DEFAULT 0,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT report_history_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.whatsapp_auth_keys (
+  session_id text NOT NULL,
+  key_type text NOT NULL,
+  key_id text NOT NULL,
+  value jsonb NOT NULL,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT whatsapp_auth_keys_pkey PRIMARY KEY (session_id, key_type, key_id),
+  CONSTRAINT whatsapp_auth_keys_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.whatsapp_sessions(id)
+);
+CREATE TABLE public.trade_active_logs (
+  id bigint NOT NULL DEFAULT nextval('trade_active_logs_id_seq'::regclass),
+  ticket_id bigint NOT NULL UNIQUE,
+  symbol character varying NOT NULL,
+  mode character varying NOT NULL CHECK (mode::text = ANY (ARRAY['BUY'::character varying, 'SELL'::character varying]::text[])),
+  message text NOT NULL,
+  op_price double precision,
+  sl_price double precision,
+  tp_price double precision,
+  created_at timestamp with time zone DEFAULT now(),
+  trading_session character varying,
+  CONSTRAINT trade_active_logs_pkey PRIMARY KEY (id)
 );

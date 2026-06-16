@@ -123,6 +123,7 @@ def build_signal(
         "curr_high":      candle_data["high_"],
         "curr_low":       candle_data["low_"],
         "engulf_ratio":   0.0, # deprecated
+        "volume":         float(candle_data.get("volume", 0.0)),
         "ema_fast_value": candle_data.get("ema_now", 0.0),
         "ema_slow_value": candle_data.get("ema_20_ago", 0.0),
         "ema_trend":      scoring_res["market_state"],

@@ -6,6 +6,7 @@
         "op_price": 4319.99,
         "sl_price": 4319.41,
         "tp_price": 4320.57,
-        "timestamp": "20260616_135600"
+        "timestamp": "20260616_135600",
+        "trading_session": "Asia"
     }
 }

@@ -31,6 +31,26 @@
     },
     {
         "schemaname": "public",
+        "tablename": "trade_active_logs",
+        "policyname": "Allow public read access on trade_active_logs",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "true",
+        "with_check": null
+    },
+    {
+        "schemaname": "public",
+        "tablename": "trade_active_logs",
+        "policyname": "Allow service role full access on trade_active_logs",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "ALL",
+        "qual": "true",
+        "with_check": "true"
+    },
+    {
+        "schemaname": "public",
         "tablename": "trade_analytics",
         "policyname": "Allow public read access on trade_analytics",
         "permissive": "PERMISSIVE",
