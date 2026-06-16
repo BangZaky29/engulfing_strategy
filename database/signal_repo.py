@@ -45,6 +45,7 @@ class SignalRepo:
                 "ticket_id": signal.get("ticket_id"),
                 "skip_reason": signal.get("skip_reason"),
                 "notes": signal.get("notes", ""),
+                "trading_session": signal.get("trading_session"),
             }
 
             sb.table(SignalRepo.TABLE).upsert(

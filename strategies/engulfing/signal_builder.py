@@ -4,7 +4,24 @@
 # =====================================================
 
 import json
+from datetime import datetime, timezone, timedelta
 from config.engulfing_config import EngulfingConfig
+from config.execution_config import ExecutionConfig
+
+def get_trading_session_wib() -> str:
+    wib_tz = timezone(timedelta(hours=7))
+    now_wib = datetime.now(wib_tz)
+    hour = now_wib.hour
+    
+    sessions = []
+    if 7 <= hour < 16:
+        sessions.append("Asia")
+    if 14 <= hour < 23:
+        sessions.append("Euro")
+    if 19 <= hour <= 23 or 0 <= hour < 4:
+        sessions.append("NY")
+        
+    return "/".join(sessions) if sessions else "Off-Market"
 
 
 def build_signal(
@@ -22,33 +39,54 @@ def build_signal(
     c1_low        = candle_data["low_"]
     point         = candle_data.get("point", 0.01)
 
-    # 1. Calculate SL pts and SL price
-    # Dynamic SL Percentage based on Grade
-    grade = scoring_res.get("grade", "D")
-    if grade == "A+":
-        sl_pct = 100.0
-    elif grade == "A":
-        sl_pct = 75.0
-    elif grade == "B+":
-        sl_pct = 50.0
-    elif grade == "B":
-        sl_pct = 50.0
-    else:
-        # C+ and below
-        sl_pct = 50.0
+    exec_cfg = ExecutionConfig()
+    trading_session = get_trading_session_wib()
+    op_price = c1_close  # Default for A
+    tp_price = 0.0
 
-    if pattern_type == "bullish_engulfing":
-        # BUY: SL distance is based on Close - Low
-        range_ref = c1_close - c1_low
-        sl_distance_price = range_ref * (sl_pct / 100.0)
-        sl_price = c1_close - sl_distance_price
-    else:
-        # SELL: SL distance is based on High - Close
-        range_ref = c1_high - c1_close
-        sl_distance_price = range_ref * (sl_pct / 100.0)
-        sl_price = c1_close + sl_distance_price
+    if cfg.active_filter_strategy == 'B':
+        # --- Filter B ---
+        op_pct = exec_cfg.op_pct_b
+        sl_pct_b = exec_cfg.sl_pct_b
+        tp_pct = exec_cfg.tp_pct_b
         
-    sl_pts = round(sl_distance_price / point) if point > 0 else 0
+        if pattern_type == "bullish_engulfing":
+            range_ref = c1_close - c1_low
+            op_price = c1_close - (range_ref * (op_pct / 100.0))
+            sl_price = c1_close - (range_ref * (sl_pct_b / 100.0))
+            tp_distance = abs(op_price - sl_price) * (tp_pct / 100.0)
+            tp_price = op_price + tp_distance
+        else:
+            range_ref = c1_high - c1_close
+            op_price = c1_close + (range_ref * (op_pct / 100.0))
+            sl_price = c1_close + (range_ref * (sl_pct_b / 100.0))
+            tp_distance = abs(op_price - sl_price) * (tp_pct / 100.0)
+            tp_price = op_price - tp_distance
+            
+        sl_distance_price = abs(op_price - sl_price)
+        sl_pts = round(sl_distance_price / point) if point > 0 else 0
+        sl_pct_used = sl_pct_b
+
+    else:
+        # --- Filter A ---
+        # Dynamic SL Percentage based on Grade
+        grade = scoring_res.get("grade", "D")
+        if grade == "A+": sl_pct_used = 100.0
+        elif grade == "A": sl_pct_used = 75.0
+        else: sl_pct_used = 50.0
+
+        if pattern_type == "bullish_engulfing":
+            # BUY: SL distance is based on Close - Low
+            range_ref = c1_close - c1_low
+            sl_distance_price = range_ref * (sl_pct_used / 100.0)
+            sl_price = c1_close - sl_distance_price
+        else:
+            # SELL: SL distance is based on High - Close
+            range_ref = c1_high - c1_close
+            sl_distance_price = range_ref * (sl_pct_used / 100.0)
+            sl_price = c1_close + sl_distance_price
+            
+        sl_pts = round(sl_distance_price / point) if point > 0 else 0
 
     # 2. (RR Ratio is now provided by F3 filter via arguments)
 
@@ -58,12 +96,15 @@ def build_signal(
         "action_str": scoring_res["action_str"],
         "body_pct": scoring_res["body_pct"],
         "cp_pct": scoring_res["cp_pct"],
-        "sl_pct_used": sl_pct,
+        "sl_pct_used": sl_pct_used,
         "rr_ratio": rr_ratio,
         "sl_pts": sl_pts,
+        "op_price": round(op_price, 2),
         "sl_price": round(sl_price, 2),
+        "tp_price": round(tp_price, 2) if tp_price > 0 else None,
         "total_score": scoring_res["total_score"],
         "market_state": scoring_res["market_state"],
+        "trading_session": trading_session,
         "score_breakdown": scoring_res.get("score_breakdown", "")
     }
     notes_str = json.dumps(notes_payload)
@@ -92,6 +133,9 @@ def build_signal(
         # Ekstra return fields agar bisa dipakai oleh print di detector.py
         "rr_ratio": rr_ratio,
         "sl_pts": sl_pts,
-        "sl_price": round(sl_price, 2)
+        "op_price": round(op_price, 2),
+        "sl_price": round(sl_price, 2),
+        "tp_price": round(tp_price, 2) if tp_price > 0 else None,
+        "trading_session": trading_session
     }
 

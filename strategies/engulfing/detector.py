@@ -5,7 +5,11 @@
 
 import os
 from config.engulfing_config import EngulfingConfig
-from .filters import check_engulfing_trigger, calculate_scoring, check_pattern_size, evaluate_market_state
+from .filters_A.f1_trigger import check_engulfing_trigger
+from .filters_A.f2_scoring import calculate_scoring
+from .filters_A.f3_pattern import check_pattern_size
+from .filters_A.f4_market_state import evaluate_market_state
+from .filters_B import check_engulfing_trigger_b, check_pattern_size_b
 from .signal_builder import build_signal
 
 
@@ -38,6 +42,7 @@ def detect_engulfing(
     # Market State Data
     avg_range_20 = candle_data.get("avg_range_20", 0.0)
     ema_now = candle_data.get("ema_now", 0.0)
+    ema_slow = candle_data.get("ema_slow", 0.0)
     ema_20_ago = candle_data.get("ema_20_ago", 0.0)
     cross_count = candle_data.get("cross_count_20", 0)
     side_strength = candle_data.get("side_strength_20", 0.0)
@@ -51,61 +56,93 @@ def detect_engulfing(
         print(f"   [FILTER] C1(Engulf)={warna_c1}  C2(Ditela)={warna_c2}")
         print(f"   {'-'*52}")
 
-    # -----------------------------------------------------------------
-    # [F1] Engulfing Trigger
-    # -----------------------------------------------------------------
-    if not cfg.filter_f1_trigger_enabled:
-        if verbose: print("   [--] [F1] Trigger: DISABLED (bypass)")
-        pattern_type = "bullish_engulfing" if c1_is_bullish else "bearish_engulfing"
-    else:
-        is_valid, pattern_type = check_engulfing_trigger(
-            c1_open, c1_close, c2_open, c2_close, verbose
+    skip_reason = None
+    scoring_res = {}
+    rr_ratio = 1.0
+
+    if cfg.active_filter_strategy == 'B':
+        if verbose:
+            print(f"   [STRATEGY] Menggunakan Filter B (Pullback Limit, No Grade)")
+            
+        # [F1_B] Engulfing Trigger & EMA Slow
+        is_valid, pattern_type = check_engulfing_trigger_b(
+            c1_open, c1_close, c2_open, c2_close, ema_slow, verbose
         )
         if not is_valid or pattern_type is None:
             return None
-
-    # -----------------------------------------------------------------
-    # [F3] Pattern Size & RR Dinamis
-    # -----------------------------------------------------------------
-    rr_ratio = 1.5
-    valid_f3 = True
-    if not cfg.filter_f3_pattern_enabled:
-        if verbose: print("   [--] [F3] Pattern Size: DISABLED (bypass)")
-    else:
-        valid_f3, rr_ratio = check_pattern_size(c1_high, c1_low, point, cfg, verbose)
-
-    # -----------------------------------------------------------------
-    # [F2] Scoring & Metrics (Includes F4 Market State implicitly)
-    # -----------------------------------------------------------------
-    if not cfg.filter_f2_scoring_enabled:
-        if verbose: print("   [--] [F2] Scoring: DISABLED (bypass)")
+            
+        # [F2_B] Pattern Size
+        valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, cfg, verbose)
+        if not valid_f2_b:
+            pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
+            skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"
+            
+        # Mock scoring_res for Filter B
         scoring_res = {
-            "range_pts": 0, "body_pct": 100, "wick_pct": 0, "cp_pct": 100,
-            "ema_label": "None", "market_state": "Normal", "total_score": 100,
-            "grade": "A+", "action_str": "BUY" if c1_is_bullish else "SELL"
+            "range_pts": round(abs(c1_high - c1_low) / point), 
+            "body_pct": 100, "wick_pct": 0, "cp_pct": 100,
+            "ema_label": "None", "market_state": "Filter B", "total_score": 100,
+            "grade": "N/A", "action_str": "BUY" if c1_is_bullish else "SELL"
         }
+
     else:
-        scoring_res = calculate_scoring(
-            c1_open, c1_close, c1_high, c1_low,
-            c2_open, c2_close, c2_high, c2_low,
-            avg_range_20, ema_now, ema_20_ago,
-            cross_count, side_strength, pattern_type, point,
-            cfg, verbose
-        )
+        if verbose:
+            print(f"   [STRATEGY] Menggunakan Filter A (Scoring/Grade)")
+            
+        # -----------------------------------------------------------------
+        # [F1] Engulfing Trigger
+        # -----------------------------------------------------------------
+        if not cfg.filter_f1_trigger_enabled:
+            if verbose: print("   [--] [F1] Trigger: DISABLED (bypass)")
+            pattern_type = "bullish_engulfing" if c1_is_bullish else "bearish_engulfing"
+        else:
+            is_valid, pattern_type = check_engulfing_trigger(
+                c1_open, c1_close, c2_open, c2_close, ema_slow, verbose
+            )
+            if not is_valid or pattern_type is None:
+                return None
 
-    # Filtering Grade Minimal
-    grade_mapping = {"A+": 7, "A": 6, "B+": 5, "B": 4, "C+": 3, "C": 2, "D": 1}
-    min_allowed = grade_mapping.get(cfg.min_grade_allowed, 3) # default C+
-    grade_str = str(scoring_res.get("grade", "D"))
-    curr_grade = grade_mapping.get(grade_str, 1)
+        # -----------------------------------------------------------------
+        # [F3] Pattern Size & RR Dinamis
+        # -----------------------------------------------------------------
+        rr_ratio = 1.5
+        valid_f3 = True
+        if not cfg.filter_f3_pattern_enabled:
+            if verbose: print("   [--] [F3] Pattern Size: DISABLED (bypass)")
+        else:
+            valid_f3, rr_ratio = check_pattern_size(c1_high, c1_low, point, cfg, verbose)
 
-    # Tentukan alasan skip jika ada
-    skip_reason = None
-    if not valid_f3:
-        pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
-        skip_reason = f"Pattern size invalid ({pattern_size_pts} pts)"
-    elif curr_grade < min_allowed:
-        skip_reason = f"Grade {grade_str} di bawah batas {cfg.min_grade_allowed}"
+        # -----------------------------------------------------------------
+        # [F2] Scoring & Metrics (Includes F4 Market State implicitly)
+        # -----------------------------------------------------------------
+        if not cfg.filter_f2_scoring_enabled:
+            if verbose: print("   [--] [F2] Scoring: DISABLED (bypass)")
+            scoring_res = {
+                "range_pts": 0, "body_pct": 100, "wick_pct": 0, "cp_pct": 100,
+                "ema_label": "None", "market_state": "Normal", "total_score": 100,
+                "grade": "A+", "action_str": "BUY" if c1_is_bullish else "SELL"
+            }
+        else:
+            scoring_res = calculate_scoring(
+                c1_open, c1_close, c1_high, c1_low,
+                c2_open, c2_close, c2_high, c2_low,
+                avg_range_20, ema_now, ema_20_ago,
+                cross_count, side_strength, pattern_type, point,
+                cfg, verbose
+            )
+
+        # Filtering Grade Minimal
+        grade_mapping = {"A+": 7, "A": 6, "B+": 5, "B": 4, "C+": 3, "C": 2, "D": 1}
+        min_allowed = grade_mapping.get(cfg.min_grade_allowed, 3) # default C+
+        grade_str = str(scoring_res.get("grade", "D"))
+        curr_grade = grade_mapping.get(grade_str, 1)
+
+        # Tentukan alasan skip jika ada
+        if not valid_f3:
+            pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
+            skip_reason = f"Pattern size invalid ({pattern_size_pts} pts)"
+        elif curr_grade < min_allowed:
+            skip_reason = f"Grade {grade_str} di bawah batas {cfg.min_grade_allowed}"
 
     # -----------------------------------------------------------------
     # Build sinyal (baik dikonfirmasi maupun dilewati)
@@ -126,8 +163,9 @@ def detect_engulfing(
             sl_pts = signal.get("sl_pts", 0)
             sl_price = signal.get("sl_price", 0.0)
             print(f"   {'-'*52}")
+            session_str = signal.get("trading_session", "Unknown")
             print(f"   {pattern_type.upper()} LOLOS SEMUA FILTER!")
-            print(f"   Engulfing | {signal['symbol']} | {signal['timeframe']} | {scoring_res['action_str']} | Grade : {scoring_res['grade']} | B : {scoring_res['body_pct']}% | CP : {scoring_res['cp_pct']}% | RR : {signal['rr_ratio']} | SL : {sl_price} ({sl_pts}pts)")
+            print(f"   Engulfing | {signal['symbol']} | {signal['timeframe']} | {scoring_res['action_str']} | Grade : {scoring_res['grade']} | B : {scoring_res['body_pct']}% | CP : {scoring_res['cp_pct']}% | RR : {signal['rr_ratio']} | SL : {sl_price} ({sl_pts}pts) | Sesi : {session_str}")
             print(f"   {'-'*52}")
 
     return signal

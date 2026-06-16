@@ -4,6 +4,7 @@
 # Modul untuk eksekusi order Market, Stop Loss, dan Take Profit
 # =====================================================
 
+import time
 import MetaTrader5 as mt5
 from config.mt5_config import MT5Config, EMAConfig
 from config.execution_config import ExecutionConfig
@@ -45,6 +46,20 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         print(f"⚠️ Eksekusi di-skip: {err_msg} untuk {symbol}. Menunggu OP sebelumnya close (kena TP/SL).")
         return None, err_msg
 
+    # 0.5. Cek apakah ada PENDING ORDER yang menggantung, jika ada BATALKAN!
+    orders = mt5.orders_get(symbol=symbol)  # type: ignore
+    if orders is not None and len(orders) > 0:
+        for old_order in orders:
+            cancel_req = {
+                "action": mt5.TRADE_ACTION_REMOVE,
+                "order": old_order.ticket
+            }
+            res = mt5.order_send(cancel_req)  # type: ignore
+            if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                print(f"🧹 PENDING ORDER LAMA ({old_order.ticket}) DIBATALKAN karena ada trigger baru!")
+            else:
+                print(f"⚠️ Gagal membatalkan pending order lama ({old_order.ticket}): {get_last_error()}")
+
     # 1. Pastikan symbol terpilih
     if not mt5.symbol_select(symbol, True):  # type: ignore
         err_msg = "Gagal select symbol"
@@ -73,13 +88,25 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     # Jika tidak ada (versi lama), fallback ke exec_cfg
     # =====================================================
     rr_ratio = signal.get("rr_ratio", exec_cfg.tp_rr_ratio)
+    op_price_payload = signal.get("op_price")
     sl_price_payload = signal.get("sl_price")
+    tp_price_payload = signal.get("tp_price")
     sl_pct_fallback = exec_cfg.sl_ring_pct / 100.0
+
+    action = mt5.TRADE_ACTION_DEAL
 
     # 2. Setup Parameter Order
     if pattern == "bullish_engulfing":
-        order_type  = mt5.ORDER_TYPE_BUY
-        price       = ask
+        # OP
+        if op_price_payload is not None and op_price_payload < ask:
+            order_type = mt5.ORDER_TYPE_BUY_LIMIT
+            action     = mt5.TRADE_ACTION_PENDING
+            price      = op_price_payload
+            comment    = "Engulf_BUY_LIMIT"
+        else:
+            order_type = mt5.ORDER_TYPE_BUY
+            price      = ask
+            comment    = "Engulf_BUY"
 
         # SL
         if sl_price_payload is not None:
@@ -90,14 +117,24 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             sl_price    = curr_close - sl_distance
 
         # TP
-        sl_from_entry = abs(price - sl_price)
-        tp_price      = price + (sl_from_entry * rr_ratio)
+        if tp_price_payload is not None:
+            tp_price = tp_price_payload
+        else:
+            sl_from_entry = abs(price - sl_price)
+            tp_price      = price + (sl_from_entry * rr_ratio)
 
-        comment = "Engulf_BUY"
 
     elif pattern == "bearish_engulfing":
-        order_type  = mt5.ORDER_TYPE_SELL
-        price       = bid
+        # OP
+        if op_price_payload is not None and op_price_payload > bid:
+            order_type = mt5.ORDER_TYPE_SELL_LIMIT
+            action     = mt5.TRADE_ACTION_PENDING
+            price      = op_price_payload
+            comment    = "Engulf_SELL_LIMIT"
+        else:
+            order_type = mt5.ORDER_TYPE_SELL
+            price      = bid
+            comment    = "Engulf_SELL"
 
         # SL
         if sl_price_payload is not None:
@@ -108,10 +145,11 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             sl_price    = curr_close + sl_distance
 
         # TP
-        sl_from_entry = abs(price - sl_price)
-        tp_price      = price - (sl_from_entry * rr_ratio)
-
-        comment = "Engulf_SELL"
+        if tp_price_payload is not None:
+            tp_price = tp_price_payload
+        else:
+            sl_from_entry = abs(price - sl_price)
+            tp_price      = price - (sl_from_entry * rr_ratio)
 
     else:
         err_msg = f"Pola tidak dikenali: {pattern}"
@@ -120,7 +158,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
 
     # 3. Request ke MT5
     request = {
-        "action":       mt5.TRADE_ACTION_DEAL,
+        "action":       action,
         "symbol":       symbol,
         "volume":       exec_cfg.lot_size,
         "type":         order_type,
@@ -131,17 +169,33 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         "magic":        exec_cfg.magic_number,
         "comment":      comment,
         "type_time":    mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_FOK,
     }
+    
+    if action == mt5.TRADE_ACTION_DEAL:
+        request["type_filling"] = mt5.ORDER_FILLING_FOK
+    elif action == mt5.TRADE_ACTION_PENDING:
+        request["type_time"] = mt5.ORDER_TIME_SPECIFIED
+        tf_seconds_map = {
+            "M1": 60, "M5": 300, "M15": 900, "M30": 1800,
+            "H1": 3600, "H4": 14400, "D1": 86400
+        }
+        tf_seconds = tf_seconds_map.get(signal["timeframe"], 300)
+        expire_time = int(time.time()) + (exec_cfg.pending_order_expire_candles * tf_seconds)
+        request["expiration"] = expire_time
 
     # 4. Log sebelum kirim
     print(f"\n🚀 Mengirim Eksekusi {comment} ...")
     print(f"   Pair      : {symbol}")
-    print(f"   Harga OP  : {round(price,    digits)}")
+    print(f"   Harga OP  : {round(price,    digits)} (Action: {'PENDING' if action == mt5.TRADE_ACTION_PENDING else 'MARKET'})")
     ring_pts = round(abs(curr_high - curr_low) / point)
-    print(f"   Ring      : {ring_pts} pts | SL_Price={sl_price_payload}")
+    sl_from_entry = abs(price - sl_price)
+    tp_from_entry = abs(tp_price - price)
+    print(f"   Ring      : {ring_pts} pts")
     print(f"   SL        : {round(sl_price, digits)} (jarak dari entry: {round(sl_from_entry, digits)})")
-    print(f"   TP        : {round(tp_price, digits)} (RR {rr_ratio}:1 | jarak: {round(abs(tp_price - price), digits)})")
+    print(f"   TP        : {round(tp_price, digits)} (jarak dari entry: {round(tp_from_entry, digits)})")
+    
+    session_str = signal.get("trading_session", "Unknown")
+    print(f"   Sesi      : [{session_str}]")
 
     # 5. Kirim order
     result = mt5.order_send(request)  # type: ignore
@@ -165,11 +219,13 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         add_tracked_trade(
             ticket=result.order,
             symbol=symbol,
-            mode="BUY" if order_type == mt5.ORDER_TYPE_BUY else "SELL",
+            mode="BUY" if pattern == "bullish_engulfing" else "SELL",
             tf=signal["timeframe"],
             op_price=price,
             sl_price=sl_price,
-            tp_price=tp_price
+            tp_price=tp_price,
+            status="PENDING" if action == mt5.TRADE_ACTION_PENDING else "ACTIVE",
+            trading_session=session_str
         )
         print(f"⏳ Trade masuk tracker. Screenshot akan digenerate saat kena SL/TP.")
     except Exception as e:

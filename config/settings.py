@@ -20,6 +20,9 @@ SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 # === Polling ===
 POLL_INTERVAL: int = int(os.getenv("POLL_INTERVAL", "1"))
 
+# === Strategy ===
+ACTIVE_FILTER_STRATEGY: str = os.getenv("ACTIVE_FILTER_STRATEGY", "A").upper()
+
 
 def validate_env():
     """Validasi bahwa semua required env vars sudah terisi."""
@@ -34,4 +37,11 @@ def validate_env():
             f"❌ Environment variables berikut belum diset: {', '.join(missing)}\n"
             f"   Pastikan file .env ada di: {_env_path}"
         )
+        
+    if ACTIVE_FILTER_STRATEGY not in ["A", "B"]:
+        raise EnvironmentError(
+            f"❌ Konfigurasi ACTIVE_FILTER_STRATEGY salah! Hanya boleh 'A' atau 'B'.\n"
+            f"   Nilai saat ini: {ACTIVE_FILTER_STRATEGY}"
+        )
+        
     return True

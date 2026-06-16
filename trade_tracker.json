@@ -1,1 +1,11 @@
-{}
+{
+    "711657965": {
+        "symbol": "XAUUSD",
+        "mode": "SELL",
+        "tf": "M1",
+        "op_price": 4319.99,
+        "sl_price": 4319.41,
+        "tp_price": 4320.57,
+        "timestamp": "20260616_135600"
+    }
+}

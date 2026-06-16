@@ -10,6 +10,9 @@ from dataclasses import dataclass, field
 @dataclass
 class EngulfingConfig:
     """Threshold dan parameter untuk engulfing detection."""
+    active_filter_strategy: str = field(
+        default_factory=lambda: os.getenv("ACTIVE_FILTER_STRATEGY", "A").upper()
+    )
     filter_f1_trigger_enabled: bool = field(
         default_factory=lambda: os.getenv("FILTER_F1_TRIGGER_ENABLED", "true").lower() == "true"
     )
@@ -43,3 +46,7 @@ class EngulfingConfig:
     normal_ring_c1_points: int = field(default_factory=lambda: int(os.getenv("NORMAL_RING_C1_POINTS", "250")))
     large_ring_c1_points: int = field(default_factory=lambda: int(os.getenv("LARGE_RING_C1_POINTS", "450")))
     max_ring_c1_points: int = field(default_factory=lambda: int(os.getenv("MAX_RING_C1_POINTS", "1500")))
+
+    # F3 Pattern & Ring Size Config (Filter B)
+    min_ring_c1_points_b: int = field(default_factory=lambda: int(os.getenv("MIN_RING_C1_POINTS_B", "250")))
+    max_ring_c1_points_b: int = field(default_factory=lambda: int(os.getenv("MAX_RING_C1_POINTS_B", "700")))

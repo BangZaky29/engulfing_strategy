@@ -1,11 +1,12 @@
 # =====================================================
-# strategies/engulfing/filters/f1_trigger.py
+# strategies/engulfing/filters_B/f1_trigger.py
 # F1: Engulfing Trigger Validations
 # =====================================================
 
-def check_engulfing_trigger(
+def check_engulfing_trigger_b(
     c1_open: float, c1_close: float,
     c2_open: float, c2_close: float,
+    ema_slow: float,
     verbose: bool = False
 ) -> tuple[bool, str | None]:
     """
@@ -19,23 +20,25 @@ def check_engulfing_trigger(
     # 1. Bullish Engulfing
     if not c2_is_bullish and c1_is_bullish:
         # C2 bearish, C1 bullish. C1 harus menelan C2 ke atas.
-        valid = c1_close >= c2_open
+        # F1 Tambahan: C1 Close harus di atas EMA Slow
+        valid = c1_close >= c2_open and c1_close > ema_slow
         if verbose:
-            print(f"   [F1] Trigger Bullish Engulfing: C1 Close ({c1_close}) >= C2 Open ({c2_open}) -> {'[OK]' if valid else '[NO]'}")
+            print(f"   [F1_B] Trigger Bullish Engulfing: C1 Close ({c1_close}) >= C2 Open ({c2_open}) & Close > EMA({ema_slow:.2f}) -> {'[OK]' if valid else '[NO]'}")
         if valid:
             return True, "bullish_engulfing"
             
     # 2. Bearish Engulfing
     elif c2_is_bullish and not c1_is_bullish:
         # C2 bullish, C1 bearish. C1 harus menelan C2 ke bawah.
-        valid = c1_close <= c2_open
+        # F1 Tambahan: C1 Close harus di bawah EMA Slow
+        valid = c1_close <= c2_open and c1_close < ema_slow
         if verbose:
-            print(f"   [F1] Trigger Bearish Engulfing: C1 Close ({c1_close}) <= C2 Open ({c2_open}) -> {'[OK]' if valid else '[NO]'}")
+            print(f"   [F1_B] Trigger Bearish Engulfing: C1 Close ({c1_close}) <= C2 Open ({c2_open}) & Close < EMA({ema_slow:.2f}) -> {'[OK]' if valid else '[NO]'}")
         if valid:
             return True, "bearish_engulfing"
             
     else:
         if verbose:
-            print("   [F1] Trigger: Warna C1 dan C2 sama atau bukan setup engulfing -> [NO]")
+            print("   [F1_B] Trigger: Warna C1 dan C2 sama atau bukan setup engulfing -> [NO]")
 
     return False, None

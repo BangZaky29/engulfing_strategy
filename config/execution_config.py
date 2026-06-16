@@ -61,3 +61,17 @@ class ExecutionConfig:
     Contoh tp_rr_ratio=1.5 (1:1.5):
       tp_price = 3300.50 + (8.50 * 1.5) = 3313.25
     """
+
+    # === Filter B Specific ===
+    op_pct_b: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_OP_PCT_B", "20"))
+    )
+    sl_pct_b: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_SL_PCT_B", "70"))
+    )
+    tp_pct_b: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_TP_PCT_B", "100"))
+    )
+    pending_order_expire_candles: int = field(
+        default_factory=lambda: int(os.getenv("PENDING_ORDER_EXPIRE_CANDLES", "2"))
+    )
