@@ -46,6 +46,7 @@ CREATE TABLE public.engulfing_signals (
   skip_reason text,
   ticket_id bigint,
   trading_session character varying,
+  volume double precision,
   CONSTRAINT engulfing_signals_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.engulfing_stats (
@@ -76,6 +77,8 @@ CREATE TABLE public.trade_analytics (
   image_url text NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   trading_session character varying,
+  exit_price double precision,
+  volume double precision,
   CONSTRAINT trade_analytics_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.whatsapp_sessions (
@@ -119,5 +122,6 @@ CREATE TABLE public.trade_active_logs (
   tp_price double precision,
   created_at timestamp with time zone DEFAULT now(),
   trading_session character varying,
+  image_url text,
   CONSTRAINT trade_active_logs_pkey PRIMARY KEY (id)
 );
