@@ -13,6 +13,7 @@ from database.supabase_storage import upload_screenshot
 from database.supabase_client import get_supabase
 from mt5_client.visualizer import generate_screenshot
 from config.mt5_config import MT5Config, EMAConfig
+from strategies.engulfing.signal_builder import get_trading_session_wib
 
 TRACKER_FILE = "trade_tracker.json"
 TEMP_DIR = "temp_screenshots"
@@ -92,18 +93,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
             try:
                 dt_local = datetime.strptime(info["timestamp"], "%Y%m%d_%H%M%S")
                 dt_local = dt_local.astimezone()  # Local machine timezone
-                wib_tz = timezone(timedelta(hours=7))
-                dt_wib = dt_local.astimezone(wib_tz)
-                hour = dt_wib.hour
-                
-                sessions = []
-                if 7 <= hour < 16:
-                    sessions.append("Asia")
-                if 14 <= hour < 23:
-                    sessions.append("Euro")
-                if 19 <= hour <= 23 or 0 <= hour < 4:
-                    sessions.append("NY")
-                session_str = "/".join(sessions) if sessions else "Off-Market"
+                session_str = get_trading_session_wib(dt_local)
                 
                 info["trading_session"] = session_str
                 save_tracked_trades(data)

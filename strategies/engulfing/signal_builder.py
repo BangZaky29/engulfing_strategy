@@ -8,20 +8,67 @@ from datetime import datetime, timezone, timedelta
 from config.engulfing_config import EngulfingConfig
 from config.execution_config import ExecutionConfig
 
-def get_trading_session_wib() -> str:
-    wib_tz = timezone(timedelta(hours=7))
-    now_wib = datetime.now(wib_tz)
-    hour = now_wib.hour
+def is_us_dst(dt: datetime) -> bool:
+    # Convert dt to UTC first to be standard
+    dt_utc = dt.astimezone(timezone.utc)
+    year = dt_utc.year
     
-    sessions = []
-    if 7 <= hour < 16:
-        sessions.append("Asia")
-    if 14 <= hour < 23:
-        sessions.append("Euro")
-    if 19 <= hour <= 23 or 0 <= hour < 4:
-        sessions.append("NY")
+    # Second Sunday in March
+    w_march1 = datetime(year, 3, 1, tzinfo=timezone.utc).weekday()
+    first_sun_march = 1 + (6 - w_march1) % 7
+    dst_start = datetime(year, 3, first_sun_march + 7, 2, 0, tzinfo=timezone.utc)
+    
+    # First Sunday in November
+    w_nov1 = datetime(year, 11, 1, tzinfo=timezone.utc).weekday()
+    first_sun_nov = 1 + (6 - w_nov1) % 7
+    dst_end = datetime(year, 11, first_sun_nov, 2, 0, tzinfo=timezone.utc)
+    
+    return dst_start <= dt_utc < dst_end
+
+
+def get_trading_session_wib(dt: datetime = None) -> str:
+    if dt is None:
+        dt = datetime.now(timezone.utc)
+    else:
+        # If it is naive (no tzinfo), assume it is UTC.
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(timezone.utc)
         
-    return "/".join(sessions) if sessions else "Off-Market"
+    wib_tz = timezone(timedelta(hours=7))
+    dt_wib = dt.astimezone(wib_tz)
+    hour = dt_wib.hour
+    
+    is_dst = is_us_dst(dt)
+    
+    if is_dst:
+        # Summer/DST
+        if 7 <= hour < 14:
+            return "Asia Only"
+        elif 14 <= hour < 16:
+            return "Asia x Europe Overlap"
+        elif 16 <= hour < 19:
+            return "Europe Only"
+        elif 19 <= hour < 23:
+            return "Europe x New York Overlap"
+        elif hour >= 23 or hour < 4:
+            return "New York Only"
+        else:
+            return "Off / Low Liquidity"
+    else:
+        # Winter/Non-DST
+        if 7 <= hour < 15:
+            return "Asia Only"
+        elif 15 <= hour < 16:
+            return "Asia x Europe Overlap"
+        elif 16 <= hour < 20:
+            return "Europe Only"
+        elif 20 <= hour < 24:
+            return "Europe x New York Overlap"
+        elif 0 <= hour < 5:
+            return "New York Only"
+        else:
+            return "Off / Low Liquidity"
 
 
 def build_signal(

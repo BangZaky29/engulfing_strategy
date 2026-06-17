@@ -125,3 +125,28 @@ CREATE TABLE public.trade_active_logs (
   image_url text,
   CONSTRAINT trade_active_logs_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.wa_outbox (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  source_table text NOT NULL,
+  source_id bigint,
+  ticket_id bigint,
+  event_type text NOT NULL,
+  group_jid text NOT NULL,
+  message_type text NOT NULL DEFAULT 'TEXT'::text CHECK (message_type = ANY (ARRAY['TEXT'::text, 'IMAGE'::text, 'DOCUMENT'::text])),
+  message text NOT NULL,
+  image_url text,
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'PENDING'::text CHECK (status = ANY (ARRAY['PENDING'::text, 'SENDING'::text, 'SENT'::text, 'FAILED'::text, 'CANCELED'::text])),
+  attempts integer NOT NULL DEFAULT 0,
+  max_attempts integer NOT NULL DEFAULT 5,
+  next_retry_at timestamp with time zone NOT NULL DEFAULT now(),
+  last_error text,
+  wa_message_id text,
+  locked_by text,
+  locked_at timestamp with time zone,
+  sent_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  dedupe_key text NOT NULL UNIQUE,
+  CONSTRAINT wa_outbox_pkey PRIMARY KEY (id)
+);
