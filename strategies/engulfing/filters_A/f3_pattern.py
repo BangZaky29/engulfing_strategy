@@ -4,13 +4,15 @@
 # =====================================================
 
 from config.engulfing_config import EngulfingConfig
+from utils.colors import cprint, ok, reject
 
 def check_pattern_size(
     c1_high: float,
     c1_low: float,
     point: float,
     cfg: EngulfingConfig,
-    verbose: bool = False
+    verbose: bool = False,
+    color: str = "",
 ) -> tuple[bool, float]:
     """
     Validasi ukuran (Ring) C1 dalam poin.
@@ -25,12 +27,18 @@ def check_pattern_size(
 
     if c1_points < cfg.min_ring_c1_points:
         if verbose:
-            print(f"   [F3] Pattern Size: C1 terlalu kecil ({c1_points:.1f} pts < {cfg.min_ring_c1_points} pts) -> [REJECT]")
+            print(cprint(
+                f"   [F3] Pattern Size: C1 terlalu kecil ({c1_points:.1f} pts < {cfg.min_ring_c1_points} pts) -> ",
+                color
+            ) + reject())
         return False, 0.0
 
     if c1_points > cfg.max_ring_c1_points:
         if verbose:
-            print(f"   [F3] Pattern Size: C1 raksasa ({c1_points:.1f} pts > {cfg.max_ring_c1_points} pts) -> [REJECT]")
+            print(cprint(
+                f"   [F3] Pattern Size: C1 raksasa ({c1_points:.1f} pts > {cfg.max_ring_c1_points} pts) -> ",
+                color
+            ) + reject())
         return False, 0.0
 
     # Tentukan RR secara adaptif berdasarkan Range Poin C1
@@ -49,6 +57,9 @@ def check_pattern_size(
         ring_cat = "Besar"
 
     if verbose:
-        print(f"   [F3] Pattern Size: {c1_points:.1f} pts (Ring {ring_cat}) -> RR: {rr_ratio:.1f}")
+        print(cprint(
+            f"   [F3] Pattern Size: {c1_points:.1f} pts (Ring {ring_cat}) -> RR: {rr_ratio:.1f}",
+            color
+        ) + " " + ok())
 
     return True, rr_ratio

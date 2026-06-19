@@ -4,13 +4,14 @@
 # =====================================================
 
 from config.engulfing_config import EngulfingConfig
+from utils.colors import cprint, grade_color, market_color
 
 def calculate_scoring(
     c1_open: float, c1_close: float, c1_high: float, c1_low: float,
     c2_open: float, c2_close: float, c2_high: float, c2_low: float,
     avg_range_20: float, ema_now: float, ema_20_ago: float,
     cross_count: int, side_strength: float, pattern_type: str, point: float,
-    cfg: EngulfingConfig, verbose: bool = False
+    cfg: EngulfingConfig, verbose: bool = False, color: str = ""
 ) -> dict:
     
     # === 1. Range C1 ===
@@ -121,13 +122,13 @@ def calculate_scoring(
     score_breakdown = f"B:{body_score:.1f}|R:{range_score:.1f}|C:{cp_score:.1f}|E:{ema_score_pts:.1f}|M:{market_state_score:+.0f}"
 
     if verbose:
-        print(f"   [F2] Scoring Summary:")
-        print(f"        - Range C1 : {range_c1_pts:.0f} pts | RangeRatio: {range_ratio:.2f}x -> Score: {range_score:.1f}")
-        print(f"        - Body C1  : {body_pct:.1f}% -> Score: {body_score:.1f}")
-        print(f"        - Close Pwr: {cp_pct:.1f}% -> Score: {cp_score:.1f}")
-        print(f"        - EMA Pos  : {ema_label} -> Score: {ema_score_pts:.1f}")
-        print(f"        - Market   : {market_state} -> Score: {market_state_score:.1f}")
-        print(f"        = TOTAL    : {total_score:.1f} -> Grade: {grade}")
+        print(cprint(f"   [F2] Scoring Summary:", color))
+        print(cprint(f"        - Range C1 : {range_c1_pts:.0f} pts | RangeRatio: {range_ratio:.2f}x -> Score: {range_score:.1f}", color))
+        print(cprint(f"        - Body C1  : {body_pct:.1f}% -> Score: {body_score:.1f}", color))
+        print(cprint(f"        - Close Pwr: {cp_pct:.1f}% -> Score: {cp_score:.1f}", color))
+        print(cprint(f"        - EMA Pos  : {ema_label} -> Score: {ema_score_pts:.1f}", color))
+        print(cprint(f"        - Market   : ", color) + market_color(market_state) + cprint(f" -> Score: {market_state_score:.1f}", color))
+        print(cprint(f"        = TOTAL    : {total_score:.1f} -> Grade: ", color) + grade_color(grade))
         
     return {
         "range_pts": round(range_c1_pts),

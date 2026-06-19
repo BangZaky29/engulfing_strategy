@@ -4,12 +4,14 @@
 # =====================================================
 
 from config.engulfing_config import EngulfingConfig
+from utils.colors import cprint, ok, no
 
 def check_pattern_size_b(
     c1_high: float, c1_low: float,
     point: float,
     cfg: EngulfingConfig,
-    verbose: bool = False
+    verbose: bool = False,
+    color: str = "",
 ) -> bool:
     """
     Cek syarat ukuran Engulfing Pattern (C1 Range)
@@ -22,15 +24,24 @@ def check_pattern_size_b(
 
     if c1_points < cfg.min_ring_c1_points_b:
         if verbose:
-            print(f"   [F2_B] Pattern Size: {c1_points:.1f} pts < Min ({cfg.min_ring_c1_points_b}) -> [NO]")
+            print(cprint(
+                f"   [F2_B] Pattern Size: {c1_points:.1f} pts < Min ({cfg.min_ring_c1_points_b}) -> ",
+                color
+            ) + no())
         return False
         
     if c1_points > cfg.max_ring_c1_points_b:
         if verbose:
-            print(f"   [F2_B] Pattern Size: {c1_points:.1f} pts > Max ({cfg.max_ring_c1_points_b}) -> [NO]")
+            print(cprint(
+                f"   [F2_B] Pattern Size: {c1_points:.1f} pts > Max ({cfg.max_ring_c1_points_b}) -> ",
+                color
+            ) + no())
         return False
 
     if verbose:
-        print(f"   [F2_B] Pattern Size: {c1_points:.1f} pts (Valid Range {cfg.min_ring_c1_points_b}-{cfg.max_ring_c1_points_b}) -> [OK]")
+        print(cprint(
+            f"   [F2_B] Pattern Size: {c1_points:.1f} pts (Valid Range {cfg.min_ring_c1_points_b}-{cfg.max_ring_c1_points_b}) -> ",
+            color
+        ) + ok())
 
     return True

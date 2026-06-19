@@ -3,11 +3,14 @@
 # F1: Engulfing Trigger Validations
 # =====================================================
 
+from utils.colors import cprint, ok, no
+
 def check_engulfing_trigger(
     c1_open: float, c1_close: float,
     c2_open: float, c2_close: float,
     ema_slow: float,
-    verbose: bool = False
+    verbose: bool = False,
+    color: str = "",
 ) -> tuple[bool, str | None]:
     """
     Cek syarat dasar Engulfing Trigger berdasarkan open & close.
@@ -23,7 +26,11 @@ def check_engulfing_trigger(
         # F1 Tambahan: C1 Close harus di atas EMA Slow
         valid = c1_close >= c2_open and c1_close > ema_slow
         if verbose:
-            print(f"   [F1] Trigger Bullish Engulfing: C1 Close ({c1_close}) >= C2 Open ({c2_open}) & Close > EMA({ema_slow:.2f}) -> {'[OK]' if valid else '[NO]'}")
+            result = ok() if valid else no()
+            print(cprint(
+                f"   [F1] Trigger Bullish Engulfing: C1 Close ({c1_close}) >= C2 Open ({c2_open}) "
+                f"& Close > EMA({ema_slow:.2f}) -> ", color
+            ) + result)
         if valid:
             return True, "bullish_engulfing"
             
@@ -33,12 +40,16 @@ def check_engulfing_trigger(
         # F1 Tambahan: C1 Close harus di bawah EMA Slow
         valid = c1_close <= c2_open and c1_close < ema_slow
         if verbose:
-            print(f"   [F1] Trigger Bearish Engulfing: C1 Close ({c1_close}) <= C2 Open ({c2_open}) & Close < EMA({ema_slow:.2f}) -> {'[OK]' if valid else '[NO]'}")
+            result = ok() if valid else no()
+            print(cprint(
+                f"   [F1] Trigger Bearish Engulfing: C1 Close ({c1_close}) <= C2 Open ({c2_open}) "
+                f"& Close < EMA({ema_slow:.2f}) -> ", color
+            ) + result)
         if valid:
             return True, "bearish_engulfing"
             
     else:
         if verbose:
-            print("   [F1] Trigger: Warna C1 dan C2 sama atau bukan setup engulfing -> [NO]")
+            print(cprint("   [F1] Trigger: Warna C1 dan C2 sama atau bukan setup engulfing -> ", color) + no())
 
     return False, None

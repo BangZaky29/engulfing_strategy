@@ -11,12 +11,14 @@ from .filters_A.f3_pattern import check_pattern_size
 from .filters_A.f4_market_state import evaluate_market_state
 from .filters_B import check_engulfing_trigger_b, check_pattern_size_b
 from .signal_builder import build_signal
+from utils.colors import Colors, cprint, skip_msg, grade_color
 
 
 def detect_engulfing(
     candle_data: dict,
     cfg: EngulfingConfig | None = None,
     verbose: bool = False,
+    color: str = "",
 ) -> dict | None:
     if cfg is None:
         cfg = EngulfingConfig()
@@ -50,11 +52,17 @@ def detect_engulfing(
     warna_c1 = "Hijau [BUY]" if c1_is_bullish else "Merah [SELL]"
     warna_c2 = "Hijau [BUY]" if c2_is_bullish else "Merah [SELL]"
 
+    # Warna label C1/C2 sesuai arahnya masing-masing
+    clr_c1 = Colors.GREEN if c1_is_bullish else Colors.RED
+    clr_c2 = Colors.GREEN if c2_is_bullish else Colors.RED
+
     # --- Header verbose ---
     if verbose:
-        print(f"   {'-'*52}")
-        print(f"   [FILTER] C1(Engulf)={warna_c1}  C2(Ditela)={warna_c2}")
-        print(f"   {'-'*52}")
+        print(cprint(f"   {'-'*52}", color))
+        c1_label = cprint(warna_c1, clr_c1, bold=True)
+        c2_label = cprint(warna_c2, clr_c2, bold=True)
+        print(cprint("   [FILTER] ", color) + f"C1(Engulf)={c1_label}  C2(Ditela)={c2_label}")
+        print(cprint(f"   {'-'*52}", color))
 
     skip_reason = None
     scoring_res = {}
@@ -62,17 +70,17 @@ def detect_engulfing(
 
     if cfg.active_filter_strategy == 'B':
         if verbose:
-            print(f"   [STRATEGY] Menggunakan Filter B (Pullback Limit, No Grade)")
+            print(cprint(f"   [STRATEGY] Menggunakan Filter B (Pullback Limit, No Grade)", color))
             
         # [F1_B] Engulfing Trigger & EMA Slow
         is_valid, pattern_type = check_engulfing_trigger_b(
-            c1_open, c1_close, c2_open, c2_close, ema_slow, verbose
+            c1_open, c1_close, c2_open, c2_close, ema_slow, verbose, color
         )
         if not is_valid or pattern_type is None:
             return None
             
         # [F2_B] Pattern Size
-        valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, cfg, verbose)
+        valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, cfg, verbose, color)
         if not valid_f2_b:
             pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
             skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"
@@ -87,17 +95,17 @@ def detect_engulfing(
 
     else:
         if verbose:
-            print(f"   [STRATEGY] Menggunakan Filter A (Scoring/Grade)")
+            print(cprint(f"   [STRATEGY] Menggunakan Filter A (Scoring/Grade)", color))
             
         # -----------------------------------------------------------------
         # [F1] Engulfing Trigger
         # -----------------------------------------------------------------
         if not cfg.filter_f1_trigger_enabled:
-            if verbose: print("   [--] [F1] Trigger: DISABLED (bypass)")
+            if verbose: print(cprint("   [--] [F1] Trigger: DISABLED (bypass)", Colors.GRAY))
             pattern_type = "bullish_engulfing" if c1_is_bullish else "bearish_engulfing"
         else:
             is_valid, pattern_type = check_engulfing_trigger(
-                c1_open, c1_close, c2_open, c2_close, ema_slow, verbose
+                c1_open, c1_close, c2_open, c2_close, ema_slow, verbose, color
             )
             if not is_valid or pattern_type is None:
                 return None
@@ -108,15 +116,15 @@ def detect_engulfing(
         rr_ratio = 1.5
         valid_f3 = True
         if not cfg.filter_f3_pattern_enabled:
-            if verbose: print("   [--] [F3] Pattern Size: DISABLED (bypass)")
+            if verbose: print(cprint("   [--] [F3] Pattern Size: DISABLED (bypass)", Colors.GRAY))
         else:
-            valid_f3, rr_ratio = check_pattern_size(c1_high, c1_low, point, cfg, verbose)
+            valid_f3, rr_ratio = check_pattern_size(c1_high, c1_low, point, cfg, verbose, color)
 
         # -----------------------------------------------------------------
         # [F2] Scoring & Metrics (Includes F4 Market State implicitly)
         # -----------------------------------------------------------------
         if not cfg.filter_f2_scoring_enabled:
-            if verbose: print("   [--] [F2] Scoring: DISABLED (bypass)")
+            if verbose: print(cprint("   [--] [F2] Scoring: DISABLED (bypass)", Colors.GRAY))
             scoring_res = {
                 "range_pts": 0, "body_pct": 100, "wick_pct": 0, "cp_pct": 100,
                 "ema_label": "None", "market_state": "Normal", "total_score": 100,
@@ -128,7 +136,7 @@ def detect_engulfing(
                 c2_open, c2_close, c2_high, c2_low,
                 avg_range_20, ema_now, ema_20_ago,
                 cross_count, side_strength, pattern_type, point,
-                cfg, verbose
+                cfg, verbose, color
             )
 
         # Filtering Grade Minimal
@@ -155,17 +163,23 @@ def detect_engulfing(
         signal["is_confirmed"] = False
         signal["skip_reason"] = skip_reason
         if verbose:
-            print(f"   >> SKIP: {skip_reason}")
+            print(cprint(f"   {skip_msg(skip_reason)}", Colors.YELLOW))
     else:
         signal["is_confirmed"] = True
         signal["skip_reason"] = None
         if verbose:
             sl_pts = signal.get("sl_pts", 0)
             sl_price = signal.get("sl_price", 0.0)
-            print(f"   {'-'*52}")
+            print(cprint(f"   {'-'*52}", color))
             session_str = signal.get("trading_session", "Unknown")
-            print(f"   {pattern_type.upper()} LOLOS SEMUA FILTER!")
-            print(f"   Engulfing | {signal['symbol']} | {signal['timeframe']} | {scoring_res['action_str']} | Grade : {scoring_res['grade']} | B : {scoring_res['body_pct']}% | CP : {scoring_res['cp_pct']}% | RR : {signal['rr_ratio']} | SL : {sl_price} ({sl_pts}pts) | Sesi : {session_str}")
-            print(f"   {'-'*52}")
+            print(cprint(f"   {pattern_type.upper()} LOLOS SEMUA FILTER! ✅", Colors.GREEN, bold=True))
+            print(cprint(
+                f"   Engulfing | {signal['symbol']} | {signal['timeframe']} | "
+                f"{scoring_res['action_str']} | Grade : {grade_color(str(scoring_res['grade']))} | "
+                f"B : {scoring_res['body_pct']}% | CP : {scoring_res['cp_pct']}% | "
+                f"RR : {signal['rr_ratio']} | SL : {sl_price} ({sl_pts}pts) | Sesi : {session_str}",
+                Colors.GREEN
+            ))
+            print(cprint(f"   {'-'*52}", color))
 
     return signal
