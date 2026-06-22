@@ -12,7 +12,8 @@ from mt5_client.indicators import get_ema
 from mt5_client.error_helper import get_last_error
 
 
-def get_closed_candles(mt5_cfg: MT5Config | None = None,
+def get_closed_candles(symbol: str,
+                       mt5_cfg: MT5Config | None = None,
                        ema_cfg: EMAConfig | None = None,
                        tf_label: str = "M1",
                        verbose: bool = False) -> dict | None:
@@ -26,13 +27,13 @@ def get_closed_candles(mt5_cfg: MT5Config | None = None,
         ema_cfg = EMAConfig()
 
     # Ambil rates dari MT5
-    rates = mt5.copy_rates_from_pos(mt5_cfg.symbol, mt5_cfg.get_mt5_timeframe(tf_label), 0, mt5_cfg.candle_count)  # type: ignore
-    tick = mt5.symbol_info_tick(mt5_cfg.symbol)  # type: ignore
-    info = mt5.symbol_info(mt5_cfg.symbol)  # type: ignore
+    rates = mt5.copy_rates_from_pos(symbol, mt5_cfg.get_mt5_timeframe(tf_label), 0, mt5_cfg.candle_count)  # type: ignore
+    tick = mt5.symbol_info_tick(symbol)  # type: ignore
+    info = mt5.symbol_info(symbol)  # type: ignore
 
     if rates is None or len(rates) < 3 or tick is None or info is None:
         if verbose:
-            print(f"❌ Gagal ambil data {mt5_cfg.symbol}. error={get_last_error()}")
+            print(f"❌ Gagal ambil data {symbol}. error={get_last_error()}")
         return None
 
     df = pd.DataFrame(rates)
@@ -111,8 +112,8 @@ def get_closed_candles(mt5_cfg: MT5Config | None = None,
                 cross_count += 1
                 
         # Side Strength
-        closes_above = int((closes > emas).sum())
-        closes_below = int((closes < emas).sum())
+        closes_above = int(sum(1 for c, e in zip(closes, emas) if c > e))
+        closes_below = int(sum(1 for c, e in zip(closes, emas) if c < e))
         side_strength = abs(closes_above - closes_below) / lookback_period
         
     else:
@@ -125,7 +126,7 @@ def get_closed_candles(mt5_cfg: MT5Config | None = None,
     if verbose:
         warna = "🟩 Hijau" if is_bullish_c2 else "🟥 Merah"
         print(
-            f"✅ {mt5_cfg.symbol} {tf_label} | C1(New): {c2['time']} {warna} "
+            f"✅ {symbol} {tf_label} | C1(New): {c2['time']} {warna} "
             f"O:{c2['open']:.2f} H:{c2['high']:.2f} L:{c2['low']:.2f} C:{c2['close']:.2f} "
             f"| Spread: {spread}"
         )
@@ -133,7 +134,7 @@ def get_closed_candles(mt5_cfg: MT5Config | None = None,
 
     return {
         # Identifikasi
-        "symbol": mt5_cfg.symbol,
+        "symbol": symbol,
         "timeframe": tf_label,
 
         # Info MT5 (untuk konversi point)
@@ -171,5 +172,5 @@ def get_closed_candles(mt5_cfg: MT5Config | None = None,
         "ema_now": float(ema_now),
         "ema_20_ago": float(ema_20_ago),
         "cross_count_20": cross_count,
-        "side_strength_20": side_strength,
+        "side_strength_20": float(side_strength),
     }

@@ -9,6 +9,7 @@ from utils.colors import cprint, ok, no
 def check_pattern_size_b(
     c1_high: float, c1_low: float,
     point: float,
+    symbol: str,
     cfg: EngulfingConfig,
     verbose: bool = False,
     color: str = "",
@@ -21,26 +22,27 @@ def check_pattern_size_b(
         return False
         
     c1_points = abs(c1_high - c1_low) / point
+    min_ring, max_ring = cfg.get_ring_size_b(symbol)
 
-    if c1_points < cfg.min_ring_c1_points_b:
+    if c1_points < min_ring:
         if verbose:
             print(cprint(
-                f"   [F2_B] Pattern Size: {c1_points:.1f} pts < Min ({cfg.min_ring_c1_points_b}) -> ",
+                f"   [F2_B] {symbol} Pattern Size: {c1_points:.1f} pts < Min ({min_ring}) -> ",
                 color
             ) + no())
         return False
         
-    if c1_points > cfg.max_ring_c1_points_b:
+    if c1_points > max_ring:
         if verbose:
             print(cprint(
-                f"   [F2_B] Pattern Size: {c1_points:.1f} pts > Max ({cfg.max_ring_c1_points_b}) -> ",
+                f"   [F2_B] {symbol} Pattern Size: {c1_points:.1f} pts > Max ({max_ring}) -> ",
                 color
             ) + no())
         return False
 
     if verbose:
         print(cprint(
-            f"   [F2_B] Pattern Size: {c1_points:.1f} pts (Valid Range {cfg.min_ring_c1_points_b}-{cfg.max_ring_c1_points_b}) -> ",
+            f"   [F2_B] {symbol} Pattern Size: {c1_points:.1f} pts (Valid Range {min_ring}-{max_ring}) -> ",
             color
         ) + ok())
 

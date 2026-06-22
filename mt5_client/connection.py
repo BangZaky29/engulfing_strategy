@@ -8,7 +8,7 @@ from config.mt5_config import MT5Config
 from mt5_client.error_helper import get_last_error
 
 
-def init_mt5(cfg: MT5Config = None) -> bool:
+def init_mt5(cfg: MT5Config | None = None) -> bool:
     """
     Inisialisasi MT5 dan select symbol.
     Returns True jika berhasil.
@@ -16,21 +16,22 @@ def init_mt5(cfg: MT5Config = None) -> bool:
     if cfg is None:
         cfg = MT5Config()
 
-    if not mt5.initialize():
+    if not mt5.initialize():  # type: ignore
         print(f"❌ Gagal inisialisasi MT5: {get_last_error()}")
         return False
     print("✅ MT5 terhubung.")
 
-    if not mt5.symbol_select(cfg.symbol, True):
-        print(f"❌ Gagal memilih simbol {cfg.symbol}: {get_last_error()}")
-        mt5.shutdown()
-        return False
-    print(f"✅ Symbol {cfg.symbol} aktif.")
+    for sym in cfg.symbols:
+        if not mt5.symbol_select(sym, True):  # type: ignore
+            print(f"❌ Gagal memilih simbol {sym}: {get_last_error()}")
+            mt5.shutdown()  # type: ignore
+            return False
+        print(f"✅ Symbol {sym} aktif.")
 
     return True
 
 
 def shutdown_mt5():
     """Shutdown MT5 connection."""
-    mt5.shutdown()
+    mt5.shutdown()  # type: ignore
     print("🛑 MT5 shutdown selesai.")

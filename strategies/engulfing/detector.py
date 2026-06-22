@@ -9,7 +9,7 @@ from .filters_A.f1_trigger import check_engulfing_trigger
 from .filters_A.f2_scoring import calculate_scoring
 from .filters_A.f3_pattern import check_pattern_size
 from .filters_A.f4_market_state import evaluate_market_state
-from .filters_B import check_engulfing_trigger_b, check_pattern_size_b
+from .filters_B import check_engulfing_trigger_b, check_pattern_size_b, check_ema_ring_b
 from .signal_builder import build_signal
 from utils.colors import Colors, cprint, skip_msg, grade_color
 
@@ -22,6 +22,8 @@ def detect_engulfing(
 ) -> dict | None:
     if cfg is None:
         cfg = EngulfingConfig()
+
+    symbol = candle_data.get("symbol", "XAUUSD")
 
     # --- Unpack data ---
     # C1 adalah candle engulfing yg baru close
@@ -79,8 +81,17 @@ def detect_engulfing(
         if not is_valid or pattern_type is None:
             return None
             
+        # [F3_B] EMA Ring Filter
+        if cfg.filter_f3_ema_ring_b_enabled:
+            valid_ema_ring = check_ema_ring_b(
+                c1_high, c1_low, c2_high, c2_low,
+                ema_now, pattern_type, verbose, color
+            )
+            if not valid_ema_ring:
+                return None
+
         # [F2_B] Pattern Size
-        valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, cfg, verbose, color)
+        valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, symbol, cfg, verbose, color)
         if not valid_f2_b:
             pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
             skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"

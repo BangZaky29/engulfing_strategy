@@ -4,6 +4,7 @@
 # Modul untuk eksekusi order Market, Stop Loss, dan Take Profit
 # =====================================================
 
+import os
 import time
 import MetaTrader5 as mt5
 from config.mt5_config import MT5Config, EMAConfig
@@ -208,19 +209,13 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         expire_time = int(tick.time) + (exec_cfg.pending_order_expire_candles * tf_seconds)
         request["expiration"] = expire_time
 
-    # 4. Log sebelum kirim
-    print(f"\n🚀 Mengirim Eksekusi {comment} ...")
-    print(f"   Pair      : {symbol}")
-    print(f"   Harga OP  : {round(price,    digits)} (Action: {'PENDING' if action == mt5.TRADE_ACTION_PENDING else 'MARKET'})")
+    # 4. Log clean terminal output
     ring_pts = round(abs(curr_high - curr_low) / point)
-    sl_from_entry = abs(price - sl_price)
-    tp_from_entry = abs(tp_price - price)
-    print(f"   Ring      : {ring_pts} pts")
-    print(f"   SL        : {round(sl_price, digits)} (jarak dari entry: {round(sl_from_entry, digits)})")
-    print(f"   TP        : {round(tp_price, digits)} (jarak dari entry: {round(tp_from_entry, digits)})")
-    
     session_str = signal.get("trading_session", "Unknown")
-    print(f"   Sesi      : [{session_str}]")
+    
+    active_filter = os.getenv("ACTIVE_FILTER_STRATEGY", "B")
+    print(f"⚠️ [SIGNAL] {symbol} | FILTER {active_filter} | {pattern.upper().replace('_', ' ')} | Sesi: {session_str}")
+    print(f"🚀 Eksekusi: {'MARKET' if action == mt5.TRADE_ACTION_DEAL else 'PENDING (LIMIT)'} di {round(price, digits):.2f} | SL: {round(sl_price, digits):.2f} ({ring_pts} pts) | TP: {round(tp_price, digits):.2f}")
 
     # 5. Kirim order
     result = mt5.order_send(request)  # type: ignore

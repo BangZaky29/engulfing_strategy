@@ -26,7 +26,7 @@ def is_us_dst(dt: datetime) -> bool:
     return dst_start <= dt_utc < dst_end
 
 
-def get_trading_session_wib(dt: datetime = None) -> str:
+def get_trading_session_wib(dt: datetime | None = None) -> str:
     if dt is None:
         dt = datetime.now(timezone.utc)
     else:
@@ -146,6 +146,7 @@ def build_signal(
         "sl_pct_used": sl_pct_used,
         "rr_ratio": rr_ratio,
         "sl_pts": sl_pts,
+        "ring_pts": round(abs(c1_high - c1_low) / point) if point > 0 else 0,
         "op_price": round(op_price, 2),
         "sl_price": round(sl_price, 2),
         "tp_price": round(tp_price, 2) if tp_price > 0 else None,

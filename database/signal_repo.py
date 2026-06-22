@@ -54,9 +54,10 @@ class SignalRepo:
             ).execute()
 
             emoji = "🟩" if signal["pattern_type"] == "bullish_engulfing" else "🟥"
+            skip_text = f" | ⏭️ SKIPPED: {signal.get('skip_reason')}" if signal.get('skip_reason') else ""
             print(
                 f"{emoji} Signal tersimpan: {signal['pattern_type']} @ {signal['signal_time']} "
-                f"(confidence: {signal.get('confidence_score', 0):.1f}%)"
+                f"(confidence: {signal.get('confidence_score', 0):.1f}%){skip_text}"
             )
             return True
 

@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 @dataclass
 class MT5Config:
     """Konfigurasi koneksi dan data MT5."""
-    symbol: str = field(default_factory=lambda: os.getenv("MT5_SYMBOL", "XAUUSD"))
+    symbols: list = field(default_factory=lambda: [x.strip() for x in os.getenv("MT5_SYMBOLS", "XAUUSD").split(",")])
     timeframes: list = field(default_factory=lambda: [x.strip() for x in os.getenv("MT5_TIMEFRAMES", "M1,M5").split(",")])
     strategy_timeframe: str = field(default_factory=lambda: os.getenv("STRATEGY_TIMEFRAME", "M1"))
     candle_count: int = field(default_factory=lambda: int(os.getenv("MT5_CANDLE_COUNT", "50")))

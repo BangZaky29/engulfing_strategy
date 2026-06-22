@@ -28,6 +28,9 @@ class EngulfingConfig:
     filter_f3_pattern_enabled: bool = field(
         default_factory=lambda: os.getenv("FILTER_F3_PATTERN_ENABLED", "true").lower() == "true"
     )
+    filter_f3_ema_ring_b_enabled: bool = field(
+        default_factory=lambda: os.getenv("FILTER_F3_EMA_RING_B_ENABLED", "true").lower() == "true"
+    )
     
     score_weight_body: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_BODY", "40")))
     score_weight_range: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_RANGE", "30")))
@@ -50,3 +53,10 @@ class EngulfingConfig:
     # F3 Pattern & Ring Size Config (Filter B)
     min_ring_c1_points_b: int = field(default_factory=lambda: int(os.getenv("MIN_RING_C1_POINTS_B", "250")))
     max_ring_c1_points_b: int = field(default_factory=lambda: int(os.getenv("MAX_RING_C1_POINTS_B", "700")))
+
+    def get_ring_size_b(self, symbol: str) -> tuple[int, int]:
+        """Fetch symbol-specific min/max ring size for Filter B."""
+        min_val = int(os.getenv(f"RING_B_{symbol.upper()}_MIN", self.min_ring_c1_points_b))
+        max_val = int(os.getenv(f"RING_B_{symbol.upper()}_MAX", self.max_ring_c1_points_b))
+        return min_val, max_val
+
