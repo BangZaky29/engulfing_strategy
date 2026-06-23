@@ -33,12 +33,15 @@ def detect_engulfing(
     c1_low        = candle_data["low_"]
     c1_is_bullish = candle_data["is_bullish"]
     
+    c1_is_doji    = candle_data.get("is_doji", False)
+    
     # C2 adalah candle yg ditelan
     c2_open       = candle_data["prev_open"]
     c2_close      = candle_data["prev_close"]
     c2_high       = candle_data["prev_high"]
     c2_low        = candle_data["prev_low"]
     c2_is_bullish = candle_data["prev_is_bullish"]
+    c2_is_doji    = candle_data.get("prev_is_doji", False)
 
     point  = candle_data.get("point", 0.01)
     digits = candle_data.get("digits", 2)
@@ -51,12 +54,19 @@ def detect_engulfing(
     cross_count = candle_data.get("cross_count_20", 0)
     side_strength = candle_data.get("side_strength_20", 0.0)
 
-    warna_c1 = "Hijau [BUY]" if c1_is_bullish else "Merah [SELL]"
-    warna_c2 = "Hijau [BUY]" if c2_is_bullish else "Merah [SELL]"
+    if c1_is_doji:
+        warna_c1 = f"Putih [DOJI {'BUY' if c1_is_bullish else 'SELL'}]"
+        clr_c1 = Colors.GRAY
+    else:
+        warna_c1 = "Hijau [BUY]" if c1_is_bullish else "Merah [SELL]"
+        clr_c1 = Colors.GREEN if c1_is_bullish else Colors.RED
 
-    # Warna label C1/C2 sesuai arahnya masing-masing
-    clr_c1 = Colors.GREEN if c1_is_bullish else Colors.RED
-    clr_c2 = Colors.GREEN if c2_is_bullish else Colors.RED
+    if c2_is_doji:
+        warna_c2 = f"Putih [DOJI {'BUY' if c2_is_bullish else 'SELL'}]"
+        clr_c2 = Colors.GRAY
+    else:
+        warna_c2 = "Hijau [BUY]" if c2_is_bullish else "Merah [SELL]"
+        clr_c2 = Colors.GREEN if c2_is_bullish else Colors.RED
 
     # --- Header verbose ---
     if verbose:
@@ -69,40 +79,59 @@ def detect_engulfing(
     skip_reason = None
     scoring_res = {}
     rr_ratio = 1.0
+    pattern_type = "none"
 
-    if cfg.active_filter_strategy == 'B':
-        if verbose:
-            print(cprint(f"   [STRATEGY] Menggunakan Filter B (Pullback Limit, No Grade)", color))
-            
-        # [F1_B] Engulfing Trigger & EMA Slow
-        is_valid, pattern_type = check_engulfing_trigger_b(
-            c1_open, c1_close, c2_open, c2_close, ema_slow, verbose, color
-        )
-        if not is_valid or pattern_type is None:
-            return None
-            
-        # [F3_B] EMA Ring Filter
-        if cfg.filter_f3_ema_ring_b_enabled:
-            valid_ema_ring = check_ema_ring_b(
-                c1_high, c1_low, c2_high, c2_low,
-                ema_now, pattern_type, verbose, color
-            )
-            if not valid_ema_ring:
-                return None
+    # DOJI CHECKS
+    if c1_is_doji:
+        skip_reason = "C1 is Doji, trigger candle too weak"
+    elif c2_is_doji:
+        if cfg.active_filter_strategy != 'B':
+            skip_reason = "C2 is Doji, invalid engulfing (Hanya diizinkan di Filter B)"
 
-        # [F2_B] Pattern Size
-        valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, symbol, cfg, verbose, color)
-        if not valid_f2_b:
-            pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
-            skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"
-            
-        # Mock scoring_res for Filter B
+    if skip_reason:
         scoring_res = {
-            "range_pts": round(abs(c1_high - c1_low) / point), 
-            "body_pct": 100, "wick_pct": 0, "cp_pct": 100,
-            "ema_label": "None", "market_state": "Filter B", "total_score": 100,
-            "grade": "N/A", "action_str": "BUY" if c1_is_bullish else "SELL"
+            "range_pts": 0, "body_pct": candle_data.get("body_pct", 0), "wick_pct": 0, "cp_pct": 0,
+            "ema_label": "None", "market_state": "Doji", "total_score": 0,
+            "grade": "N/A", "action_str": "NONE"
         }
+
+    # ONLY RUN STRATEGY IF NO DOJI SKIP REASON
+    if not skip_reason:
+        if cfg.active_filter_strategy == 'B':
+            if verbose:
+                print(cprint(f"   [STRATEGY] Menggunakan Filter B (Pullback Limit, No Grade)", color))
+                
+            # [F1_B] Engulfing Trigger & EMA Slow
+            is_valid, pattern_type = check_engulfing_trigger_b(
+                c1_open, c1_close, c2_open, c2_close,
+                c2_high, c2_low, c2_is_doji,
+                ema_slow, verbose, color
+            )
+            if not is_valid or pattern_type is None:
+                return None
+                
+            # [F3_B] EMA Ring Filter
+            if cfg.filter_f3_ema_ring_b_enabled:
+                valid_ema_ring = check_ema_ring_b(
+                    c1_high, c1_low, c2_high, c2_low,
+                    ema_now, pattern_type, verbose, color
+                )
+                if not valid_ema_ring:
+                    return None
+
+            # [F2_B] Pattern Size
+            valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, symbol, cfg, verbose, color)
+            if not valid_f2_b:
+                pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
+                skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"
+                
+            # Mock scoring_res for Filter B
+            scoring_res = {
+                "range_pts": round(abs(c1_high - c1_low) / point), 
+                "body_pct": 100, "wick_pct": 0, "cp_pct": 100,
+                "ema_label": "None", "market_state": "Filter B", "total_score": 100,
+                "grade": "N/A", "action_str": "BUY" if c1_is_bullish else "SELL"
+            }
 
     else:
         if verbose:

@@ -73,13 +73,27 @@ def get_closed_candles(symbol: str,
 
     # Body & wick C2 (Engulfing Candle / C1 in new rules)
     body_c2 = abs(c2["close"] - c2["open"])
+    range_c2 = c2["high"] - c2["low"]
     upper_wick_c2 = c2["high"] - max(c2["open"], c2["close"])
     lower_wick_c2 = min(c2["open"], c2["close"]) - c2["low"]
     is_bullish_c2 = c2["close"] > c2["open"]
+    
+    # Doji Evaluation C2
+    body_pts_c2 = round(body_c2 / info.point) if info.point > 0 else 0
+    range_pts_c2 = round(range_c2 / info.point) if info.point > 0 else 0
+    body_pct_c2 = (body_pts_c2 / range_pts_c2 * 100) if range_pts_c2 > 0 else 0
+    is_doji_c2 = (body_pct_c2 <= mt5_cfg.doji_body_percent) or (body_pts_c2 <= mt5_cfg.get_doji_abs_points(symbol))
 
     # Body C1 (Engulfed Candle / C2 in new rules)
     body_c1 = abs(c1["close"] - c1["open"])
+    range_c1 = c1["high"] - c1["low"]
     is_bullish_c1 = c1["close"] > c1["open"]
+    
+    # Doji Evaluation C1
+    body_pts_c1 = round(body_c1 / info.point) if info.point > 0 else 0
+    range_pts_c1 = round(range_c1 / info.point) if info.point > 0 else 0
+    body_pct_c1 = (body_pts_c1 / range_pts_c1 * 100) if range_pts_c1 > 0 else 0
+    is_doji_c1 = (body_pct_c1 <= mt5_cfg.doji_body_percent) or (body_pts_c1 <= mt5_cfg.get_doji_abs_points(symbol))
 
     import os
     # --- Market State (20 Candles Lookback) ---
@@ -124,11 +138,15 @@ def get_closed_candles(symbol: str,
         side_strength = 0.0
 
     if verbose:
-        warna = "🟩 Hijau" if is_bullish_c2 else "🟥 Merah"
+        if is_doji_c2:
+            warna = f"⬜ Doji ({'🟩 Hijau' if is_bullish_c2 else '🟥 Merah'})"
+        else:
+            warna = "🟩 Bullish" if is_bullish_c2 else "🟥 Bearish"
+            
         print(
             f"✅ {symbol} {tf_label} | C1(New): {c2['time']} {warna} "
             f"O:{c2['open']:.2f} H:{c2['high']:.2f} L:{c2['low']:.2f} C:{c2['close']:.2f} "
-            f"| Spread: {spread}"
+            f"| Body:{body_pts_c2}pts | B:{body_pct_c2:.1f}% | Spread: {spread}"
         )
         print(f"   📈 {ema_cfg.labels['fast']}: {ema_fast:.2f} | {ema_cfg.labels['slow']}: {ema_slow:.2f}")
 
@@ -153,6 +171,9 @@ def get_closed_candles(symbol: str,
         "upper_wick": float(upper_wick_c2),
         "lower_wick": float(lower_wick_c2),
         "is_bullish": bool(is_bullish_c2),
+        "is_doji": bool(is_doji_c2),
+        "body_pct": float(body_pct_c2),
+        "body_pts": int(body_pts_c2),
 
         # C1 (candle sebelumnya)
         "prev_timestamp": c1["time"],
@@ -162,6 +183,9 @@ def get_closed_candles(symbol: str,
         "prev_close": float(c1["close"]),
         "prev_body_size": float(body_c1),
         "prev_is_bullish": bool(is_bullish_c1),
+        "prev_is_doji": bool(is_doji_c1),
+        "prev_body_pct": float(body_pct_c1),
+        "prev_body_pts": int(body_pts_c1),
 
         # Indikator
         "ema_fast": float(ema_fast),

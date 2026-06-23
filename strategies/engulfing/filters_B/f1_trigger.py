@@ -8,6 +8,8 @@ from utils.colors import cprint, ok, no
 def check_engulfing_trigger_b(
     c1_open: float, c1_close: float,
     c2_open: float, c2_close: float,
+    c2_high: float, c2_low: float,
+    c2_is_doji: bool,
     ema_slow: float,
     verbose: bool = False,
     color: str = "",
@@ -24,13 +26,16 @@ def check_engulfing_trigger_b(
     if not c2_is_bullish and c1_is_bullish:
         # C2 bearish, C1 bullish. C1 harus menelan C2 ke atas.
         # F1 Tambahan: C1 Close harus di atas EMA Slow
-        valid = c1_close >= c2_open and c1_close > ema_slow
+        if c2_is_doji:
+            valid = c1_close > c2_high and c1_close > ema_slow
+            msg = f"Trigger Bullish Engulfing (C2 Doji): C1 Close ({c1_close}) > C2 High ({c2_high})"
+        else:
+            valid = c1_close >= c2_open and c1_close > ema_slow
+            msg = f"Trigger Bullish Engulfing: C1 Close ({c1_close}) >= C2 Open ({c2_open})"
+            
         if verbose:
             result = ok() if valid else no()
-            print(cprint(
-                f"   [F1_B] Trigger Bullish Engulfing: C1 Close ({c1_close}) >= C2 Open ({c2_open}) "
-                f"& Close > EMA({ema_slow:.2f}) -> ", color
-            ) + result)
+            print(cprint(f"   [F1_B] {msg} & Close > EMA({ema_slow:.2f}) -> ", color) + result)
         if valid:
             return True, "bullish_engulfing"
             
@@ -38,13 +43,16 @@ def check_engulfing_trigger_b(
     elif c2_is_bullish and not c1_is_bullish:
         # C2 bullish, C1 bearish. C1 harus menelan C2 ke bawah.
         # F1 Tambahan: C1 Close harus di bawah EMA Slow
-        valid = c1_close <= c2_open and c1_close < ema_slow
+        if c2_is_doji:
+            valid = c1_close < c2_low and c1_close < ema_slow
+            msg = f"Trigger Bearish Engulfing (C2 Doji): C1 Close ({c1_close}) < C2 Low ({c2_low})"
+        else:
+            valid = c1_close <= c2_open and c1_close < ema_slow
+            msg = f"Trigger Bearish Engulfing: C1 Close ({c1_close}) <= C2 Open ({c2_open})"
+            
         if verbose:
             result = ok() if valid else no()
-            print(cprint(
-                f"   [F1_B] Trigger Bearish Engulfing: C1 Close ({c1_close}) <= C2 Open ({c2_open}) "
-                f"& Close < EMA({ema_slow:.2f}) -> ", color
-            ) + result)
+            print(cprint(f"   [F1_B] {msg} & Close < EMA({ema_slow:.2f}) -> ", color) + result)
         if valid:
             return True, "bearish_engulfing"
             
