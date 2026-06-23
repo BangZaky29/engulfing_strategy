@@ -64,7 +64,13 @@ def main():
             check_closed_trades(mt5_cfg, ema_cfg)
 
             for symbol in mt5_cfg.symbols:
-                for tf in mt5_cfg.timeframes:
+                target_tf = mt5_cfg.get_symbol_timeframe(symbol)
+                
+                # Pastikan target_tf ikut di-scan
+                tfs_to_scan = set(mt5_cfg.timeframes)
+                tfs_to_scan.add(target_tf)
+
+                for tf in tfs_to_scan:
                     # Ambil data candle
                     candle_data = get_closed_candles(symbol, mt5_cfg, ema_cfg, tf_label=tf, verbose=False)
 
@@ -104,9 +110,9 @@ def main():
                     CandleRepo.upsert(candle_data)
 
                     # =====================================================
-                    # Deteksi pola Engulfing HANYA untuk Strategy TF (M1)
+                    # Deteksi pola Engulfing HANYA untuk timeframe target symbol
                     # =====================================================
-                    if tf == mt5_cfg.strategy_timeframe:
+                    if tf == target_tf:
                         signal = detect_engulfing(candle_data, cfg=engulf_cfg, verbose=False, color=clr)
 
                         if signal:

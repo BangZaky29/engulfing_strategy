@@ -147,9 +147,9 @@ def build_signal(
         "rr_ratio": rr_ratio,
         "sl_pts": sl_pts,
         "ring_pts": round(abs(c1_high - c1_low) / point) if point > 0 else 0,
-        "op_price": round(op_price, 2),
-        "sl_price": round(sl_price, 2),
-        "tp_price": round(tp_price, 2) if tp_price > 0 else None,
+        "op_price": float(op_price),
+        "sl_price": float(sl_price),
+        "tp_price": float(tp_price) if tp_price > 0 else None,
         "total_score": scoring_res["total_score"],
         "market_state": scoring_res["market_state"],
         "trading_session": trading_session,
@@ -182,9 +182,9 @@ def build_signal(
         # Ekstra return fields agar bisa dipakai oleh print di detector.py
         "rr_ratio": rr_ratio,
         "sl_pts": sl_pts,
-        "op_price": round(op_price, 2),
-        "sl_price": round(sl_price, 2),
-        "tp_price": round(tp_price, 2) if tp_price > 0 else None,
+        "op_price": float(op_price),
+        "sl_price": float(sl_price),
+        "tp_price": float(tp_price) if tp_price > 0 else None,
         "trading_session": trading_session
     }
 

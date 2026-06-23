@@ -26,7 +26,10 @@ class MT5Config:
         """Konversi label timeframe ke konstanta MT5."""
         return self._TF_MAP.get(label, 1)  # Default M1
 
-
+    def get_symbol_timeframe(self, symbol: str) -> str:
+        """Mendapatkan timeframe spesifik untuk symbol tertentu dari .env (contoh: TF_BTCUSD)."""
+        env_key = f"TF_{symbol.upper()}"
+        return os.getenv(env_key, self.strategy_timeframe)
 
 @dataclass
 class EMAConfig:
