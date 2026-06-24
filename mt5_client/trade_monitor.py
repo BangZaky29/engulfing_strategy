@@ -301,6 +301,39 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
         result_str = "PROFIT" if total_profit > 0 else "LOSS"
         print(f"🏁 TRADE CLOSED: #{ticket} ({info['symbol']}) | Result: {result_str} | Profit: ${total_profit:.2f} | Sesi: {session_str}")
         
+        # --- CANCEL HEDGE JIKA OP-1 KENA TP PROFIT ---
+        hedge_ticket = info.get("hedge_ticket")
+        if result_str == "PROFIT" and hedge_ticket:
+            hedge_orders = mt5.orders_get(ticket=hedge_ticket)  # type: ignore
+            if hedge_orders is not None and len(hedge_orders) > 0:
+                print(f"🧹 Menghapus OP-2 (Hedge #{hedge_ticket}) otomatis karena OP-1 sudah Kena TP Profit.")
+                req = {
+                    "action": mt5.TRADE_ACTION_REMOVE,
+                    "order": hedge_ticket
+                }
+                res = mt5.order_send(req)  # type: ignore
+                if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                    print(f"✅ OP-2 (#{hedge_ticket}) berhasil dihapus otomatis.")
+                    try:
+                        supabase = get_supabase()
+                        log_data = {
+                            "ticket_id": hedge_ticket,
+                            "symbol": info['symbol'],
+                            "mode": info['mode'],
+                            "message": f"🧹 HAPUS OP-2 OTOMATIS! OP-1 telah mencapai Take Profit, sehingga Pending Order Hedging OP-2 (#{hedge_ticket}) dihapus secara otomatis dari market.",
+                            "op_price": 0.0,
+                            "sl_price": 0.0,
+                            "tp_price": 0.0,
+                            "trading_session": session_str
+                        }
+                        supabase.table("trade_active_logs").insert(log_data).execute()
+                    except Exception as ex:
+                        pass
+                else:
+                    err_txt = res.comment if res else get_last_error()
+                    print(f"❌ Gagal hapus otomatis OP-2 (#{hedge_ticket}): {err_txt}")
+        # ---------------------------------------------
+        
         # 3. Generate Screenshot Saat Ini
         time_suffix = info["timestamp"].split("_")[1]
         new_filename = f"{info['mode']}_{result_str}_{info['symbol']}_{info['tf']}_{time_suffix}.png"
