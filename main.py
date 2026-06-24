@@ -22,8 +22,11 @@ def print_banner(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
     print("=" * 60)
     print("🕯️  ENGULFING PATTERN SCANNER (MODULAR)")
     print(f"   Symbols   : {', '.join(mt5_cfg.symbols)}")
-    print(f"   Scan TFs  : {', '.join(mt5_cfg.timeframes)}")
-    print(f"   Strategy  : {mt5_cfg.strategy_timeframe}")
+    
+    # Tampilkan timeframe eksekusi spesifik per mata uang
+    tf_str_list = [f"{sym}({mt5_cfg.get_symbol_timeframe(sym)})" for sym in mt5_cfg.symbols]
+    print(f"   Execute TF: {', '.join(tf_str_list)}")
+    print(f"   Info TFs  : {', '.join(mt5_cfg.info_timeframes)}")
     print(f"   EMA       : {ema_cfg.labels['fast']} / {ema_cfg.labels['slow']}")
     print(f"   Database  : Supabase (metaTrader5)")
     print("=" * 60)
