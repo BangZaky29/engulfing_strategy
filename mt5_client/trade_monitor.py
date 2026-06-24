@@ -159,6 +159,22 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                     else:
                         msg = f"🧹 PENDING ORDER DIBATALKAN (OVERRIDE)! Dibatalkan karena ada trigger baru yang aktif atau manual cancel."
                         
+                    # --- CANCEL OP-2 HEDGE JIKA OP-1 EXPIRED/CANCELED ---
+                    hedge_ticket = info.get("hedge_ticket")
+                    if hedge_ticket:
+                        h_orders = mt5.orders_get(ticket=hedge_ticket)  # type: ignore
+                        if h_orders is not None and len(h_orders) > 0:
+                            print(f"🧹 Menghapus OP-2 (Hedge #{hedge_ticket}) otomatis karena OP-1 {state_name}.")
+                            req = {
+                                "action": mt5.TRADE_ACTION_REMOVE,
+                                "order": hedge_ticket
+                            }
+                            res = mt5.order_send(req)  # type: ignore
+                            if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                                print(f"✅ OP-2 (#{hedge_ticket}) berhasil dihapus mengikuti OP-1 yang batal.")
+                                msg += f"\n🗑️ _Info Tambahan: Limit Order Hedging (OP-2) juga telah dihapus otomatis._"
+                    # ---------------------------------------------------
+                        
                     # 2. Ambil screenshot chart pending order sebelum dihapus
                     public_url = None
                     try:
@@ -249,7 +265,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                         try:
                             supabase = get_supabase()
                             log_data = {
-                                "ticket_id": ticket,
+                                "ticket_id": hedge_ticket,
                                 "symbol": info['symbol'],
                                 "mode": info['mode'],
                                 "message": f"⚠️ HEDGE OP-2 TERSENTUH! TP untuk OP-1 (#{ticket}) otomatis dihapus.",
@@ -258,9 +274,9 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "tp_price": 0.0,
                                 "trading_session": session_str
                             }
-                            supabase.table("trade_active_logs").insert(log_data).execute()
+                            res_log = supabase.table("trade_active_logs").insert(log_data).execute()
                         except Exception as ex:
-                            pass
+                            print(f"⚠️ Gagal menyimpan log Hedge ke Supabase: {ex}")
                     else:
                         err_txt = res.comment if res else get_last_error()
                         print(f"❌ Gagal hapus TP OP-1: {err_txt}")
