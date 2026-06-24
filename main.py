@@ -70,10 +70,9 @@ def main():
                 tfs_to_scan = set(mt5_cfg.timeframes)
                 tfs_to_scan.add(target_tf)
                 
-                if mt5_cfg.info_scan_m15:
-                    tfs_to_scan.add("M15")
-                if mt5_cfg.info_scan_h1:
-                    tfs_to_scan.add("H1")
+                # Tambahkan semua TF info ke set scan
+                for info_tf in mt5_cfg.info_timeframes:
+                    tfs_to_scan.add(info_tf)
 
                 for tf in tfs_to_scan:
                     # Ambil data candle
@@ -117,7 +116,7 @@ def main():
                     # =====================================================
                     # Deteksi pola Engulfing
                     # =====================================================
-                    if tf in [target_tf, "M15", "H1"]:
+                    if tf == target_tf or tf in mt5_cfg.info_timeframes:
                         signal = detect_engulfing(candle_data, cfg=engulf_cfg, verbose=False, color=clr)
 
                         if signal:
@@ -173,42 +172,48 @@ def main():
                                     # Simpan signal info ke DB (WA bot akan broadcast ini)
                                     SignalRepo.upsert(signal)
                                     
-                                    # --- Pengecekan Sync dengan TF sebelahnya ---
-                                    other_tf = "H1" if tf == "M15" else "M15"
-                                    recent_signals = SignalRepo.get_recent(symbol=symbol, limit=20)
+                                    # --- Pengecekan Sync dengan TF Info lainnya ---
+                                    recent_signals = None
                                     
-                                    # Cari signal terbaru dari other_tf yang is_confirmed=True dan tidak skipped
-                                    latest_other = next((s for s in recent_signals if s.get("timeframe") == other_tf and s.get("is_confirmed") and not s.get("skip_reason")), None)
-                                    
-                                    if latest_other and latest_other.get("pattern_type") == signal["pattern_type"]:
-                                        # Jika ditemukan sinyal dengan arah yang sama (Sync)
-                                        
-                                        # Hindari insert sync berulang-ulang di waktu yang berdekatan
-                                        # (Cek apakah sudah ada INFO_SYNC untuk pasangan ini di 24 jam terakhir)
-                                        latest_sync = next((s for s in recent_signals if s.get("ticket_id") == "INFO_SYNC" and s.get("pattern_type") == signal["pattern_type"]), None)
-                                        
-                                        is_new_sync = True
-                                        if latest_sync:
-                                            # Cek selisih waktu
-                                            if hasattr(latest_sync.get("signal_time"), "timestamp") and hasattr(signal.get("signal_time"), "timestamp"):
-                                                time_diff = abs(signal["signal_time"].timestamp() - latest_sync["signal_time"].timestamp())
-                                                if time_diff < 14400: # 4 jam
-                                                    is_new_sync = False
-                                        
-                                        if is_new_sync:
-                                            sync_signal = copy.deepcopy(signal)
-                                            # Modifikasi key agar unik (timeframe gabungan)
-                                            sync_signal["timeframe"] = f"SYNC_{tf}_{other_tf}"
-                                            sync_signal["ticket_id"] = "INFO_SYNC"
+                                    for other_tf in mt5_cfg.info_timeframes:
+                                        if other_tf == tf:
+                                            continue
                                             
-                                            try:
-                                                notes_obj = json.loads(sync_signal.get("notes", "{}"))
-                                            except:
-                                                notes_obj = {}
-                                            notes_obj["sync_with"] = other_tf
-                                            sync_signal["notes"] = json.dumps(notes_obj)
+                                        if recent_signals is None:
+                                            recent_signals = SignalRepo.get_recent(symbol=symbol, limit=20)
+                                        
+                                        # Cari signal terbaru dari other_tf yang is_confirmed=True dan tidak skipped
+                                        latest_other = next((s for s in recent_signals if s.get("timeframe") == other_tf and s.get("is_confirmed") and not s.get("skip_reason")), None)
+                                        
+                                        if latest_other and latest_other.get("pattern_type") == signal["pattern_type"]:
+                                            # Jika ditemukan sinyal dengan arah yang sama (Sync)
                                             
-                                            SignalRepo.upsert(sync_signal)
+                                            # Hindari insert sync berulang-ulang di waktu yang berdekatan
+                                            # (Cek apakah sudah ada INFO_SYNC untuk pasangan ini di 24 jam terakhir)
+                                            latest_sync = next((s for s in recent_signals if s.get("ticket_id") == "INFO_SYNC" and s.get("pattern_type") == signal["pattern_type"]), None)
+                                            
+                                            is_new_sync = True
+                                            if latest_sync:
+                                                # Cek selisih waktu
+                                                if hasattr(latest_sync.get("signal_time"), "timestamp") and hasattr(signal.get("signal_time"), "timestamp"):
+                                                    time_diff = abs(signal["signal_time"].timestamp() - latest_sync["signal_time"].timestamp())
+                                                    if time_diff < 14400: # 4 jam
+                                                        is_new_sync = False
+                                            
+                                            if is_new_sync:
+                                                sync_signal = copy.deepcopy(signal)
+                                                # Modifikasi key agar unik (timeframe gabungan)
+                                                sync_signal["timeframe"] = f"SYNC_{tf}_{other_tf}"
+                                                sync_signal["ticket_id"] = "INFO_SYNC"
+                                                
+                                                try:
+                                                    notes_obj = json.loads(sync_signal.get("notes", "{}"))
+                                                except:
+                                                    notes_obj = {}
+                                                notes_obj["sync_with"] = other_tf
+                                                sync_signal["notes"] = json.dumps(notes_obj)
+                                                
+                                                SignalRepo.upsert(sync_signal)
 
             # Status counter
             print(cprint(f"   📊 Total: {total_candles} candles | {total_signals} signals", Colors.CYAN), end='\r')

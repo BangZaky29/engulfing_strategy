@@ -19,8 +19,7 @@ class MT5Config:
     doji_body_percent: float = field(default_factory=lambda: float(os.getenv("DOJI_BODY_PERCENT", "10")))
 
     # Info Scan Configuration
-    info_scan_m15: bool = field(default_factory=lambda: os.getenv("INFO_SCAN_M15", "true").lower() == "true")
-    info_scan_h1: bool = field(default_factory=lambda: os.getenv("INFO_SCAN_H1", "true").lower() == "true")
+    info_timeframes: list = field(default_factory=lambda: [x.strip() for x in os.getenv("INFO_TIMEFRAMES", "M15,H1").split(",") if x.strip()])
 
     # Mapping label → konstanta MT5 (di-resolve saat runtime)
     _TF_MAP = {
