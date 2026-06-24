@@ -165,14 +165,19 @@ def main():
                                     )
                                 else:
                                     # Info Signal M15 / H1
-                                    # Jangan eksekusi OP, cukup kirim notifikasi info
+                                    # Simpan signal info ke DB (WA bot akan broadcast ini)
                                     import json
                                     import copy
                                     
                                     signal["is_confirmed"] = True
-                                    signal["ticket_id"] = f"INFO_{tf}"
+                                    signal["ticket_id"] = None
+                                    try:
+                                        notes_obj = json.loads(signal.get("notes", "{}"))
+                                    except:
+                                        notes_obj = {}
+                                    notes_obj["ticket_id"] = f"INFO_{tf}"
+                                    signal["notes"] = json.dumps(notes_obj)
                                     
-                                    # Simpan signal info ke DB (WA bot akan broadcast ini)
                                     SignalRepo.upsert(signal)
                                     
                                     # --- Pengecekan Sync dengan TF Info lainnya ---
@@ -193,7 +198,15 @@ def main():
                                             
                                             # Hindari insert sync berulang-ulang di waktu yang berdekatan
                                             # (Cek apakah sudah ada INFO_SYNC untuk pasangan ini di 24 jam terakhir)
-                                            latest_sync = next((s for s in recent_signals if s.get("ticket_id") == "INFO_SYNC" and s.get("pattern_type") == signal["pattern_type"]), None)
+                                            latest_sync = None
+                                            for s in recent_signals:
+                                                try:
+                                                    s_notes = json.loads(s.get("notes", "{}"))
+                                                except:
+                                                    s_notes = {}
+                                                if s_notes.get("ticket_id") == "INFO_SYNC" and s.get("pattern_type") == signal["pattern_type"]:
+                                                    latest_sync = s
+                                                    break
                                             
                                             is_new_sync = True
                                             if latest_sync:
@@ -207,13 +220,14 @@ def main():
                                                 sync_signal = copy.deepcopy(signal)
                                                 # Modifikasi key agar unik (timeframe gabungan)
                                                 sync_signal["timeframe"] = f"SYNC_{tf}_{other_tf}"
-                                                sync_signal["ticket_id"] = "INFO_SYNC"
+                                                sync_signal["ticket_id"] = None
                                                 
                                                 try:
                                                     notes_obj = json.loads(sync_signal.get("notes", "{}"))
                                                 except:
                                                     notes_obj = {}
                                                 notes_obj["sync_with"] = other_tf
+                                                notes_obj["ticket_id"] = "INFO_SYNC"
                                                 sync_signal["notes"] = json.dumps(notes_obj)
                                                 
                                                 SignalRepo.upsert(sync_signal)
