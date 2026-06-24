@@ -14,6 +14,7 @@ from database.supabase_client import get_supabase
 from mt5_client.visualizer import generate_screenshot
 from config.mt5_config import MT5Config, EMAConfig
 from strategies.engulfing.signal_builder import get_trading_session_wib
+from mt5_client.error_helper import get_last_error
 
 TRACKER_FILE = "trade_tracker.json"
 TEMP_DIR = "temp_screenshots"
@@ -35,7 +36,7 @@ def save_tracked_trades(data: dict):
         json.dump(data, f, indent=4)
 
 
-def add_tracked_trade(ticket: int, symbol: str, mode: str, tf: str, op_price: float, sl_price: float, tp_price: float, status: str = "ACTIVE", trading_session: str = "Unknown"):
+def add_tracked_trade(ticket: int, symbol: str, mode: str, tf: str, op_price: float, sl_price: float, tp_price: float, status: str = "ACTIVE", trading_session: str = "Unknown", hedge_ticket: int | None = None):
     """
     Simpan tiket order ke file tracker untuk dimonitor.
     """
@@ -49,7 +50,9 @@ def add_tracked_trade(ticket: int, symbol: str, mode: str, tf: str, op_price: fl
         "tp_price": tp_price,
         "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
         "status": status,
-        "trading_session": trading_session
+        "trading_session": trading_session,
+        "hedge_ticket": hedge_ticket,
+        "hedge_triggered": False
     }
     save_tracked_trades(data)
 
@@ -219,6 +222,50 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
         # 2. Cek apakah posisi masih aktif (Status = ACTIVE)
         if status == "ACTIVE":
             positions = mt5.positions_get(ticket=ticket)  # type: ignore
+            
+            # --- CEK HEDGING OP-2 TERSENTUH ---
+            hedge_ticket = info.get("hedge_ticket")
+            hedge_triggered = info.get("hedge_triggered", False)
+            
+            if hedge_ticket and not hedge_triggered:
+                hedge_positions = mt5.positions_get(ticket=hedge_ticket)  # type: ignore
+                if hedge_positions and len(hedge_positions) > 0:
+                    print(f"⚠️ HEDGE OP-2 (#{hedge_ticket}) TERSENTUH! Menghapus TP dari OP-1 (#{ticket})")
+                    req = {
+                        "action": mt5.TRADE_ACTION_SLTP,
+                        "position": ticket,
+                        "symbol": info["symbol"],
+                        "sl": 0.0,
+                        "tp": 0.0
+                    }
+                    res = mt5.order_send(req)  # type: ignore
+                    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                        print("✅ TP OP-1 berhasil dihapus karena Hedging aktif.")
+                        info["hedge_triggered"] = True
+                        info["tp_price"] = 0.0
+                        save_tracked_trades(data)
+                        
+                        # Opsional: Log ke wa_trigger
+                        try:
+                            supabase = get_supabase()
+                            log_data = {
+                                "ticket_id": ticket,
+                                "symbol": info['symbol'],
+                                "mode": info['mode'],
+                                "message": f"⚠️ HEDGE OP-2 TERSENTUH! TP untuk OP-1 (#{ticket}) otomatis dihapus.",
+                                "op_price": info['op_price'],
+                                "sl_price": 0.0,
+                                "tp_price": 0.0,
+                                "trading_session": session_str
+                            }
+                            supabase.table("trade_active_logs").insert(log_data).execute()
+                        except Exception as ex:
+                            pass
+                    else:
+                        err_txt = res.comment if res else get_last_error()
+                        print(f"❌ Gagal hapus TP OP-1: {err_txt}")
+            # ----------------------------------
+
             if positions is not None and len(positions) > 0:
                 # Posisi masih running, skip
                 continue
@@ -307,8 +354,8 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "exit_price": exit_price,
                                 "volume": trade_volume,
                                 "profit": total_profit,
-                                "entry_time": datetime.utcfromtimestamp(entry_time).isoformat() if entry_time else None,
-                                "exit_time": datetime.utcfromtimestamp(exit_time).isoformat() if exit_time else None,
+                                "entry_time": datetime.fromtimestamp(entry_time, tz=timezone.utc).isoformat() if entry_time else None,
+                                "exit_time": datetime.fromtimestamp(exit_time, tz=timezone.utc).isoformat() if exit_time else None,
                                 "image_url": public_url,
                                 "trading_session": session_str
                             }

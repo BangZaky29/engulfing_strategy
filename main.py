@@ -69,6 +69,11 @@ def main():
                 # Pastikan target_tf ikut di-scan
                 tfs_to_scan = set(mt5_cfg.timeframes)
                 tfs_to_scan.add(target_tf)
+                
+                if mt5_cfg.info_scan_m15:
+                    tfs_to_scan.add("M15")
+                if mt5_cfg.info_scan_h1:
+                    tfs_to_scan.add("H1")
 
                 for tf in tfs_to_scan:
                     # Ambil data candle
@@ -110,50 +115,100 @@ def main():
                     CandleRepo.upsert(candle_data)
 
                     # =====================================================
-                    # Deteksi pola Engulfing HANYA untuk timeframe target symbol
+                    # Deteksi pola Engulfing
                     # =====================================================
-                    if tf == target_tf:
+                    if tf in [target_tf, "M15", "H1"]:
                         signal = detect_engulfing(candle_data, cfg=engulf_cfg, verbose=False, color=clr)
 
                         if signal:
                             # Cek apakah sinyal ini dilewati (skipped)
                             if signal.get("skip_reason"):
-                                SignalRepo.upsert(signal)
+                                if tf == target_tf:
+                                    SignalRepo.upsert(signal)
                             else:
-                                total_signals += 1
+                                if tf == target_tf:
+                                    total_signals += 1
 
-                                # =====================================================
-                                # Eksekusi Order di MT5
-                                # =====================================================
-                                ticket_id, exec_skip_reason = execute_engulfing_order(signal, mt5_cfg, exec_cfg, ema_cfg)
+                                    # =====================================================
+                                    # Eksekusi Order di MT5
+                                    # =====================================================
+                                    ticket_id, exec_skip_reason = execute_engulfing_order(signal, mt5_cfg, exec_cfg, ema_cfg)
 
-                                # Flag is_confirmed menandakan OP dieksekusi di market
-                                signal["is_confirmed"] = bool(ticket_id)
-                                
-                                if ticket_id:
-                                    signal["ticket_id"] = ticket_id
-                                    import json
-                                    try:
-                                        notes_obj = json.loads(signal["notes"])
-                                        notes_obj["ticket_id"] = ticket_id
-                                        signal["notes"] = json.dumps(notes_obj)
-                                    except:
-                                        pass
+                                    # Flag is_confirmed menandakan OP dieksekusi di market
+                                    signal["is_confirmed"] = bool(ticket_id)
+                                    
+                                    if ticket_id:
+                                        signal["ticket_id"] = ticket_id
+                                        import json
+                                        try:
+                                            notes_obj = json.loads(signal["notes"])
+                                            notes_obj["ticket_id"] = ticket_id
+                                            signal["notes"] = json.dumps(notes_obj)
+                                        except:
+                                            pass
+                                    else:
+                                        signal["skip_reason"] = exec_skip_reason or "Eksekusi MT5 gagal"
+
+                                    # Simpan sinyal ke Supabase
+                                    SignalRepo.upsert(signal)
+
+                                    # Update statistik harian
+                                    today = datetime.now().strftime("%Y-%m-%d")
+                                    StatsRepo.update_daily(
+                                        symbol=signal["symbol"],
+                                        timeframe=signal["timeframe"],
+                                        date_str=today,
+                                        pattern_type=signal["pattern_type"],
+                                        confidence=signal["confidence_score"]
+                                    )
                                 else:
-                                    signal["skip_reason"] = exec_skip_reason or "Eksekusi MT5 gagal"
-
-                                # Simpan sinyal ke Supabase
-                                SignalRepo.upsert(signal)
-
-                                # Update statistik harian
-                                today = datetime.now().strftime("%Y-%m-%d")
-                                StatsRepo.update_daily(
-                                    symbol=signal["symbol"],
-                                    timeframe=signal["timeframe"],
-                                    date_str=today,
-                                    pattern_type=signal["pattern_type"],
-                                    confidence=signal["confidence_score"]
-                                )
+                                    # Info Signal M15 / H1
+                                    # Jangan eksekusi OP, cukup kirim notifikasi info
+                                    import json
+                                    import copy
+                                    
+                                    signal["is_confirmed"] = True
+                                    signal["ticket_id"] = f"INFO_{tf}"
+                                    
+                                    # Simpan signal info ke DB (WA bot akan broadcast ini)
+                                    SignalRepo.upsert(signal)
+                                    
+                                    # --- Pengecekan Sync dengan TF sebelahnya ---
+                                    other_tf = "H1" if tf == "M15" else "M15"
+                                    recent_signals = SignalRepo.get_recent(symbol=symbol, limit=20)
+                                    
+                                    # Cari signal terbaru dari other_tf yang is_confirmed=True dan tidak skipped
+                                    latest_other = next((s for s in recent_signals if s.get("timeframe") == other_tf and s.get("is_confirmed") and not s.get("skip_reason")), None)
+                                    
+                                    if latest_other and latest_other.get("pattern_type") == signal["pattern_type"]:
+                                        # Jika ditemukan sinyal dengan arah yang sama (Sync)
+                                        
+                                        # Hindari insert sync berulang-ulang di waktu yang berdekatan
+                                        # (Cek apakah sudah ada INFO_SYNC untuk pasangan ini di 24 jam terakhir)
+                                        latest_sync = next((s for s in recent_signals if s.get("ticket_id") == "INFO_SYNC" and s.get("pattern_type") == signal["pattern_type"]), None)
+                                        
+                                        is_new_sync = True
+                                        if latest_sync:
+                                            # Cek selisih waktu
+                                            if hasattr(latest_sync.get("signal_time"), "timestamp") and hasattr(signal.get("signal_time"), "timestamp"):
+                                                time_diff = abs(signal["signal_time"].timestamp() - latest_sync["signal_time"].timestamp())
+                                                if time_diff < 14400: # 4 jam
+                                                    is_new_sync = False
+                                        
+                                        if is_new_sync:
+                                            sync_signal = copy.deepcopy(signal)
+                                            # Modifikasi key agar unik (timeframe gabungan)
+                                            sync_signal["timeframe"] = f"SYNC_{tf}_{other_tf}"
+                                            sync_signal["ticket_id"] = "INFO_SYNC"
+                                            
+                                            try:
+                                                notes_obj = json.loads(sync_signal.get("notes", "{}"))
+                                            except:
+                                                notes_obj = {}
+                                            notes_obj["sync_with"] = other_tf
+                                            sync_signal["notes"] = json.dumps(notes_obj)
+                                            
+                                            SignalRepo.upsert(sync_signal)
 
             # Status counter
             print(cprint(f"   📊 Total: {total_candles} candles | {total_signals} signals", Colors.CYAN), end='\r')

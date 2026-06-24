@@ -182,14 +182,15 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         print(f"❌ {err_msg}")
         return None, err_msg
 
-    # 3. Request ke MT5
-    request = {
+    # 3. Request OP-1 (Main Order) ke MT5
+    # SL dihilangkan (0.0) diganti dengan Hedging OP-2
+    request_op1 = {
         "action":       action,
         "symbol":       symbol,
         "volume":       exec_cfg.lot_size,
         "type":         order_type,
         "price":        round(price,    digits),
-        "sl":           round(sl_price, digits),
+        "sl":           0.0,  # SL diubah jadi 0 untuk Hedging
         "tp":           round(tp_price, digits),
         "deviation":    exec_cfg.slippage,
         "magic":        exec_cfg.magic_number,
@@ -198,16 +199,16 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     }
     
     if action == mt5.TRADE_ACTION_DEAL:
-        request["type_filling"] = mt5.ORDER_FILLING_FOK
+        request_op1["type_filling"] = mt5.ORDER_FILLING_FOK
     elif action == mt5.TRADE_ACTION_PENDING:
-        request["type_time"] = mt5.ORDER_TIME_SPECIFIED
+        request_op1["type_time"] = mt5.ORDER_TIME_SPECIFIED
         tf_seconds_map = {
             "M1": 60, "M5": 300, "M15": 900, "M30": 1800,
             "H1": 3600, "H4": 14400, "D1": 86400
         }
         tf_seconds = tf_seconds_map.get(signal["timeframe"], 300)
         expire_time = int(tick.time) + (exec_cfg.pending_order_expire_candles * tf_seconds)
-        request["expiration"] = expire_time
+        request_op1["expiration"] = expire_time
 
     # 4. Log clean terminal output
     ring_pts = round(abs(curr_high - curr_low) / point)
@@ -215,40 +216,72 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     
     active_filter = os.getenv("ACTIVE_FILTER_STRATEGY", "B")
     print(f"⚠️ [SIGNAL] {symbol} | FILTER {active_filter} | {pattern.upper().replace('_', ' ')} | Sesi: {session_str}")
-    print(f"🚀 Eksekusi: {'MARKET' if action == mt5.TRADE_ACTION_DEAL else 'PENDING (LIMIT)'} di {round(price, digits):.2f} | SL: {round(sl_price, digits):.2f} ({ring_pts} pts) | TP: {round(tp_price, digits):.2f}")
+    print(f"🚀 Eksekusi OP-1: {'MARKET' if action == mt5.TRADE_ACTION_DEAL else 'PENDING (LIMIT)'} di {round(price, digits):.2f} | HEDGE OP-2: {round(sl_price, digits):.2f} ({ring_pts} pts) | TP: {round(tp_price, digits):.2f}")
 
-    # 5. Kirim order
-    result = mt5.order_send(request)  # type: ignore
+    # 5. Kirim order OP-1
+    result_op1 = mt5.order_send(request_op1)  # type: ignore
 
-    if result is None:
-        err_msg = f"order_send me-return None: {get_last_error()}"
-        print(f"❌ Eksekusi gagal! {err_msg}")  # type: ignore
+    if result_op1 is None:
+        err_msg = f"order_send OP-1 me-return None: {get_last_error()}"
+        print(f"❌ Eksekusi OP-1 gagal! {err_msg}")  # type: ignore
         return None, err_msg
 
-    if result.retcode != mt5.TRADE_RETCODE_DONE:
-        err_msg = f"Ditolak MT5: {result.comment} (code {result.retcode})"
-        print(f"❌ Eksekusi ditolak MT5! {err_msg}")
+    if result_op1.retcode != mt5.TRADE_RETCODE_DONE:
+        err_msg = f"Ditolak MT5 (OP-1): {result_op1.comment} (code {result_op1.retcode})"
+        print(f"❌ Eksekusi OP-1 ditolak MT5! {err_msg}")
         return None, err_msg
 
-    print(f"✅ EKSEKUSI SUKSES! Ticket: #{result.order} | Volume: {result.volume}")
+    print(f"✅ EKSEKUSI OP-1 SUKSES! Ticket: #{result_op1.order} | Volume: {result_op1.volume}")
+
+    # 6. Kirim order OP-2 (Hedging)
+    op2_type = mt5.ORDER_TYPE_SELL_STOP if pattern == "bullish_engulfing" else mt5.ORDER_TYPE_BUY_STOP
+    
+    request_op2 = {
+        "action":       mt5.TRADE_ACTION_PENDING,
+        "symbol":       symbol,
+        "volume":       exec_cfg.lot_size,
+        "type":         op2_type,
+        "price":        round(sl_price, digits),
+        "sl":           0.0,
+        "tp":           0.0,
+        "deviation":    exec_cfg.slippage,
+        "magic":        exec_cfg.magic_number,
+        "comment":      "Engulf_HEDGE",
+        "type_time":    mt5.ORDER_TIME_GTC,
+    }
+    
+    # Jika OP-1 expired/canceled, idealnya OP-2 juga ada penanganan, 
+    # tapi sementara disamakan time/expiration dengan config (jika pending order expiration berlaku untuk hedge juga)
+    if action == mt5.TRADE_ACTION_PENDING and "expiration" in request_op1:
+        request_op2["type_time"] = mt5.ORDER_TIME_SPECIFIED
+        request_op2["expiration"] = request_op1["expiration"]
+
+    result_op2 = mt5.order_send(request_op2)  # type: ignore
+    
+    if result_op2 is None or result_op2.retcode != mt5.TRADE_RETCODE_DONE:
+        err_msg_op2 = get_last_error() if result_op2 is None else result_op2.comment
+        print(f"⚠️ Eksekusi OP-2 (HEDGE) gagal/ditolak! {err_msg_op2}")
+    else:
+        print(f"✅ EKSEKUSI OP-2 (HEDGE) SUKSES! Ticket: #{result_op2.order} | Volume: {result_op2.volume} | Price: {round(sl_price, digits):.2f}")
 
     # =====================================================
     # Simpan ke Tracker untuk di-SS setelah closed
     # =====================================================
     try:
         add_tracked_trade(
-            ticket=result.order,
+            ticket=result_op1.order,
             symbol=symbol,
             mode="BUY" if pattern == "bullish_engulfing" else "SELL",
             tf=signal["timeframe"],
             op_price=price,
-            sl_price=sl_price,
+            sl_price=sl_price, # Disimpan untuk track info saja
             tp_price=tp_price,
             status="PENDING" if action == mt5.TRADE_ACTION_PENDING else "ACTIVE",
-            trading_session=session_str
+            trading_session=session_str,
+            hedge_ticket=result_op2.order if (result_op2 and result_op2.retcode == mt5.TRADE_RETCODE_DONE) else None
         )
-        print(f"⏳ Trade masuk tracker. Screenshot akan digenerate saat kena SL/TP.")
+        print(f"⏳ Trade OP-1 masuk tracker. Screenshot akan digenerate saat close.")
     except Exception as e:
         print(f"⚠️ Gagal menambahkan tracker: {e}")
 
-    return result.order, None
+    return result_op1.order, None

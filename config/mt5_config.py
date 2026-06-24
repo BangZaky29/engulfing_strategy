@@ -18,6 +18,10 @@ class MT5Config:
     # Doji Threshold Configuration
     doji_body_percent: float = field(default_factory=lambda: float(os.getenv("DOJI_BODY_PERCENT", "10")))
 
+    # Info Scan Configuration
+    info_scan_m15: bool = field(default_factory=lambda: os.getenv("INFO_SCAN_M15", "true").lower() == "true")
+    info_scan_h1: bool = field(default_factory=lambda: os.getenv("INFO_SCAN_H1", "true").lower() == "true")
+
     # Mapping label → konstanta MT5 (di-resolve saat runtime)
     _TF_MAP = {
         "M1": 1, "M5": 5, "M15": 15, "M30": 30,
