@@ -179,18 +179,22 @@ def detect_engulfing(
                 cfg, verbose, color
             )
 
-        # Filtering Grade Minimal
-        grade_mapping = {"A+": 7, "A": 6, "B+": 5, "B": 4, "C+": 3, "C": 2, "D": 1}
-        min_allowed = grade_mapping.get(cfg.min_grade_allowed, 3) # default C+
-        grade_str = str(scoring_res.get("grade", "D"))
-        curr_grade = grade_mapping.get(grade_str, 1)
+        if cfg.active_filter_strategy != 'B':
+            # Filtering Grade Minimal
+            grade_mapping = {"A+": 7, "A": 6, "B+": 5, "B": 4, "C+": 3, "C": 2, "D": 1}
+            min_allowed = grade_mapping.get(cfg.min_grade_allowed, 3) # default C+
+            grade_str = str(scoring_res.get("grade", "D"))
+            curr_grade = grade_mapping.get(grade_str, 1)
 
-        # Tentukan alasan skip jika ada
-        if not valid_f3:
-            pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
-            skip_reason = f"Pattern size invalid ({pattern_size_pts} pts)"
-        elif curr_grade < min_allowed:
-            skip_reason = f"Grade {grade_str} di bawah batas {cfg.min_grade_allowed}"
+            # Tentukan alasan skip jika ada
+            if not valid_f3:
+                pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
+                skip_reason = f"Pattern size invalid ({pattern_size_pts} pts)"
+            elif curr_grade < min_allowed:
+                skip_reason = f"Grade {grade_str} di bawah batas {cfg.min_grade_allowed}"
+        else:
+            # Filter B: valid_f3 was calculated differently, let's keep it consistent
+            pass
 
     # -----------------------------------------------------------------
     # Build sinyal (baik dikonfirmasi maupun dilewati)

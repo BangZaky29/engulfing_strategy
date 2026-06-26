@@ -251,10 +251,8 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     }
     
     # Jika OP-1 expired/canceled, idealnya OP-2 juga ada penanganan, 
-    # tapi sementara disamakan time/expiration dengan config (jika pending order expiration berlaku untuk hedge juga)
-    if action == mt5.TRADE_ACTION_PENDING and "expiration" in request_op1:
-        request_op2["type_time"] = mt5.ORDER_TIME_SPECIFIED
-        request_op2["expiration"] = request_op1["expiration"]
+    # OP-2 (Hedge) dibiarkan menjadi GTC agar tetap ada jika OP-1 menjadi aktif.
+    # trade_monitor.py akan men-handle penghapusan OP-2 jika OP-1 ternyata expired.
 
     result_op2 = mt5.order_send(request_op2)  # type: ignore
     
