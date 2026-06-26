@@ -213,14 +213,14 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         return None, err_msg
 
     # 3. Request OP-1 (Main Order) ke MT5
-    # SL dihilangkan (0.0) diganti dengan Hedging OP-2
+    # Gunakan SL normal (bukan Hedging)
     request_op1 = {
         "action":       action,
         "symbol":       symbol,
         "volume":       exec_cfg.lot_size,
         "type":         order_type,
         "price":        round(price,    digits),
-        "sl":           0.0,  # SL diubah jadi 0 untuk Hedging
+        "sl":           round(sl_price, digits),
         "tp":           round(tp_price, digits),
         "deviation":    exec_cfg.slippage,
         "magic":        exec_cfg.magic_number,
@@ -246,7 +246,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     
     active_filter = os.getenv("ACTIVE_FILTER_STRATEGY", "B")
     print(f"⚠️ [SIGNAL] {symbol} | FILTER {active_filter} | {pattern.upper().replace('_', ' ')} | Sesi: {session_str}")
-    print(f"🚀 Eksekusi OP-1: {'MARKET' if action == mt5.TRADE_ACTION_DEAL else 'PENDING (LIMIT)'} di {round(price, digits):.2f} | HEDGE OP-2: {round(sl_price, digits):.2f} ({ring_pts} pts) | TP: {round(tp_price, digits):.2f}")
+    print(f"🚀 Eksekusi OP-1: {'MARKET' if action == mt5.TRADE_ACTION_DEAL else 'PENDING (LIMIT)'} di {round(price, digits):.2f} | SL: {round(sl_price, digits):.2f} ({ring_pts} pts) | TP: {round(tp_price, digits):.2f}")
 
     # 5. Kirim order OP-1
     result_op1 = mt5.order_send(request_op1)  # type: ignore
@@ -263,34 +263,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
 
     print(f"✅ EKSEKUSI OP-1 SUKSES! Ticket: #{result_op1.order} | Volume: {result_op1.volume}")
 
-    # 6. Kirim order OP-2 (Hedging)
-    op2_type = mt5.ORDER_TYPE_SELL_STOP if pattern == "bullish_engulfing" else mt5.ORDER_TYPE_BUY_STOP
-    
-    request_op2 = {
-        "action":       mt5.TRADE_ACTION_PENDING,
-        "symbol":       symbol,
-        "volume":       exec_cfg.lot_size,
-        "type":         op2_type,
-        "price":        round(sl_price, digits),
-        "sl":           0.0,
-        "tp":           0.0,
-        "deviation":    exec_cfg.slippage,
-        "magic":        exec_cfg.magic_number,
-        "comment":      "Engulf_HEDGE",
-        "type_time":    mt5.ORDER_TIME_GTC,
-    }
-    
-    # Jika OP-1 expired/canceled, idealnya OP-2 juga ada penanganan, 
-    # OP-2 (Hedge) dibiarkan menjadi GTC agar tetap ada jika OP-1 menjadi aktif.
-    # trade_monitor.py akan men-handle penghapusan OP-2 jika OP-1 ternyata expired.
-
-    result_op2 = mt5.order_send(request_op2)  # type: ignore
-    
-    if result_op2 is None or result_op2.retcode != mt5.TRADE_RETCODE_DONE:
-        err_msg_op2 = get_last_error() if result_op2 is None else result_op2.comment
-        print(f"⚠️ Eksekusi OP-2 (HEDGE) gagal/ditolak! {err_msg_op2}")
-    else:
-        print(f"✅ EKSEKUSI OP-2 (HEDGE) SUKSES! Ticket: #{result_op2.order} | Volume: {result_op2.volume} | Price: {round(sl_price, digits):.2f}")
+    # Hedging OP-2 Dihapus Sesuai Permintaan User
 
     # =====================================================
     # Simpan ke Tracker untuk di-SS setelah closed
@@ -306,7 +279,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             tp_price=tp_price,
             status="PENDING" if action == mt5.TRADE_ACTION_PENDING else "ACTIVE",
             trading_session=session_str,
-            hedge_ticket=result_op2.order if (result_op2 and result_op2.retcode == mt5.TRADE_RETCODE_DONE) else None
+            hedge_ticket=None
         )
         print(f"⏳ Trade OP-1 masuk tracker. Screenshot akan digenerate saat close.")
     except Exception as e:

@@ -135,7 +135,7 @@ def state_marker_text(
     ema_text = ema_relation_text(state.direction, close_price, ema_val, use_ema_filter)
 
     # Trigger baru atau masih fresh (age=0)
-    if is_new or age <= 0:
+    if age <= 0:
         marker = f" (N) {trigger_time}"
         if ema_text:
             marker += f" ({ema_text})"
