@@ -37,8 +37,9 @@ def backfill():
         updated_count = 0
         deleted_count = 0
         for row in res.data:
-            ts = parse_iso(row["timestamp"])
-            created_at = parse_iso(row["created_at"])
+            if not isinstance(row, dict): continue
+            ts = parse_iso(str(row["timestamp"]))
+            created_at = parse_iso(str(row["created_at"]))
             diff = ts - created_at
             if diff > timedelta(minutes=10):
                 offset = get_broker_timezone_offset(created_at)
@@ -66,8 +67,9 @@ def backfill():
         corrected_count = 0
         deleted_count = 0
         for row in res.data:
-            sig_time = parse_iso(row["signal_time"])
-            created_at = parse_iso(row["created_at"])
+            if not isinstance(row, dict): continue
+            sig_time = parse_iso(str(row["signal_time"]))
+            created_at = parse_iso(str(row["created_at"]))
             diff = sig_time - created_at
             
             # If stored signal_time is naive-converted broker time, it will be ahead of created_at
@@ -103,7 +105,8 @@ def backfill():
     if res.data:
         print(f"Found {len(res.data)} rows in trade_analytics.")
         for row in res.data:
-            dt = parse_iso(row["created_at"])
+            if not isinstance(row, dict): continue
+            dt = parse_iso(str(row["created_at"]))
             session = get_trading_session_wib(dt)
             supabase.table("trade_analytics").update({"trading_session": session}).eq("id", row["id"]).execute()
         print("Finished updating sessions in trade_analytics.")
@@ -116,7 +119,8 @@ def backfill():
     if res.data:
         print(f"Found {len(res.data)} rows in trade_active_logs.")
         for row in res.data:
-            dt = parse_iso(row["created_at"])
+            if not isinstance(row, dict): continue
+            dt = parse_iso(str(row["created_at"]))
             session = get_trading_session_wib(dt)
             supabase.table("trade_active_logs").update({"trading_session": session}).eq("id", row["id"]).execute()
         print("Finished updating sessions in trade_active_logs.")

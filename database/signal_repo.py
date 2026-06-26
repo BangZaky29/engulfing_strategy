@@ -55,6 +55,14 @@ class SignalRepo:
 
             # Filter print log agar terminal bersih
             ticket_id_str = str(signal.get('ticket_id') or "")
+            if not ticket_id_str:
+                try:
+                    import json
+                    notes_obj = json.loads(signal.get('notes', '{}'))
+                    ticket_id_str = str(notes_obj.get('ticket_id', ''))
+                except:
+                    pass
+            
             if not ticket_id_str.startswith("INFO_") and not ticket_id_str.startswith("TFM_"):
                 if signal.get('is_confirmed'):
                     emoji = "🚀"
