@@ -278,6 +278,28 @@ def detect_engulfing(
                 if verbose:
                     print(cprint(f"   ⚠️ [FC] TF Monitor error (non-blocking): {e}", Colors.YELLOW))
 
+        # Re-build notes JSON if rr_ratio was updated by Filter C
+        if signal.get("is_confirmed"):
+            try:
+                import json
+                notes_obj = json.loads(signal.get("notes", "{}"))
+                new_rr = signal.get("rr_ratio", 1.0)
+                if notes_obj.get("rr_ratio") != new_rr:
+                    notes_obj["rr_ratio"] = new_rr
+                    op = signal.get("op_price", 0.0)
+                    sl = signal.get("sl_price", 0.0)
+                    if op > 0 and sl > 0:
+                        sl_dist = abs(op - sl)
+                        if op > sl: # BUY
+                            new_tp = op + (sl_dist * new_rr)
+                        else:       # SELL
+                            new_tp = op - (sl_dist * new_rr)
+                        notes_obj["tp_price"] = new_tp
+                        signal["tp_price"] = new_tp
+                    signal["notes"] = json.dumps(notes_obj)
+            except Exception as ex:
+                pass
+
         if verbose and signal.get("is_confirmed"):
             sl_pts = signal.get("sl_pts", 0)
             sl_price = signal.get("sl_price", 0.0)
