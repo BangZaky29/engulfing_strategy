@@ -21,6 +21,14 @@ class ExecutionConfig:
         default_factory=lambda: int(os.getenv("EXECUTION_MAGIC_NUMBER", "777777"))
     )
 
+    # === Fixed USD Risk/Reward ===
+    use_fixed_money: bool = field(
+        default_factory=lambda: os.getenv("EXECUTION_USE_FIXED_MONEY", "true").lower() == "true"
+    )
+    fixed_money_usd: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_FIXED_MONEY_USD", "10.0"))
+    )
+
     # === SL — Metode Ring % ===
     sl_ring_pct: float = field(
         default_factory=lambda: float(os.getenv("EXECUTION_SL_RING_PCT", "80"))

@@ -121,10 +121,27 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
 
     action = mt5.TRADE_ACTION_DEAL
 
+    # =====================================================
+    # Kalkulasi Fixed USD Risk/Reward
+    # =====================================================
+    fixed_distance = 0.0
+    if getattr(exec_cfg, 'use_fixed_money', False):
+        tick_value = symbol_info.trade_tick_value
+        tick_size = symbol_info.trade_tick_size
+        if tick_value > 0 and exec_cfg.lot_size > 0:
+            value_per_tick = tick_value * exec_cfg.lot_size
+            ticks_needed = exec_cfg.fixed_money_usd / value_per_tick
+            fixed_distance = ticks_needed * tick_size
+
     # 2. Setup Parameter Order
     if pattern == "bullish_engulfing":
         # OP
-        if op_price_payload is not None and op_price_payload < ask:
+        if getattr(exec_cfg, 'use_fixed_money', False):
+            order_type = mt5.ORDER_TYPE_BUY
+            action     = mt5.TRADE_ACTION_DEAL
+            price      = ask
+            comment    = "Engulf_BUY_FIXED"
+        elif op_price_payload is not None and op_price_payload < ask:
             order_type = mt5.ORDER_TYPE_BUY_LIMIT
             action     = mt5.TRADE_ACTION_PENDING
             price      = op_price_payload
@@ -135,7 +152,9 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             comment    = "Engulf_BUY"
 
         # SL
-        if sl_price_payload is not None:
+        if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
+            sl_price = price - fixed_distance
+        elif sl_price_payload is not None:
             sl_price = sl_price_payload
         else:
             ring_range  = curr_close - curr_low
@@ -143,7 +162,9 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             sl_price    = curr_close - sl_distance
 
         # TP
-        if tp_price_payload is not None:
+        if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
+            tp_price = price + (fixed_distance * rr_ratio)
+        elif tp_price_payload is not None:
             tp_price = tp_price_payload
         else:
             sl_from_entry = abs(price - sl_price)
@@ -152,7 +173,12 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
 
     elif pattern == "bearish_engulfing":
         # OP
-        if op_price_payload is not None and op_price_payload > bid:
+        if getattr(exec_cfg, 'use_fixed_money', False):
+            order_type = mt5.ORDER_TYPE_SELL
+            action     = mt5.TRADE_ACTION_DEAL
+            price      = bid
+            comment    = "Engulf_SELL_FIXED"
+        elif op_price_payload is not None and op_price_payload > bid:
             order_type = mt5.ORDER_TYPE_SELL_LIMIT
             action     = mt5.TRADE_ACTION_PENDING
             price      = op_price_payload
@@ -163,7 +189,9 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             comment    = "Engulf_SELL"
 
         # SL
-        if sl_price_payload is not None:
+        if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
+            sl_price = price + fixed_distance
+        elif sl_price_payload is not None:
             sl_price = sl_price_payload
         else:
             ring_range  = curr_high - curr_close
@@ -171,7 +199,9 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             sl_price    = curr_close + sl_distance
 
         # TP
-        if tp_price_payload is not None:
+        if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
+            tp_price = price - (fixed_distance * rr_ratio)
+        elif tp_price_payload is not None:
             tp_price = tp_price_payload
         else:
             sl_from_entry = abs(price - sl_price)

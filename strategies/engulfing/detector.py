@@ -230,22 +230,47 @@ def detect_engulfing(
                 signal["tfm_bias"] = tfm_result["bias_column"]
                 signal["tfm_snapshot"] = tfm_result["snapshot"]
 
-                if fc_cfg.filter_c_blocking and tfm_result["status"] in ("LATE", "WAIT"):
-                    signal["is_confirmed"] = False
-                    signal["skip_reason"] = f"TF Monitor: {tfm_result['status']} — {tfm_result['bias_column']}"
-                    if verbose:
-                        print(cprint(f"   ❌ [FC] TF Monitor BLOCKED: {tfm_result['status']} | {tfm_result['bias_column']}", Colors.YELLOW))
-                        print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
-                else:
-                    # Adjust RR berdasarkan status
-                    if tfm_result["status"] == "STRONG":
-                        signal["rr_ratio"] = 2.0
-                    elif tfm_result["status"] == "EARLY":
-                        signal["rr_ratio"] = 1.0
+                # Cek apakah arah M5 (pattern_type) searah dengan Bias TF Monitor
+                is_aligned = True
+                if "Buy" in tfm_result["bias_column"] and pattern_type == "bearish_engulfing":
+                    is_aligned = False
+                elif "Sell" in tfm_result["bias_column"] and pattern_type == "bullish_engulfing":
+                    is_aligned = False
 
+                if fc_cfg.filter_c_blocking:
+                    if tfm_result["status"] in ("LATE", "WAIT"):
+                        signal["is_confirmed"] = False
+                        signal["skip_reason"] = f"TF Monitor: {tfm_result['status']} — {tfm_result['bias_column']}"
+                        if verbose:
+                            print(cprint(f"   ❌ [FC] TF Monitor BLOCKED: {tfm_result['status']} | {tfm_result['bias_column']}", Colors.YELLOW))
+                            print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
+                    elif not is_aligned:
+                        signal["is_confirmed"] = False
+                        signal["skip_reason"] = f"TF Monitor: Arah M5 berlawanan dengan Bias ({tfm_result['bias_column']})"
+                        if verbose:
+                            print(cprint(f"   ❌ [FC] TF Monitor BLOCKED: M5 Counter-Trend | {tfm_result['bias_column']}", Colors.YELLOW))
+                            print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
+                    else:
+                        # Sesuaikan RR
+                        if tfm_result["status"] == "STRONG":
+                            signal["rr_ratio"] = 2.0
+                        elif tfm_result["status"] == "EARLY":
+                            signal["rr_ratio"] = 1.0
+
+                        if verbose:
+                            status_emoji = {"STRONG": "🟢🔥", "VALID": "🟢", "EARLY": "🟡"}.get(tfm_result["status"], "❓")
+                            print(cprint(f"   ✅ [FC] TF Monitor: {status_emoji} {tfm_result['status']} | {tfm_result['bias_column']}", Colors.GREEN))
+                            print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
+                else:
+                    # Non-blocking mode
+                    if is_aligned:
+                        if tfm_result["status"] == "STRONG":
+                            signal["rr_ratio"] = 2.0
+                        elif tfm_result["status"] == "EARLY":
+                            signal["rr_ratio"] = 1.0
                     if verbose:
                         status_emoji = {"STRONG": "🟢🔥", "VALID": "🟢", "EARLY": "🟡"}.get(tfm_result["status"], "❓")
-                        print(cprint(f"   ✅ [FC] TF Monitor: {status_emoji} {tfm_result['status']} | {tfm_result['bias_column']}", Colors.GREEN))
+                        print(cprint(f"   ✅ [FC] TF Monitor (Info): {status_emoji} {tfm_result['status']} | {tfm_result['bias_column']}", Colors.GREEN))
                         print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
 
             except Exception as e:
