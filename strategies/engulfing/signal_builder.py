@@ -153,7 +153,10 @@ def build_signal(
         "total_score": scoring_res["total_score"],
         "market_state": scoring_res["market_state"],
         "trading_session": trading_session,
-        "score_breakdown": scoring_res.get("score_breakdown", "")
+        "score_breakdown": scoring_res.get("score_breakdown", ""),
+        "tfm_status": None,
+        "tfm_bias": None,
+        "tfm_snapshot": None,
     }
     notes_str = json.dumps(notes_payload)
 

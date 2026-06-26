@@ -4,6 +4,7 @@
 # =====================================================
 
 from database.supabase_client import get_supabase
+from postgrest.types import CountMethod
 
 
 class CandleRepo:
@@ -44,7 +45,6 @@ class CandleRepo:
                 payload, on_conflict="symbol,timeframe,timestamp"
             ).execute()
 
-            print(f"✅ Candle disimpan: {data['symbol']} {data['timeframe']} {data['timestamp']}")
             return True
 
         except Exception as e:
@@ -78,7 +78,7 @@ class CandleRepo:
             sb = get_supabase()
             result = (
                 sb.table(CandleRepo.TABLE)
-                .select("id", count="exact")
+                .select("id", count=CountMethod.exact)
                 .eq("symbol", symbol)
                 .eq("timeframe", timeframe)
                 .execute()

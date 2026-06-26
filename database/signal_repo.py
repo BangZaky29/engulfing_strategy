@@ -53,12 +53,19 @@ class SignalRepo:
                 on_conflict="symbol,timeframe,signal_time,pattern_type",
             ).execute()
 
-            emoji = "🟩" if signal["pattern_type"] == "bullish_engulfing" else "🟥"
-            skip_text = f" | ⏭️ SKIPPED: {signal.get('skip_reason')}" if signal.get('skip_reason') else ""
-            print(
-                f"{emoji} Signal tersimpan: {signal['pattern_type']} @ {signal['signal_time']} "
-                f"(confidence: {signal.get('confidence_score', 0):.1f}%){skip_text}"
-            )
+            # Filter print log agar terminal bersih
+            ticket_id_str = str(signal.get('ticket_id') or "")
+            if not ticket_id_str.startswith("INFO_") and not ticket_id_str.startswith("TFM_"):
+                if signal.get('is_confirmed'):
+                    emoji = "🚀"
+                    status = f"EKSEKUSI ({signal.get('pattern_type')})"
+                    notes = f" | Ticket: {signal.get('ticket_id')}"
+                else:
+                    emoji = "⏭️"
+                    status = f"SKIPPED ({signal.get('pattern_type')})"
+                    notes = f" | Alasan: {signal.get('skip_reason')}"
+                
+                print(f"   {emoji} [Signal] {status} @ {signal['symbol']} {signal['timeframe']}{notes}")
             return True
 
         except Exception as e:

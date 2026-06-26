@@ -211,7 +211,49 @@ def detect_engulfing(
     else:
         signal["is_confirmed"] = True
         signal["skip_reason"] = None
-        if verbose:
+
+        # =============================================================
+        # [FC] Filter C — TF Monitor Check
+        # Hanya dijalankan jika sinyal sudah lolos Filter A/B.
+        # Blocking: WAIT/LATE → skip. STRONG → RR 1:2.
+        # =============================================================
+        if cfg.filter_c_tfm_enabled:
+            try:
+                from .filters_C import check_tf_monitor
+                from config.filter_c_config import FilterCConfig
+
+                fc_cfg = FilterCConfig()
+                tfm_result = check_tf_monitor(symbol, cfg=fc_cfg)
+
+                # Inject TFM data ke signal
+                signal["tfm_status"] = tfm_result["status"]
+                signal["tfm_bias"] = tfm_result["bias_column"]
+                signal["tfm_snapshot"] = tfm_result["snapshot"]
+
+                if fc_cfg.filter_c_blocking and tfm_result["status"] in ("LATE", "WAIT"):
+                    signal["is_confirmed"] = False
+                    signal["skip_reason"] = f"TF Monitor: {tfm_result['status']} — {tfm_result['bias_column']}"
+                    if verbose:
+                        print(cprint(f"   ❌ [FC] TF Monitor BLOCKED: {tfm_result['status']} | {tfm_result['bias_column']}", Colors.YELLOW))
+                        print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
+                else:
+                    # Adjust RR berdasarkan status
+                    if tfm_result["status"] == "STRONG":
+                        signal["rr_ratio"] = 2.0
+                    elif tfm_result["status"] == "EARLY":
+                        signal["rr_ratio"] = 1.0
+
+                    if verbose:
+                        status_emoji = {"STRONG": "🟢🔥", "VALID": "🟢", "EARLY": "🟡"}.get(tfm_result["status"], "❓")
+                        print(cprint(f"   ✅ [FC] TF Monitor: {status_emoji} {tfm_result['status']} | {tfm_result['bias_column']}", Colors.GREEN))
+                        print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
+
+            except Exception as e:
+                # Filter C failure tidak boleh block sinyal
+                if verbose:
+                    print(cprint(f"   ⚠️ [FC] TF Monitor error (non-blocking): {e}", Colors.YELLOW))
+
+        if verbose and signal.get("is_confirmed"):
             sl_pts = signal.get("sl_pts", 0)
             sl_price = signal.get("sl_price", 0.0)
             print(cprint(f"   {'-'*52}", color))

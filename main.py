@@ -4,12 +4,15 @@
 # =====================================================
 
 import time
+import json
+import copy
 from datetime import datetime
 
 from config.settings import validate_env, POLL_INTERVAL
 from config.mt5_config import MT5Config, EMAConfig
 from config.engulfing_config import EngulfingConfig
 from config.execution_config import ExecutionConfig
+from config.filter_c_config import FilterCConfig
 
 from mt5_client import init_mt5, shutdown_mt5, get_closed_candles, execute_engulfing_order
 from mt5_client.trade_monitor import check_closed_trades
@@ -45,8 +48,14 @@ def main():
     ema_cfg = EMAConfig()
     engulf_cfg = EngulfingConfig()
     exec_cfg = ExecutionConfig()
+    fc_cfg = FilterCConfig() if engulf_cfg.filter_c_tfm_enabled else None
 
     print_banner(mt5_cfg, ema_cfg)
+
+    if engulf_cfg.filter_c_tfm_enabled and fc_cfg:
+        print(cprint("📡 [TF Monitor] Filter C AKTIF — H1 Bias + M15 Confirm + M5 Trigger", Colors.CYAN))
+        print(cprint(f"   EMA Filter: {'ON' if fc_cfg.use_ema_filter else 'OFF'} | Lookback: {fc_cfg.trigger_lookback_bars} bars", Colors.CYAN))
+        print(cprint(f"   Blocking: {'ON (WAIT/LATE = skip)' if fc_cfg.filter_c_blocking else 'OFF (tag only)'}", Colors.CYAN))
 
     # 3. Inisialisasi MT5
     if not init_mt5(mt5_cfg):
@@ -56,6 +65,7 @@ def main():
     # 4. Main Loop - Polling candle baru
     # =====================================================
     last_candle_time = {}  # dict to store last candle time per timeframe
+    last_tfm_snapshot = {}  # dict to store last TFM snapshot per symbol
     total_candles = 0
     total_signals = 0
 
@@ -65,6 +75,53 @@ def main():
         while True:
             # 1. Cek apakah ada trade yang sudah close (SL/TP) untuk upload screenshot
             check_closed_trades(mt5_cfg, ema_cfg)
+
+            # =====================================================
+            # 1.5 TF Monitor — Periodic Snapshot Log
+            # =====================================================
+            if engulf_cfg.filter_c_tfm_enabled and fc_cfg:
+                try:
+                    from strategies.engulfing.filters_C import check_tf_monitor
+                    for symbol in mt5_cfg.symbols:
+                        tfm_result = check_tf_monitor(symbol, cfg=fc_cfg)
+                        snapshot = tfm_result.get("snapshot", "")
+                        is_new = tfm_result.get("is_new_event", False)
+
+                        if is_new and snapshot and snapshot != last_tfm_snapshot.get(symbol):
+                            print(cprint(f"📡 {snapshot}", Colors.CYAN))
+                            last_tfm_snapshot[symbol] = snapshot
+
+                            # Insert TFM status change ke Supabase untuk WA notification
+                            tfm_signal = {
+                                "symbol": symbol,
+                                "timeframe": f"TFM_{tfm_result['status']}",
+                                "signal_time": datetime.now(),
+                                "pattern_type": "bullish_engulfing" if "Buy" in tfm_result.get("bias_column", "") else "bearish_engulfing",
+                                "prev_open": 0, "prev_close": 0, "prev_high": 0, "prev_low": 0,
+                                "curr_open": 0, "curr_close": 0, "curr_high": 0, "curr_low": 0,
+                                "engulf_ratio": 0, "volume": 0,
+                                "ema_fast_value": 0, "ema_slow_value": 0,
+                                "ema_trend": tfm_result["status"],
+                                "confidence_score": 0,
+                                "is_confirmed": True,
+                                "ticket_id": None,
+                                "notes": json.dumps({
+                                    "ticket_id": "TFM_STATUS_CHANGE",
+                                    "tfm_status": tfm_result["status"],
+                                    "tfm_bias": tfm_result["bias_column"],
+                                    "tfm_snapshot": snapshot,
+                                    "grade": "N/A", "action_str": "NONE",
+                                    "body_pct": 0, "cp_pct": 0, "sl_pct_used": 0,
+                                    "rr_ratio": 0, "sl_pts": 0, "ring_pts": 0,
+                                    "op_price": 0, "sl_price": 0, "tp_price": None,
+                                    "total_score": 0, "market_state": "TFM",
+                                    "trading_session": "",
+                                }),
+                            }
+                            SignalRepo.upsert(tfm_signal)
+
+                except Exception as e:
+                    pass  # TFM error non-blocking
 
             for symbol in mt5_cfg.symbols:
                 target_tf = mt5_cfg.get_symbol_timeframe(symbol)
@@ -101,15 +158,15 @@ def main():
                     clr = candle_color(candle_data["is_bullish"])
                     warna = "🟩" if candle_data["is_bullish"] else "🟥"
                     
-                    # Clean tabular terminal log
-                    time_str = current_time.strftime("%H:%M:%S") if hasattr(current_time, 'strftime') else current_time
-                    log_line = (
-                        f"[{time_str}] {warna} {symbol} ({tf}) | "
-                        f"O: {candle_data['open_']:.5f} H: {candle_data['high_']:.5f} "
-                        f"L: {candle_data['low_']:.5f} C: {candle_data['close_']:.5f} | "
-                        f"EMA: {candle_data['ema_fast']:.5f}/{candle_data['ema_slow']:.5f}"
-                    )
-                    print(cprint(log_line, clr))
+                    # Clean tabular terminal log dihapus agar tidak spam
+                    # time_str = current_time.strftime("%H:%M:%S") if hasattr(current_time, 'strftime') else current_time
+                    # log_line = (
+                    #     f"[{time_str}] {warna} {symbol} ({tf}) | "
+                    #     f"O: {candle_data['open_']:.5f} H: {candle_data['high_']:.5f} "
+                    #     f"L: {candle_data['low_']:.5f} C: {candle_data['close_']:.5f} | "
+                    #     f"EMA: {candle_data['ema_fast']:.5f}/{candle_data['ema_slow']:.5f}"
+                    # )
+                    # print(cprint(log_line, clr))
 
                     # =====================================================
                     # Simpan candle ke Supabase
@@ -141,10 +198,14 @@ def main():
                                     
                                     if ticket_id:
                                         signal["ticket_id"] = ticket_id
-                                        import json
                                         try:
                                             notes_obj = json.loads(signal["notes"])
                                             notes_obj["ticket_id"] = ticket_id
+                                            # Inject TFM data ke notes jika ada
+                                            if signal.get("tfm_status"):
+                                                notes_obj["tfm_status"] = signal["tfm_status"]
+                                                notes_obj["tfm_bias"] = signal.get("tfm_bias")
+                                                notes_obj["tfm_snapshot"] = signal.get("tfm_snapshot")
                                             signal["notes"] = json.dumps(notes_obj)
                                         except:
                                             pass
@@ -166,8 +227,6 @@ def main():
                                 else:
                                     # Info Signal M15 / H1
                                     # Simpan signal info ke DB (WA bot akan broadcast ini)
-                                    import json
-                                    import copy
                                     
                                     signal["is_confirmed"] = True
                                     signal["ticket_id"] = None
@@ -232,14 +291,15 @@ def main():
                                                 
                                                 SignalRepo.upsert(sync_signal)
 
-            # Status counter
-            print(cprint(f"   📊 Total: {total_candles} candles | {total_signals} signals", Colors.CYAN), end='\r')
+            # Heartbeat (Overwrites line to avoid spam)
+            print(cprint(f"   📊 Heartbeat: {total_candles} candles scanned | {total_signals} executions", Colors.GRAY), end='\r', flush=True)
 
             time.sleep(POLL_INTERVAL)
 
     except KeyboardInterrupt:
-        print(f"\n\n🛑 Scanner dihentikan oleh user.")
-        print(f"   📊 Total: {total_candles} candles | {total_signals} engulfing signals")
+        # Clear heartbeat line
+        print(" " * 80, end='\r')
+        print(f"   📊 Total Run: {total_candles} candles scanned | {total_signals} executions")
 
     except Exception as e:
         print(f"\n❌ Error: {e}")

@@ -31,6 +31,9 @@ class EngulfingConfig:
     filter_f3_ema_ring_b_enabled: bool = field(
         default_factory=lambda: os.getenv("FILTER_F3_EMA_RING_B_ENABLED", "true").lower() == "true"
     )
+    filter_c_tfm_enabled: bool = field(
+        default_factory=lambda: os.getenv("FILTER_C_TFM_ENABLED", "false").lower() == "true"
+    )
     
     score_weight_body: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_BODY", "40")))
     score_weight_range: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_RANGE", "30")))
