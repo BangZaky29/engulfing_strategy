@@ -214,7 +214,7 @@ def main():
                                         if exec_skip_reason and "Ada posisi aktif" in exec_skip_reason:
                                             # Bypass Supabase filter agar info ini dikirim ke WA
                                             signal["is_confirmed"] = True
-                                            signal["ticket_id"] = "INFO_ACTIVE"
+                                            signal["ticket_id"] = None
                                             try:
                                                 notes_obj = json.loads(signal.get("notes", "{}"))
                                                 notes_obj["ticket_id"] = "INFO_ACTIVE"

@@ -8,18 +8,5 @@
         "tp_price": 4320.57,
         "timestamp": "20260616_135600",
         "trading_session": "Asia"
-    },
-    "751558056": {
-        "symbol": "XAUUSD",
-        "mode": "BUY",
-        "tf": "M5",
-        "op_price": 4092.32,
-        "sl_price": 4082.32,
-        "tp_price": 4112.32,
-        "timestamp": "20260626_223958",
-        "status": "ACTIVE",
-        "trading_session": "Europe x New York Overlap",
-        "hedge_ticket": null,
-        "hedge_triggered": false
     }
 }
