@@ -25,7 +25,7 @@ def main():
     symbol = "BTC" 
     
     # Ambil harga market saat ini supaya langsung eksekusi MARKET
-    info = mt5.symbol_info(symbol)
+    info = mt5.symbol_info(symbol)  # type: ignore
     if info is None:
         print(f"Gagal mendapat harga live untuk {symbol}")
         shutdown_mt5()
