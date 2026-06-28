@@ -285,12 +285,14 @@ def detect_engulfing(
                         # Update notes JSON
                         try:
                             notes_obj = _json.loads(signal.get("notes", "{}"))
-                            notes_obj["sl_price"]  = new_sl
-                            notes_obj["sl_pts"]    = new_sl_pts
-                            notes_obj["tp_price"]  = new_tp
-                            notes_obj["sl_source"] = "H1"
-                            notes_obj["sl_pct"]    = sl_h1_pct
-                            notes_obj["rr_ratio"]  = new_rr
+                            notes_obj["sl_price"]          = new_sl
+                            notes_obj["sl_pts"]            = new_sl_pts
+                            notes_obj["tp_price"]          = new_tp
+                            notes_obj["sl_source"]         = "H1"
+                            notes_obj["sl_pct"]            = sl_h1_pct
+                            notes_obj["rr_ratio"]          = new_rr
+                            # ✅ Simpan h1_trigger_source ke notes agar bisa dibaca WA bot
+                            notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
                             signal["notes"] = _json.dumps(notes_obj)
                         except Exception:
                             pass
