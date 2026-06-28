@@ -135,99 +135,95 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
 
     # 2. Setup Parameter Order
     if pattern == "bullish_engulfing":
-        # OP
-        if getattr(exec_cfg, 'use_fixed_money', False):
+        # --- OP Type & Price ---
+        # use_fixed_money hanya menentukan apakah pakai MARKET langsung (bukan LIMIT)
+        if getattr(exec_cfg, 'use_fixed_money', False) or op_price_payload is None or op_price_payload >= ask:
             order_type = mt5.ORDER_TYPE_BUY
             action     = mt5.TRADE_ACTION_DEAL
             price      = ask
-            comment    = "Engulf_BUY_FIXED"
-        elif op_price_payload is not None and op_price_payload < ask:
+            comment    = "Engulf_BUY_FIXED" if getattr(exec_cfg, 'use_fixed_money', False) else "Engulf_BUY"
+        else:
             order_type = mt5.ORDER_TYPE_BUY_LIMIT
             action     = mt5.TRADE_ACTION_PENDING
             price      = op_price_payload
             comment    = "Engulf_BUY_LIMIT"
-        else:
-            order_type = mt5.ORDER_TYPE_BUY
-            price      = ask
-            comment    = "Engulf_BUY"
 
-        # SL
-        if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
-            sl_price = price - fixed_distance
-        elif sl_price_payload is not None:
+        # --- SL Logic (Prioritas: H1 Dynamic > Fixed Money > Fallback Ring M5) ---
+        if sl_price_payload is not None:
+            # ✅ Prioritas 1: SL H1 Dynamic dari detector.py (selalu menang)
             sl_price = sl_price_payload
+            print(f"   [SL] Menggunakan SL H1 Dynamic dari detector: {sl_price:.2f}")
+        elif getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
+            # Prioritas 2: Fixed Money SL (hanya jika tidak ada H1 dynamic)
+            sl_price = price - fixed_distance
+            print(f"   [SL] Menggunakan SL Fixed Money: {sl_price:.2f} (jarak: {fixed_distance:.2f})")
         else:
+            # Prioritas 3: Fallback H1 lokal dari signal field (jarang terjadi)
             if signal.get("tfm_status") in ("STRONG", "VALID") and "h1_trigger_close" in signal:
                 h1_close = signal["h1_trigger_close"]
-                h1_low = signal["h1_trigger_low"]
+                h1_low   = signal["h1_trigger_low"]
                 h1_ring_range = h1_close - h1_low
                 sl_h1_pct = float(os.getenv("SL_H1_PCT", "0.30"))
-                sl_distance = h1_ring_range * sl_h1_pct
-                sl_price = h1_low - sl_distance
+                sl_price = h1_low - (h1_ring_range * sl_h1_pct)
+                print(f"   [SL] Menggunakan SL H1 Fallback (signal field): {sl_price:.2f}")
             else:
                 ring_range  = curr_close - curr_low
                 sl_distance = ring_range * sl_pct_fallback
                 sl_price    = curr_close - sl_distance
+                print(f"   [SL] Menggunakan SL Fallback Ring M5: {sl_price:.2f}")
 
-        # TP
-        if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
-            tp_price = price + (fixed_distance * rr_ratio)
-        elif tp_price_payload is not None:
+        # --- TP Logic (Prioritas: Payload > Hitung dari SL actual) ---
+        if tp_price_payload is not None:
             tp_price = tp_price_payload
         else:
             sl_from_entry = abs(price - sl_price)
-            if signal.get("tfm_status") == "STRONG" and "h1_trigger_close" in signal:
-                tp_price      = price + (sl_from_entry * 1.0)
-            else:
-                tp_price      = price + (sl_from_entry * rr_ratio)
+            tp_price      = price + (sl_from_entry * rr_ratio)
 
 
     elif pattern == "bearish_engulfing":
-        # OP
-        if getattr(exec_cfg, 'use_fixed_money', False):
+        # --- OP Type & Price ---
+        # use_fixed_money hanya menentukan apakah pakai MARKET langsung (bukan LIMIT)
+        if getattr(exec_cfg, 'use_fixed_money', False) or op_price_payload is None or op_price_payload <= bid:
             order_type = mt5.ORDER_TYPE_SELL
             action     = mt5.TRADE_ACTION_DEAL
             price      = bid
-            comment    = "Engulf_SELL_FIXED"
-        elif op_price_payload is not None and op_price_payload > bid:
+            comment    = "Engulf_SELL_FIXED" if getattr(exec_cfg, 'use_fixed_money', False) else "Engulf_SELL"
+        else:
             order_type = mt5.ORDER_TYPE_SELL_LIMIT
             action     = mt5.TRADE_ACTION_PENDING
             price      = op_price_payload
             comment    = "Engulf_SELL_LIMIT"
-        else:
-            order_type = mt5.ORDER_TYPE_SELL
-            price      = bid
-            comment    = "Engulf_SELL"
 
-        # SL
-        if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
-            sl_price = price + fixed_distance
-        elif sl_price_payload is not None:
+        # --- SL Logic (Prioritas: H1 Dynamic > Fixed Money > Fallback Ring M5) ---
+        if sl_price_payload is not None:
+            # ✅ Prioritas 1: SL H1 Dynamic dari detector.py (selalu menang)
             sl_price = sl_price_payload
+            print(f"   [SL] Menggunakan SL H1 Dynamic dari detector: {sl_price:.2f}")
+        elif getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
+            # Prioritas 2: Fixed Money SL (hanya jika tidak ada H1 dynamic)
+            sl_price = price + fixed_distance
+            print(f"   [SL] Menggunakan SL Fixed Money: {sl_price:.2f} (jarak: {fixed_distance:.2f})")
         else:
+            # Prioritas 3: Fallback H1 lokal dari signal field (jarang terjadi)
             if signal.get("tfm_status") in ("STRONG", "VALID") and "h1_trigger_close" in signal:
                 h1_close = signal["h1_trigger_close"]
-                h1_high = signal["h1_trigger_high"]
+                h1_high  = signal["h1_trigger_high"]
                 h1_ring_range = h1_high - h1_close
                 sl_h1_pct = float(os.getenv("SL_H1_PCT", "0.30"))
-                sl_distance = h1_ring_range * sl_h1_pct
-                sl_price = h1_high + sl_distance
+                sl_price = h1_high + (h1_ring_range * sl_h1_pct)
+                print(f"   [SL] Menggunakan SL H1 Fallback (signal field): {sl_price:.2f}")
             else:
                 ring_range  = curr_high - curr_close
                 sl_distance = ring_range * sl_pct_fallback
                 sl_price    = curr_close + sl_distance
+                print(f"   [SL] Menggunakan SL Fallback Ring M5: {sl_price:.2f}")
 
-        # TP
-        if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
-            tp_price = price - (fixed_distance * rr_ratio)
-        elif tp_price_payload is not None:
+        # --- TP Logic (Prioritas: Payload > Hitung dari SL actual) ---
+        if tp_price_payload is not None:
             tp_price = tp_price_payload
         else:
             sl_from_entry = abs(price - sl_price)
-            if signal.get("tfm_status") == "STRONG" and "h1_trigger_close" in signal:
-                tp_price      = price - (sl_from_entry * 1.0)
-            else:
-                tp_price      = price - (sl_from_entry * rr_ratio)
+            tp_price      = price - (sl_from_entry * rr_ratio)
 
     else:
         err_msg = f"Pola tidak dikenali: {pattern}"
