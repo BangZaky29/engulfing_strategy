@@ -237,6 +237,16 @@ def check_tf_monitor(
     else:
         snapshot = manager.last_snapshot
 
+    # =========================================================
+    # 6. Cari H1 Trigger Candle
+    # =========================================================
+    h1_trigger_candle = None
+    if manager.h1_state and manager.h1_state.time:
+        for c in h1_candles:
+            if c["time"] == manager.h1_state.time:
+                h1_trigger_candle = c
+                break
+
     return {
         "status": status,
         "bias_column": bias_col,
@@ -245,6 +255,8 @@ def check_tf_monitor(
         "h1_state": manager.h1_state,
         "m15_state": manager.m15_state,
         "m5_state": manager.m5_state,
+        "h1_trigger_candle": h1_trigger_candle,
+        "h1_trigger_source": manager.h1_state.source if manager.h1_state else None,
     }
 
 

@@ -157,9 +157,16 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         elif sl_price_payload is not None:
             sl_price = sl_price_payload
         else:
-            ring_range  = curr_close - curr_low
-            sl_distance = ring_range * sl_pct_fallback
-            sl_price    = curr_close - sl_distance
+            if signal.get("tfm_status") == "STRONG" and "h1_trigger_close" in signal:
+                h1_close = signal["h1_trigger_close"]
+                h1_low = signal["h1_trigger_low"]
+                h1_ring_range = h1_close - h1_low
+                sl_distance = h1_ring_range * 1.3
+                sl_price = h1_close - sl_distance
+            else:
+                ring_range  = curr_close - curr_low
+                sl_distance = ring_range * sl_pct_fallback
+                sl_price    = curr_close - sl_distance
 
         # TP
         if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
@@ -168,7 +175,10 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             tp_price = tp_price_payload
         else:
             sl_from_entry = abs(price - sl_price)
-            tp_price      = price + (sl_from_entry * rr_ratio)
+            if signal.get("tfm_status") == "STRONG" and "h1_trigger_close" in signal:
+                tp_price      = price + (sl_from_entry * 1.0)
+            else:
+                tp_price      = price + (sl_from_entry * rr_ratio)
 
 
     elif pattern == "bearish_engulfing":
@@ -194,9 +204,16 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         elif sl_price_payload is not None:
             sl_price = sl_price_payload
         else:
-            ring_range  = curr_high - curr_close
-            sl_distance = ring_range * sl_pct_fallback
-            sl_price    = curr_close + sl_distance
+            if signal.get("tfm_status") == "STRONG" and "h1_trigger_close" in signal:
+                h1_close = signal["h1_trigger_close"]
+                h1_high = signal["h1_trigger_high"]
+                h1_ring_range = h1_high - h1_close
+                sl_distance = h1_ring_range * 1.3
+                sl_price = h1_close + sl_distance
+            else:
+                ring_range  = curr_high - curr_close
+                sl_distance = ring_range * sl_pct_fallback
+                sl_price    = curr_close + sl_distance
 
         # TP
         if getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
@@ -205,7 +222,10 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             tp_price = tp_price_payload
         else:
             sl_from_entry = abs(price - sl_price)
-            tp_price      = price - (sl_from_entry * rr_ratio)
+            if signal.get("tfm_status") == "STRONG" and "h1_trigger_close" in signal:
+                tp_price      = price - (sl_from_entry * 1.0)
+            else:
+                tp_price      = price - (sl_from_entry * rr_ratio)
 
     else:
         err_msg = f"Pola tidak dikenali: {pattern}"

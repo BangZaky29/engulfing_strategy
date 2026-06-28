@@ -90,3 +90,10 @@ class FilterCConfig:
     filter_c_blocking: bool = field(
         default_factory=lambda: os.getenv("TFM_BLOCKING", "true").lower() == "true"
     )
+
+    # === Dynamic SL dari H1 Trigger ===
+    # 0% = Close H1 trigger, 100% = High (SELL) / Low (BUY) H1 trigger
+    # SL ditempatkan pada sl_h1_pct % dari range tersebut
+    sl_h1_pct: float = field(
+        default_factory=lambda: float(os.getenv("SL_H1_PCT", "0.30"))
+    )

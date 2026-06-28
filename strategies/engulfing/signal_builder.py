@@ -154,6 +154,8 @@ def build_signal(
         "market_state": scoring_res["market_state"],
         "trading_session": trading_session,
         "score_breakdown": scoring_res.get("score_breakdown", ""),
+        "sl_source": "M5",   # akan di-override "H1" oleh detector jika H1 trigger tersedia
+        "sl_pct": None,      # akan diisi oleh detector (sl_h1_pct dari FilterCConfig)
         "tfm_status": None,
         "tfm_bias": None,
         "tfm_snapshot": None,

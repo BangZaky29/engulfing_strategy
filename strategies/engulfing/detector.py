@@ -227,8 +227,81 @@ def detect_engulfing(
 
                 # Inject TFM data ke signal
                 signal["tfm_status"] = tfm_result["status"]
-                signal["tfm_bias"] = tfm_result["bias_column"]
+                signal["tfm_bias"]   = tfm_result["bias_column"]
                 signal["tfm_snapshot"] = tfm_result["snapshot"]
+
+                # ─────────────────────────────────────────────────────────
+                # Dynamic SL dari H1 Trigger Candle
+                # Rule:
+                #   0%   = Close H1 trigger
+                #   100% = High H1 trigger (SELL) | Low H1 trigger (BUY)
+                #   SL   = Close + (range × sl_h1_pct)   → SELL
+                #   SL   = Close - (range × sl_h1_pct)   → BUY
+                #   TP   = OP ± |OP - SL| × rr_ratio     (1:1 default)
+                # ─────────────────────────────────────────────────────────
+                if tfm_result.get("h1_trigger_candle"):
+                    import json as _json
+                    hc = tfm_result["h1_trigger_candle"]
+                    signal["h1_trigger_open"]   = hc["open"]
+                    signal["h1_trigger_high"]   = hc["high"]
+                    signal["h1_trigger_low"]    = hc["low"]
+                    signal["h1_trigger_close"]  = hc["close"]
+                    signal["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
+
+                    op    = signal.get("op_price", 0.0)
+                    point = candle_data.get("point", 0.01)
+
+                    if op > 0 and point > 0:
+                        h1_close   = hc["close"]
+                        h1_high    = hc["high"]
+                        h1_low     = hc["low"]
+                        sl_h1_pct  = fc_cfg.sl_h1_pct  # default 0.30
+
+                        if pattern_type == "bearish_engulfing":
+                            # SELL: range dari H1_close ke H1_high (ekor atas)
+                            range_ref = h1_high - h1_close
+                            new_sl    = h1_close + (range_ref * sl_h1_pct)
+                        else:
+                            # BUY: range dari H1_close ke H1_low (ekor bawah)
+                            range_ref = h1_close - h1_low
+                            new_sl    = h1_close - (range_ref * sl_h1_pct)
+
+                        sl_dist    = abs(op - new_sl)
+                        new_rr     = signal.get("rr_ratio", 1.0)
+                        new_sl_pts = round(sl_dist / point)
+
+                        if pattern_type == "bearish_engulfing":
+                            new_tp = op - (sl_dist * new_rr)
+                        else:
+                            new_tp = op + (sl_dist * new_rr)
+
+                        # Update signal
+                        signal["sl_price"] = new_sl
+                        signal["sl_pts"]   = new_sl_pts
+                        signal["tp_price"] = new_tp
+
+                        # Update notes JSON
+                        try:
+                            notes_obj = _json.loads(signal.get("notes", "{}"))
+                            notes_obj["sl_price"]  = new_sl
+                            notes_obj["sl_pts"]    = new_sl_pts
+                            notes_obj["tp_price"]  = new_tp
+                            notes_obj["sl_source"] = "H1"
+                            notes_obj["sl_pct"]    = sl_h1_pct
+                            notes_obj["rr_ratio"]  = new_rr
+                            signal["notes"] = _json.dumps(notes_obj)
+                        except Exception:
+                            pass
+
+                        if verbose:
+                            h1_src = tfm_result.get("h1_trigger_source", "?")
+                            print(cprint(
+                                f"   🎯 [FC] Dynamic SL (H1) | Trigger: {h1_src} | "
+                                f"H1 Close={h1_close:.2f} High={h1_high:.2f} Low={h1_low:.2f} | "
+                                f"Range={range_ref:.2f} | SL={new_sl:.2f} ({new_sl_pts}pts) | "
+                                f"TP={new_tp:.2f} | RR={new_rr}",
+                                Colors.CYAN
+                            ))
 
                 # Cek apakah arah M5 (pattern_type) searah dengan Bias TF Monitor
                 is_aligned = True
@@ -251,11 +324,31 @@ def detect_engulfing(
                             print(cprint(f"   ❌ [FC] TF Monitor BLOCKED: M5 Counter-Trend | {tfm_result['bias_column']}", Colors.YELLOW))
                             print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
                     else:
-                        # Sesuaikan RR
+                        # Sesuaikan RR berdasarkan status TF Monitor
                         if tfm_result["status"] == "STRONG":
                             signal["rr_ratio"] = 2.0
                         elif tfm_result["status"] == "EARLY":
                             signal["rr_ratio"] = 1.0
+
+                        # Re-hitung TP dengan rr_ratio terbaru (SL sudah dinamis dari H1)
+                        try:
+                            import json as _json2
+                            new_rr = signal.get("rr_ratio", 1.0)
+                            op     = signal.get("op_price", 0.0)
+                            sl     = signal.get("sl_price", 0.0)
+                            if op > 0 and sl > 0:
+                                sl_dist = abs(op - sl)
+                                if pattern_type == "bearish_engulfing":
+                                    new_tp = op - (sl_dist * new_rr)
+                                else:
+                                    new_tp = op + (sl_dist * new_rr)
+                                signal["tp_price"] = new_tp
+                                notes_obj = _json2.loads(signal.get("notes", "{}"))
+                                notes_obj["tp_price"]  = new_tp
+                                notes_obj["rr_ratio"]  = new_rr
+                                signal["notes"] = _json2.dumps(notes_obj)
+                        except Exception:
+                            pass
 
                         if verbose:
                             status_emoji = {"STRONG": "🟢🔥", "VALID": "🟢", "EARLY": "🟡"}.get(tfm_result["status"], "❓")
@@ -268,6 +361,27 @@ def detect_engulfing(
                             signal["rr_ratio"] = 2.0
                         elif tfm_result["status"] == "EARLY":
                             signal["rr_ratio"] = 1.0
+
+                        # Re-hitung TP dengan rr_ratio terbaru
+                        try:
+                            import json as _json3
+                            new_rr = signal.get("rr_ratio", 1.0)
+                            op     = signal.get("op_price", 0.0)
+                            sl     = signal.get("sl_price", 0.0)
+                            if op > 0 and sl > 0:
+                                sl_dist = abs(op - sl)
+                                if pattern_type == "bearish_engulfing":
+                                    new_tp = op - (sl_dist * new_rr)
+                                else:
+                                    new_tp = op + (sl_dist * new_rr)
+                                signal["tp_price"] = new_tp
+                                notes_obj = _json3.loads(signal.get("notes", "{}"))
+                                notes_obj["tp_price"] = new_tp
+                                notes_obj["rr_ratio"] = new_rr
+                                signal["notes"] = _json3.dumps(notes_obj)
+                        except Exception:
+                            pass
+
                     if verbose:
                         status_emoji = {"STRONG": "🟢🔥", "VALID": "🟢", "EARLY": "🟡"}.get(tfm_result["status"], "❓")
                         print(cprint(f"   ✅ [FC] TF Monitor (Info): {status_emoji} {tfm_result['status']} | {tfm_result['bias_column']}", Colors.GREEN))
@@ -277,28 +391,6 @@ def detect_engulfing(
                 # Filter C failure tidak boleh block sinyal
                 if verbose:
                     print(cprint(f"   ⚠️ [FC] TF Monitor error (non-blocking): {e}", Colors.YELLOW))
-
-        # Re-build notes JSON if rr_ratio was updated by Filter C
-        if signal.get("is_confirmed"):
-            try:
-                import json
-                notes_obj = json.loads(signal.get("notes", "{}"))
-                new_rr = signal.get("rr_ratio", 1.0)
-                if notes_obj.get("rr_ratio") != new_rr:
-                    notes_obj["rr_ratio"] = new_rr
-                    op = signal.get("op_price", 0.0)
-                    sl = signal.get("sl_price", 0.0)
-                    if op > 0 and sl > 0:
-                        sl_dist = abs(op - sl)
-                        if op > sl: # BUY
-                            new_tp = op + (sl_dist * new_rr)
-                        else:       # SELL
-                            new_tp = op - (sl_dist * new_rr)
-                        notes_obj["tp_price"] = new_tp
-                        signal["tp_price"] = new_tp
-                    signal["notes"] = json.dumps(notes_obj)
-            except Exception as ex:
-                pass
 
         if verbose and signal.get("is_confirmed"):
             sl_pts = signal.get("sl_pts", 0)
