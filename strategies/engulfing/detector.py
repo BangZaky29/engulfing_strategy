@@ -258,13 +258,15 @@ def detect_engulfing(
                         sl_h1_pct  = fc_cfg.sl_h1_pct  # default 0.30
 
                         if pattern_type == "bearish_engulfing":
-                            # SELL: range dari H1_close ke H1_high (ekor atas)
+                            # SELL: range dari H1_close ke H1_high (ujung ekor atas)
+                            # SL ditaruh 30% DI ATAS High
                             range_ref = h1_high - h1_close
-                            new_sl    = h1_close + (range_ref * sl_h1_pct)
+                            new_sl    = h1_high + (range_ref * sl_h1_pct)
                         else:
-                            # BUY: range dari H1_close ke H1_low (ekor bawah)
+                            # BUY: range dari H1_close ke H1_low (ujung ekor bawah)
+                            # SL ditaruh 30% DI BAWAH Low
                             range_ref = h1_close - h1_low
-                            new_sl    = h1_close - (range_ref * sl_h1_pct)
+                            new_sl    = h1_low - (range_ref * sl_h1_pct)
 
                         sl_dist    = abs(op - new_sl)
                         new_rr     = signal.get("rr_ratio", 1.0)

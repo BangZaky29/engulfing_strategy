@@ -157,12 +157,13 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         elif sl_price_payload is not None:
             sl_price = sl_price_payload
         else:
-            if signal.get("tfm_status") == "STRONG" and "h1_trigger_close" in signal:
+            if signal.get("tfm_status") in ("STRONG", "VALID") and "h1_trigger_close" in signal:
                 h1_close = signal["h1_trigger_close"]
                 h1_low = signal["h1_trigger_low"]
                 h1_ring_range = h1_close - h1_low
-                sl_distance = h1_ring_range * 1.3
-                sl_price = h1_close - sl_distance
+                sl_h1_pct = float(os.getenv("SL_H1_PCT", "0.30"))
+                sl_distance = h1_ring_range * sl_h1_pct
+                sl_price = h1_low - sl_distance
             else:
                 ring_range  = curr_close - curr_low
                 sl_distance = ring_range * sl_pct_fallback
@@ -204,12 +205,13 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         elif sl_price_payload is not None:
             sl_price = sl_price_payload
         else:
-            if signal.get("tfm_status") == "STRONG" and "h1_trigger_close" in signal:
+            if signal.get("tfm_status") in ("STRONG", "VALID") and "h1_trigger_close" in signal:
                 h1_close = signal["h1_trigger_close"]
                 h1_high = signal["h1_trigger_high"]
                 h1_ring_range = h1_high - h1_close
-                sl_distance = h1_ring_range * 1.3
-                sl_price = h1_close + sl_distance
+                sl_h1_pct = float(os.getenv("SL_H1_PCT", "0.30"))
+                sl_distance = h1_ring_range * sl_h1_pct
+                sl_price = h1_high + sl_distance
             else:
                 ring_range  = curr_high - curr_close
                 sl_distance = ring_range * sl_pct_fallback
