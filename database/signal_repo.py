@@ -80,6 +80,10 @@ class SignalRepo:
                 print(f"   {emoji} [Signal] {status} @ {signal['symbol']} {signal['timeframe']}{notes}")
             return True
 
+        except Exception as e:
+            print(f"❌ Error insert signal: {e}")
+            return False
+
     @staticmethod
     def get_recent(symbol: str | None = None, limit: int = 20) -> list:
         """Ambil sinyal terbaru."""
