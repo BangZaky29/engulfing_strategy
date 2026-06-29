@@ -159,6 +159,13 @@ def build_signal(
         "tfm_status": None,
         "tfm_bias": None,
         "tfm_snapshot": None,
+        "h1_trigger_source": None,
+        "h1_trigger_time": None,
+        "m15_trigger_source": None,
+        "m15_trigger_time": None,
+        "m15_trigger_age": None,
+        "m5_trigger_source": None,
+        "m5_trigger_time": None,
     }
     notes_str = json.dumps(notes_payload)
 

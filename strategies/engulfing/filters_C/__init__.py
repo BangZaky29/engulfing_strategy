@@ -17,7 +17,7 @@ from .f2_bias_logic import (
     build_event_key, build_snapshot,
 )
 from .f3_ema_utils import calculate_ema_series
-from .f4_state_manager import TFMState, TFMonitorStateManager, clear_state
+from .f4_state_manager import TFMState, TFMonitorStateManager, clear_state, state_age_candles
 
 logger = logging.getLogger("filter_c")
 
@@ -258,6 +258,9 @@ def check_tf_monitor(
         "h1_trigger_candle": h1_trigger_candle,
         "h1_trigger_source": manager.h1_state.source if manager.h1_state else None,
         "h1_trigger_time": manager.h1_state.time.strftime("%H:%M") if manager.h1_state and manager.h1_state.time else None,
+        "m15_trigger_source": manager.m15_state.source if manager.m15_state else None,
+        "m15_trigger_time": manager.m15_state.time.strftime("%H:%M") if manager.m15_state and manager.m15_state.time else None,
+        "m15_trigger_age": state_age_candles(manager.m15_state, m15_candles),
         "m5_trigger_source": manager.m5_state.source if manager.m5_state else None,
         "m5_trigger_time": manager.m5_state.time.strftime("%H:%M") if manager.m5_state and manager.m5_state.time else None,
     }

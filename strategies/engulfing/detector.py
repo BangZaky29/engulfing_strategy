@@ -120,10 +120,14 @@ def detect_engulfing(
                     return None
 
             # [F2_B] Pattern Size
-            valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, symbol, cfg, verbose, color)
-            if not valid_f2_b:
-                pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
-                skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"
+            if cfg.filter_f2_pattern_b_enabled:
+                valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, symbol, cfg, verbose, color)
+                if not valid_f2_b:
+                    pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
+                    skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"
+            else:
+                if verbose:
+                    print(cprint("   [F2_B] Pattern Size: DISABLED (bypass)", Colors.GRAY))
                 
             # Mock scoring_res for Filter B
             scoring_res = {
@@ -230,9 +234,10 @@ def detect_engulfing(
                 signal["tfm_bias"]   = tfm_result["bias_column"]
                 signal["tfm_snapshot"] = tfm_result["snapshot"]
                 signal["m5_trigger_source"] = tfm_result.get("m5_trigger_source")
+                signal["m15_trigger_source"] = tfm_result.get("m15_trigger_source")
                 signal["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
-                signal["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
-                signal["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
+                signal["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
+                signal["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
                 signal["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
 
                 # ─────────────────────────────────────────────────────────
@@ -300,9 +305,12 @@ def detect_engulfing(
                             # ✅ Simpan h1_trigger_source dan trigger time ke notes agar WA bot bisa baca
                             notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
                             notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
+                            notes_obj["m15_trigger_source"] = tfm_result.get("m15_trigger_source", "")
+                            notes_obj["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
+                            notes_obj["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
                             notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
-                            notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
-                            notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+                            if signal.get("m15_trigger_source"):
+                                notes_obj["m15_trigger_source"] = signal["m15_trigger_source"]
                             if signal.get("m5_trigger_source"):
                                 notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
                             signal["notes"] = _json.dumps(notes_obj)

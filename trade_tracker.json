@@ -9,16 +9,16 @@
         "timestamp": "20260616_135600",
         "trading_session": "Asia"
     },
-    "763049575": {
-        "symbol": "BTC",
-        "mode": "BUY",
+    "766157910": {
+        "symbol": "XAUUSD",
+        "mode": "SELL",
         "tf": "M5",
-        "op_price": 60308.25,
-        "sl_price": 59689.972,
-        "tp_price": 60874.828,
-        "timestamp": "20260629_172000",
+        "op_price": 4023.36,
+        "sl_price": 4057.7470000000003,
+        "tp_price": 3990.7889999999998,
+        "timestamp": "20260629_213959",
         "status": "ACTIVE",
-        "trading_session": "Europe Only",
+        "trading_session": "Europe x New York Overlap",
         "hedge_ticket": null,
         "hedge_triggered": false
     }

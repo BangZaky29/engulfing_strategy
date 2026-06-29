@@ -31,6 +31,9 @@ class EngulfingConfig:
     filter_f3_ema_ring_b_enabled: bool = field(
         default_factory=lambda: os.getenv("FILTER_F3_EMA_RING_B_ENABLED", "true").lower() == "true"
     )
+    filter_f2_pattern_b_enabled: bool = field(
+        default_factory=lambda: os.getenv("FILTER_F2_PATTERN_B_ENABLED", "true").lower() == "true"
+    )
     filter_c_tfm_enabled: bool = field(
         default_factory=lambda: os.getenv("FILTER_C_TFM_ENABLED", "false").lower() == "true"
     )
