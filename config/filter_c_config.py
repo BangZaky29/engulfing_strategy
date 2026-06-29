@@ -83,7 +83,7 @@ class FilterCConfig:
         default_factory=lambda: int(os.getenv("TFM_STRONG_H1_MAX_AGE", "3"))
     )
     strong_m15_max_age: int = field(
-        default_factory=lambda: int(os.getenv("TFM_STRONG_M15_MAX_AGE", "2"))
+        default_factory=lambda: int(os.getenv("TFM_STRONG_M15_MAX_AGE", "3"))
     )
 
     # === Filter C Behavior ===

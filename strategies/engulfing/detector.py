@@ -315,69 +315,47 @@ def detect_engulfing(
                 elif "Sell" in tfm_result["bias_column"] and pattern_type == "bullish_engulfing":
                     is_aligned = False
 
-                if fc_cfg.filter_c_blocking:
-                    if tfm_result["status"] in ("LATE", "WAIT"):
-                        signal["is_confirmed"] = False
-                        signal["skip_reason"] = f"TF Monitor: {tfm_result['status']} — {tfm_result['bias_column']}"
-                        if verbose:
-                            print(cprint(f"   ❌ [FC] TF Monitor BLOCKED: {tfm_result['status']} | {tfm_result['bias_column']}", Colors.YELLOW))
-                            print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
-                    elif not is_aligned:
-                        signal["is_confirmed"] = False
-                        signal["skip_reason"] = f"TF Monitor: Arah M5 berlawanan dengan Bias ({tfm_result['bias_column']})"
-                        if verbose:
-                            print(cprint(f"   ❌ [FC] TF Monitor BLOCKED: M5 Counter-Trend | {tfm_result['bias_column']}", Colors.YELLOW))
-                            print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
-                    else:
-                        # TP selalu 1:1 — jarak TP = jarak OP ke SL
-                        signal["rr_ratio"] = 1.0
-                        try:
-                            import json as _json2
-                            op = signal.get("op_price", 0.0)
-                            sl = signal.get("sl_price", 0.0)
-                            if op > 0 and sl > 0:
-                                sl_dist = abs(op - sl)
-                                if pattern_type == "bearish_engulfing":
-                                    new_tp = op - sl_dist
-                                else:
-                                    new_tp = op + sl_dist
-                                signal["tp_price"] = new_tp
-                                notes_obj = _json2.loads(signal.get("notes", "{}"))
-                                notes_obj["tp_price"] = new_tp
-                                notes_obj["rr_ratio"] = 1.0
-                                signal["notes"] = _json2.dumps(notes_obj)
-                        except Exception:
-                            pass
-
-                        if verbose:
-                            status_emoji = {"STRONG": "🟢🔥", "VALID": "🟢", "EARLY": "🟡"}.get(tfm_result["status"], "❓")
-                            print(cprint(f"   ✅ [FC] TF Monitor: {status_emoji} {tfm_result['status']} | {tfm_result['bias_column']}", Colors.GREEN))
-                            print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
+                if tfm_result["status"] != "STRONG":
+                    signal["is_confirmed"] = False
+                    signal["skip_reason"] = f"TF Monitor: status {tfm_result['status']} bukan STRONG"
+                    if verbose:
+                        print(cprint(
+                            f"   ❌ [FC] TF Monitor BLOCKED: status {tfm_result['status']} bukan STRONG | {tfm_result['bias_column']}",
+                            Colors.YELLOW
+                        ))
+                        print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
+                elif not is_aligned:
+                    signal["is_confirmed"] = False
+                    signal["skip_reason"] = f"TF Monitor: Arah M5 berlawanan dengan Bias ({tfm_result['bias_column']})"
+                    if verbose:
+                        print(cprint(
+                            f"   ❌ [FC] TF Monitor BLOCKED: M5 Counter-Trend | {tfm_result['bias_column']}",
+                            Colors.YELLOW
+                        ))
+                        print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
                 else:
-                    # Non-blocking mode
-                    if is_aligned:
-                        signal["rr_ratio"] = 1.0
-                        try:
-                            import json as _json3
-                            op = signal.get("op_price", 0.0)
-                            sl = signal.get("sl_price", 0.0)
-                            if op > 0 and sl > 0:
-                                sl_dist = abs(op - sl)
-                                if pattern_type == "bearish_engulfing":
-                                    new_tp = op - sl_dist
-                                else:
-                                    new_tp = op + sl_dist
-                                signal["tp_price"] = new_tp
-                                notes_obj = _json3.loads(signal.get("notes", "{}"))
-                                notes_obj["tp_price"] = new_tp
-                                notes_obj["rr_ratio"] = 1.0
-                                signal["notes"] = _json3.dumps(notes_obj)
-                        except Exception:
-                            pass
+                    signal["rr_ratio"] = 1.0
+                    try:
+                        import json as _json2
+                        op = signal.get("op_price", 0.0)
+                        sl = signal.get("sl_price", 0.0)
+                        if op > 0 and sl > 0:
+                            sl_dist = abs(op - sl)
+                            if pattern_type == "bearish_engulfing":
+                                new_tp = op - sl_dist
+                            else:
+                                new_tp = op + sl_dist
+                            signal["tp_price"] = new_tp
+                            notes_obj = _json2.loads(signal.get("notes", "{}"))
+                            notes_obj["tp_price"] = new_tp
+                            notes_obj["rr_ratio"] = 1.0
+                            signal["notes"] = _json2.dumps(notes_obj)
+                    except Exception:
+                        pass
 
                     if verbose:
                         status_emoji = {"STRONG": "🟢🔥", "VALID": "🟢", "EARLY": "🟡"}.get(tfm_result["status"], "❓")
-                        print(cprint(f"   ✅ [FC] TF Monitor (Info): {status_emoji} {tfm_result['status']} | {tfm_result['bias_column']}", Colors.GREEN))
+                        print(cprint(f"   ✅ [FC] TF Monitor: {status_emoji} {tfm_result['status']} | {tfm_result['bias_column']}", Colors.GREEN))
                         print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
 
             except Exception as e:

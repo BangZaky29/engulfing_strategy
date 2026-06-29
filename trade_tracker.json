@@ -9,16 +9,16 @@
         "timestamp": "20260616_135600",
         "trading_session": "Asia"
     },
-    "759445429": {
-        "symbol": "BTC",
+    "761344021": {
+        "symbol": "NASDAQ-100",
         "mode": "BUY",
         "tf": "M5",
-        "op_price": 59993.2,
-        "sl_price": 58634.96,
-        "tp_price": 61305.57200000001,
-        "timestamp": "20260629_105001",
+        "op_price": 29460.4,
+        "sl_price": 29219.2,
+        "tp_price": 29681.12,
+        "timestamp": "20260629_145001",
         "status": "ACTIVE",
-        "trading_session": "Asia Only",
+        "trading_session": "Asia x Europe Overlap",
         "hedge_ticket": null,
         "hedge_triggered": false
     }
