@@ -58,6 +58,7 @@ def pass_ema_filter(
     ema_values: list[float],
     shift: int,
     is_buy: bool,
+    open_price: float,
     close_price: float,
     use_ema_filter: bool,
 ) -> bool:
@@ -65,8 +66,9 @@ def pass_ema_filter(
     Cek apakah trigger lolos EMA filter.
     Jika use_ema_filter=False, selalu return True (semua trigger tampil).
     Jika use_ema_filter=True, filter trigger yang melawan EMA.
-    
-    Transfer dari TFM_PassEMAFilter() di Utils.mqh.
+
+    Untuk validasi OP di M5, baik open maupun close harus berada di satu sisi EMA.
+    Jika candle body (open-close) cross EMA, trigger tidak valid.
     """
     if not use_ema_filter:
         return True
@@ -76,9 +78,9 @@ def pass_ema_filter(
         return False
 
     if is_buy:
-        return close_price > ema_val
+        return open_price > ema_val and close_price > ema_val
     else:
-        return close_price < ema_val
+        return open_price < ema_val and close_price < ema_val
 
 
 def ema_relation_text(

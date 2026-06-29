@@ -91,7 +91,7 @@ def is_bullish_engulfing(
     if not c2_bearish or not c1_bullish or not engulf:
         return False
 
-    return pass_ema_filter(ema_values, shift, True, c1_close, use_ema_filter)
+    return pass_ema_filter(ema_values, shift, True, c1_open, c1_close, use_ema_filter)
 
 
 def is_bearish_engulfing(
@@ -110,7 +110,7 @@ def is_bearish_engulfing(
     if not c2_bullish or not c1_bearish or not engulf:
         return False
 
-    return pass_ema_filter(ema_values, shift, False, c1_close, use_ema_filter)
+    return pass_ema_filter(ema_values, shift, False, c1_open, c1_close, use_ema_filter)
 
 
 # =====================================================
@@ -162,7 +162,7 @@ def is_bullish_marubozu(
     if range_pts < (avg_range * cfg.marubozu_range_multiplier):
         return False
 
-    return pass_ema_filter(ema_values, shift, True, c1_close, use_ema_filter)
+    return pass_ema_filter(ema_values, shift, True, c1_open, c1_close, use_ema_filter)
 
 
 def is_bearish_marubozu(
@@ -191,7 +191,7 @@ def is_bearish_marubozu(
     if range_pts < (avg_range * cfg.marubozu_range_multiplier):
         return False
 
-    return pass_ema_filter(ema_values, shift, False, c1_close, use_ema_filter)
+    return pass_ema_filter(ema_values, shift, False, c1_open, c1_close, use_ema_filter)
 
 
 # =====================================================
@@ -216,7 +216,7 @@ def is_bullish_ict(
     if not c2_bearish or not low_break or not close_above_c2_open:
         return False
 
-    return pass_ema_filter(ema_values, shift, True, c1_close, use_ema_filter)
+    return pass_ema_filter(ema_values, shift, True, c1_open, c1_close, use_ema_filter)
 
 
 def is_bearish_ict(
@@ -236,7 +236,7 @@ def is_bearish_ict(
     if not c2_bullish or not high_break or not close_below_c2_open:
         return False
 
-    return pass_ema_filter(ema_values, shift, False, c1_close, use_ema_filter)
+    return pass_ema_filter(ema_values, shift, False, c1_open, c1_close, use_ema_filter)
 
 
 # =====================================================
@@ -249,6 +249,7 @@ def is_bullish_pinbar(
     ema_values: list[float], use_ema_filter: bool,
     cfg: FilterCConfig,
 ) -> bool:
+    c1_open = _get(candles, shift, "open")
     c1_close = _get(candles, shift, "close")
     range_pts = _range_points(candles, shift, point)
     body_pts = _normalized_body(_body_points(candles, shift, point))
@@ -262,7 +263,7 @@ def is_bullish_pinbar(
     if upper_wick > body_pts:
         return False
 
-    return pass_ema_filter(ema_values, shift, True, c1_close, use_ema_filter)
+    return pass_ema_filter(ema_values, shift, True, c1_open, c1_close, use_ema_filter)
 
 
 def is_bearish_pinbar(
@@ -283,7 +284,8 @@ def is_bearish_pinbar(
     if lower_wick > body_pts:
         return False
 
-    return pass_ema_filter(ema_values, shift, False, c1_close, use_ema_filter)
+    c1_open = _get(candles, shift, "open")
+    return pass_ema_filter(ema_values, shift, True, c1_open, c1_close, use_ema_filter)
 
 
 # =====================================================
@@ -348,12 +350,14 @@ def check_dominan_break(
         if not previous_inside:
             continue
 
+        break_open = _get(candles, shift, "open")
+
         if buy_break:
-            if pass_ema_filter(ema_values, shift, True, break_close, use_ema_filter):
+            if pass_ema_filter(ema_values, shift, True, break_open, break_close, use_ema_filter):
                 return DIR_BUY, count
 
         if sell_break:
-            if pass_ema_filter(ema_values, shift, False, break_close, use_ema_filter):
+            if pass_ema_filter(ema_values, shift, False, break_open, break_close, use_ema_filter):
                 return DIR_SELL, count
 
     return DIR_NONE, 0
