@@ -203,6 +203,7 @@ def is_bullish_ict(
     candles: list[dict], shift: int,
     ema_values: list[float], use_ema_filter: bool,
 ) -> bool:
+    c1_open = _get(candles, shift, "open")
     c1_low = _get(candles, shift, "low")
     c1_close = _get(candles, shift, "close")
     c2_open = _get(candles, shift + 1, "open")
@@ -223,6 +224,7 @@ def is_bearish_ict(
     candles: list[dict], shift: int,
     ema_values: list[float], use_ema_filter: bool,
 ) -> bool:
+    c1_open = _get(candles, shift, "open")
     c1_high = _get(candles, shift, "high")
     c1_close = _get(candles, shift, "close")
     c2_open = _get(candles, shift + 1, "open")
