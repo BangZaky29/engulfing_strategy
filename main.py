@@ -222,6 +222,7 @@ def main():
                                                 notes_obj["ticket_id"] = "INFO_ACTIVE"
                                                 notes_obj["skip_reason"] = signal["skip_reason"]
                                                 notes_obj["skip_reasons"] = signal["skip_reasons"]
+                                                notes_obj["active_position_info"] = exec_skip_reason
                                                 if signal.get("tfm_status"):
                                                     notes_obj["tfm_status"] = signal["tfm_status"]
                                                     notes_obj["tfm_bias"] = signal.get("tfm_bias")

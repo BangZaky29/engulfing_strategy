@@ -43,7 +43,19 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
         print(f"❌ Eksekusi dibatalkan: {err_msg} untuk {symbol}")  # type: ignore
         return None, err_msg
     elif len(positions) > 0:
-        err_msg = f"Ada posisi aktif ({len(positions)})"
+        active_info = []
+        for pos in positions:
+            pos_type = "BUY" if getattr(pos, "type", None) == mt5.POSITION_TYPE_BUY else "SELL"
+            pos_ticket = getattr(pos, "ticket", None)
+            pos_price = getattr(pos, "price_open", None) or getattr(pos, "price_current", None) or getattr(pos, "price", None)
+            pos_vol = getattr(pos, "volume", None)
+            pair = f"#{pos_ticket} {pos_type} @ {pos_price:.2f}" if pos_price is not None else f"#{pos_ticket} {pos_type}"
+            if pos_vol is not None:
+                pair += f" ({pos_vol:.2f})"
+            active_info.append(pair)
+
+        active_summary = ", ".join(active_info)
+        err_msg = f"Ada posisi aktif ({len(positions)}): {active_summary}"
         print(f"⚠️ Eksekusi di-skip: {err_msg} untuk {symbol}. Menunggu OP sebelumnya close (kena TP/SL).")
         return None, err_msg
 
