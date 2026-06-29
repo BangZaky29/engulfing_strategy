@@ -222,6 +222,8 @@ def main():
                                                     notes_obj["tfm_status"] = signal["tfm_status"]
                                                     notes_obj["tfm_bias"] = signal.get("tfm_bias")
                                                     notes_obj["tfm_snapshot"] = signal.get("tfm_snapshot")
+                                                if signal.get("m5_trigger_source"):
+                                                    notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
                                                 signal["notes"] = json.dumps(notes_obj)
                                             except:
                                                 pass

@@ -8,31 +8,5 @@
         "tp_price": 4320.57,
         "timestamp": "20260616_135600",
         "trading_session": "Asia"
-    },
-    "761344021": {
-        "symbol": "NASDAQ-100",
-        "mode": "BUY",
-        "tf": "M5",
-        "op_price": 29460.4,
-        "sl_price": 29219.2,
-        "tp_price": 29681.12,
-        "timestamp": "20260629_145001",
-        "status": "ACTIVE",
-        "trading_session": "Asia x Europe Overlap",
-        "hedge_ticket": null,
-        "hedge_triggered": false
-    },
-    "762692971": {
-        "symbol": "XAUUSD",
-        "mode": "SELL",
-        "tf": "M5",
-        "op_price": 4040.58,
-        "sl_price": 4073.654,
-        "tp_price": 4008.6700000000005,
-        "timestamp": "20260629_165000",
-        "status": "ACTIVE",
-        "trading_session": "Europe Only",
-        "hedge_ticket": null,
-        "hedge_triggered": false
     }
 }

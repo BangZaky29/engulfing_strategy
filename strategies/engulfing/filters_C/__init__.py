@@ -257,6 +257,7 @@ def check_tf_monitor(
         "m5_state": manager.m5_state,
         "h1_trigger_candle": h1_trigger_candle,
         "h1_trigger_source": manager.h1_state.source if manager.h1_state else None,
+        "m5_trigger_source": manager.m5_state.source if manager.m5_state else None,
     }
 
 
