@@ -21,5 +21,18 @@
         "trading_session": "Asia x Europe Overlap",
         "hedge_ticket": null,
         "hedge_triggered": false
+    },
+    "762692971": {
+        "symbol": "XAUUSD",
+        "mode": "SELL",
+        "tf": "M5",
+        "op_price": 4040.58,
+        "sl_price": 4073.654,
+        "tp_price": 4008.6700000000005,
+        "timestamp": "20260629_165000",
+        "status": "ACTIVE",
+        "trading_session": "Europe Only",
+        "hedge_ticket": null,
+        "hedge_triggered": false
     }
 }
