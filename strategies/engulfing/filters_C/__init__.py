@@ -263,6 +263,7 @@ def check_tf_monitor(
         "m15_trigger_age": state_age_candles(manager.m15_state, m15_candles),
         "m5_trigger_source": manager.m5_state.source if manager.m5_state else None,
         "m5_trigger_time": manager.m5_state.time.strftime("%H:%M") if manager.m5_state and manager.m5_state.time else None,
+        "m5_trigger_direction": manager.m5_state.direction if manager.m5_state else 0,
     }
 
 

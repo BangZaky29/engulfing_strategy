@@ -21,5 +21,18 @@
         "trading_session": "Europe x New York Overlap",
         "hedge_ticket": null,
         "hedge_triggered": false
+    },
+    "766410742": {
+        "symbol": "NASDAQ-100",
+        "mode": "BUY",
+        "tf": "M5",
+        "op_price": 29503.9,
+        "sl_price": 28922.2,
+        "tp_price": 30053.920000000002,
+        "timestamp": "20260629_220959",
+        "status": "ACTIVE",
+        "trading_session": "Europe x New York Overlap",
+        "hedge_ticket": null,
+        "hedge_triggered": false
     }
 }

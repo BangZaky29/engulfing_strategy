@@ -97,7 +97,7 @@ def build_signal(
         sl_pct_b = exec_cfg.sl_pct_b
         tp_pct = exec_cfg.tp_pct_b
         
-        if pattern_type == "bullish_engulfing":
+        if pattern_type.startswith("bullish"):
             range_ref = c1_close - c1_low
             op_price = c1_close - (range_ref * (op_pct / 100.0))
             sl_price = c1_close - (range_ref * (sl_pct_b / 100.0))
@@ -188,6 +188,7 @@ def build_signal(
         "ema_slow_value": candle_data.get("ema_20_ago", 0.0),
         "ema_trend":      scoring_res["market_state"],
         "confidence_score": scoring_res["total_score"],
+        "action_str": scoring_res["action_str"],
         "is_confirmed": True,
         "notes": notes_str,
         

@@ -5,11 +5,14 @@
 
 import os
 from config.engulfing_config import EngulfingConfig
+from config.filter_c_config import FilterCConfig
 from .filters_A.f1_trigger import check_engulfing_trigger
 from .filters_A.f2_scoring import calculate_scoring
 from .filters_A.f3_pattern import check_pattern_size
 from .filters_A.f4_market_state import evaluate_market_state
 from .filters_B import check_engulfing_trigger_b, check_pattern_size_b, check_ema_ring_b
+from .filters_C import check_tf_monitor
+from .filters_C.f4_state_manager import DIR_BUY, DIR_SELL
 from .signal_builder import build_signal
 from utils.colors import Colors, cprint, skip_msg, grade_color
 
@@ -102,16 +105,38 @@ def detect_engulfing(
                 print(cprint(f"   [STRATEGY] Menggunakan Filter B (Pullback Limit, No Grade)", color))
                 
             # [F1_B] Engulfing Trigger & EMA Slow
+            fallback_m5_trigger = False
+            m5_fallback_source = None
             is_valid, pattern_type = check_engulfing_trigger_b(
                 c1_open, c1_close, c2_open, c2_close,
                 c2_high, c2_low, c2_is_doji,
                 ema_slow, verbose, color
             )
             if not is_valid or pattern_type is None:
-                return None
+                if candle_data.get("timeframe") == "M5" and cfg.filter_c_tfm_enabled:
+                    from config.filter_c_config import FilterCConfig
+                    fc_cfg = FilterCConfig()
+                    tfm_result = check_tf_monitor(symbol, cfg=fc_cfg)
+                    m5_source = tfm_result.get("m5_trigger_source")
+                    m5_direction = tfm_result.get("m5_trigger_direction")
+
+                    if (
+                        tfm_result.get("status") == "STRONG"
+                        and m5_source
+                        and m5_direction in (DIR_BUY, DIR_SELL)
+                    ):
+                        fallback_m5_trigger = True
+                        m5_fallback_source = m5_source
+                        pattern_type = "bullish_engulfing" if m5_direction == DIR_BUY else "bearish_engulfing"
+                        if verbose:
+                            print(cprint(f"   [F1_B] Fallback M5 trigger accepted: {m5_source}", color) + " " + Colors.GREEN)
+                    else:
+                        return None
+                else:
+                    return None
                 
             # [F3_B] EMA Ring Filter
-            if cfg.filter_f3_ema_ring_b_enabled:
+            if not fallback_m5_trigger and cfg.filter_f3_ema_ring_b_enabled:
                 valid_ema_ring = check_ema_ring_b(
                     c1_high, c1_low, c2_high, c2_low,
                     ema_now, pattern_type, verbose, color
@@ -120,21 +145,22 @@ def detect_engulfing(
                     return None
 
             # [F2_B] Pattern Size
-            if cfg.filter_f2_pattern_b_enabled:
-                valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, symbol, cfg, verbose, color)
-                if not valid_f2_b:
-                    pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
-                    skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"
-            else:
-                if verbose:
-                    print(cprint("   [F2_B] Pattern Size: DISABLED (bypass)", Colors.GRAY))
-                
+            if not fallback_m5_trigger:
+                if cfg.filter_f2_pattern_b_enabled:
+                    valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, symbol, cfg, verbose, color)
+                    if not valid_f2_b:
+                        pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
+                        skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"
+                else:
+                    if verbose:
+                        print(cprint("   [F2_B] Pattern Size: DISABLED (bypass)", Colors.GRAY))
+
             # Mock scoring_res for Filter B
             scoring_res = {
                 "range_pts": round(abs(c1_high - c1_low) / point), 
                 "body_pct": 100, "wick_pct": 0, "cp_pct": 100,
                 "ema_label": "None", "market_state": "Filter B", "total_score": 100,
-                "grade": "N/A", "action_str": "BUY" if c1_is_bullish else "SELL"
+                "grade": "N/A", "action_str": "BUY" if pattern_type.startswith("bullish") else "SELL"
             }
 
     else:
@@ -223,7 +249,6 @@ def detect_engulfing(
         # =============================================================
         if cfg.filter_c_tfm_enabled:
             try:
-                from .filters_C import check_tf_monitor
                 from config.filter_c_config import FilterCConfig
 
                 fc_cfg = FilterCConfig()
@@ -234,11 +259,26 @@ def detect_engulfing(
                 signal["tfm_bias"]   = tfm_result["bias_column"]
                 signal["tfm_snapshot"] = tfm_result["snapshot"]
                 signal["m5_trigger_source"] = tfm_result.get("m5_trigger_source")
+                signal["m5_trigger_direction"] = tfm_result.get("m5_trigger_direction")
                 signal["m15_trigger_source"] = tfm_result.get("m15_trigger_source")
                 signal["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
                 signal["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
                 signal["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
                 signal["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+
+                try:
+                    import json as _json
+                    notes_obj = _json.loads(signal.get("notes", "{}"))
+                    notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
+                    notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
+                    notes_obj["m15_trigger_source"] = tfm_result.get("m15_trigger_source", "")
+                    notes_obj["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
+                    notes_obj["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
+                    notes_obj["m5_trigger_source"] = tfm_result.get("m5_trigger_source", "")
+                    notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+                    signal["notes"] = _json.dumps(notes_obj)
+                except Exception:
+                    pass
 
                 # ─────────────────────────────────────────────────────────
                 # Dynamic SL dari H1 Trigger Candle

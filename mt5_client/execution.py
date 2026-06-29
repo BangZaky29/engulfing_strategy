@@ -105,6 +105,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     bid    = tick.bid
 
     pattern    = signal["pattern_type"]
+    action_str = str(signal.get("action_str", "BUY")).upper()
     curr_close = signal["curr_close"]
     curr_low   = signal["curr_low"]
     curr_high  = signal["curr_high"]
@@ -134,19 +135,32 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             fixed_distance = ticks_needed * tick_size
 
     # 2. Setup Parameter Order
-    if pattern == "bullish_engulfing":
+    if action_str == "BUY":
         # --- OP Type & Price ---
         # use_fixed_money hanya menentukan apakah pakai MARKET langsung (bukan LIMIT)
         if getattr(exec_cfg, 'use_fixed_money', False) or op_price_payload is None or op_price_payload >= ask:
             order_type = mt5.ORDER_TYPE_BUY
             action     = mt5.TRADE_ACTION_DEAL
             price      = ask
-            comment    = "Engulf_BUY_FIXED" if getattr(exec_cfg, 'use_fixed_money', False) else "Engulf_BUY"
+            comment    = "SIGNAL_BUY_FIXED" if getattr(exec_cfg, 'use_fixed_money', False) else "SIGNAL_BUY"
         else:
             order_type = mt5.ORDER_TYPE_BUY_LIMIT
             action     = mt5.TRADE_ACTION_PENDING
             price      = op_price_payload
-            comment    = "Engulf_BUY_LIMIT"
+            comment    = "SIGNAL_BUY_LIMIT"
+    elif action_str == "SELL":
+        # --- OP Type & Price ---
+        # use_fixed_money hanya menentukan apakah pakai MARKET langsung (bukan LIMIT)
+        if getattr(exec_cfg, 'use_fixed_money', False) or op_price_payload is None or op_price_payload <= bid:
+            order_type = mt5.ORDER_TYPE_SELL
+            action     = mt5.TRADE_ACTION_DEAL
+            price      = bid
+            comment    = "SIGNAL_SELL_FIXED" if getattr(exec_cfg, 'use_fixed_money', False) else "SIGNAL_SELL"
+        else:
+            order_type = mt5.ORDER_TYPE_SELL_LIMIT
+            action     = mt5.TRADE_ACTION_PENDING
+            price      = op_price_payload
+            comment    = "SIGNAL_SELL_LIMIT"
 
         # --- SL Logic (Prioritas: H1 Dynamic > Fixed Money > Fallback Ring M5) ---
         if sl_price_payload is not None:
