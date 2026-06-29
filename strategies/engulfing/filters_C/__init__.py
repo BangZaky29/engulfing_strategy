@@ -257,7 +257,9 @@ def check_tf_monitor(
         "m5_state": manager.m5_state,
         "h1_trigger_candle": h1_trigger_candle,
         "h1_trigger_source": manager.h1_state.source if manager.h1_state else None,
+        "h1_trigger_time": manager.h1_state.time.strftime("%H:%M") if manager.h1_state and manager.h1_state.time else None,
         "m5_trigger_source": manager.m5_state.source if manager.m5_state else None,
+        "m5_trigger_time": manager.m5_state.time.strftime("%H:%M") if manager.m5_state and manager.m5_state.time else None,
     }
 
 

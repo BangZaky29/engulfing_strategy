@@ -230,6 +230,10 @@ def detect_engulfing(
                 signal["tfm_bias"]   = tfm_result["bias_column"]
                 signal["tfm_snapshot"] = tfm_result["snapshot"]
                 signal["m5_trigger_source"] = tfm_result.get("m5_trigger_source")
+                signal["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
+                signal["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+                signal["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
+                signal["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
 
                 # ─────────────────────────────────────────────────────────
                 # Dynamic SL dari H1 Trigger Candle
@@ -293,8 +297,12 @@ def detect_engulfing(
                             notes_obj["sl_source"]         = "H1"
                             notes_obj["sl_pct"]            = sl_h1_pct
                             notes_obj["rr_ratio"]          = new_rr
-                            # ✅ Simpan h1_trigger_source ke notes agar bisa dibaca WA bot
+                            # ✅ Simpan h1_trigger_source dan trigger time ke notes agar WA bot bisa baca
                             notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
+                            notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
+                            notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+                            notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
+                            notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
                             if signal.get("m5_trigger_source"):
                                 notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
                             signal["notes"] = _json.dumps(notes_obj)

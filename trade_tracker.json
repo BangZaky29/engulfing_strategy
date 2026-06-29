@@ -8,5 +8,18 @@
         "tp_price": 4320.57,
         "timestamp": "20260616_135600",
         "trading_session": "Asia"
+    },
+    "763049575": {
+        "symbol": "BTC",
+        "mode": "BUY",
+        "tf": "M5",
+        "op_price": 60308.25,
+        "sl_price": 59689.972,
+        "tp_price": 60874.828,
+        "timestamp": "20260629_172000",
+        "status": "ACTIVE",
+        "trading_session": "Europe Only",
+        "hedge_ticket": null,
+        "hedge_triggered": false
     }
 }

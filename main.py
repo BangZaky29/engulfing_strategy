@@ -183,6 +183,7 @@ def main():
                             # Cek apakah sinyal ini dilewati (skipped)
                             if signal.get("skip_reason"):
                                 if tf == target_tf:
+                                    # Simpan skipped signal agar WA bisa mengirim notifikasi ke PRIVATE_JID
                                     SignalRepo.upsert(signal)
                             else:
                                 if tf == target_tf:
