@@ -159,6 +159,8 @@ def build_signal(
         "tfm_status": None,
         "tfm_bias": None,
         "tfm_snapshot": None,
+        "skip_reason": None,
+        "skip_reasons": [],
         "h1_trigger_source": None,
         "h1_trigger_time": None,
         "m15_trigger_source": None,

@@ -233,11 +233,20 @@ def detect_engulfing(
         candle_data, pattern_type, scoring_res, rr_ratio, cfg
     )
 
+    signal["skip_reasons"] = [skip_reason] if skip_reason else []
     if skip_reason:
         signal["is_confirmed"] = False
         signal["skip_reason"] = skip_reason
         if verbose:
             print(cprint(f"   {skip_msg(skip_reason)}", Colors.YELLOW))
+        try:
+            import json as _json
+            notes_obj = _json.loads(signal.get("notes", "{}"))
+            notes_obj["skip_reason"] = signal["skip_reason"]
+            notes_obj["skip_reasons"] = signal["skip_reasons"]
+            signal["notes"] = _json.dumps(notes_obj)
+        except Exception:
+            pass
     else:
         signal["is_confirmed"] = True
         signal["skip_reason"] = None
@@ -276,6 +285,8 @@ def detect_engulfing(
                     notes_obj["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
                     notes_obj["m5_trigger_source"] = tfm_result.get("m5_trigger_source", "")
                     notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+                    notes_obj["skip_reason"] = signal.get("skip_reason")
+                    notes_obj["skip_reasons"] = signal.get("skip_reasons", [])
                     signal["notes"] = _json.dumps(notes_obj)
                 except Exception:
                     pass
@@ -349,6 +360,8 @@ def detect_engulfing(
                             notes_obj["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
                             notes_obj["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
                             notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+                            notes_obj["skip_reason"] = signal.get("skip_reason")
+                            notes_obj["skip_reasons"] = signal.get("skip_reasons", [])
                             if signal.get("m15_trigger_source"):
                                 notes_obj["m15_trigger_source"] = signal["m15_trigger_source"]
                             if signal.get("m5_trigger_source"):
@@ -374,21 +387,19 @@ def detect_engulfing(
                 elif "Sell" in tfm_result["bias_column"] and pattern_type == "bullish_engulfing":
                     is_aligned = False
 
+                skip_reasons = []
                 if tfm_result["status"] != "STRONG":
+                    skip_reasons.append(f"TF Monitor: status {tfm_result['status']} bukan STRONG")
+                if not is_aligned:
+                    skip_reasons.append(f"TF Monitor: Arah M5 berlawanan dengan Bias ({tfm_result['bias_column']})")
+
+                if skip_reasons:
                     signal["is_confirmed"] = False
-                    signal["skip_reason"] = f"TF Monitor: status {tfm_result['status']} bukan STRONG"
+                    signal["skip_reasons"] = skip_reasons
+                    signal["skip_reason"] = " | ".join(skip_reasons)
                     if verbose:
                         print(cprint(
-                            f"   ❌ [FC] TF Monitor BLOCKED: status {tfm_result['status']} bukan STRONG | {tfm_result['bias_column']}",
-                            Colors.YELLOW
-                        ))
-                        print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
-                elif not is_aligned:
-                    signal["is_confirmed"] = False
-                    signal["skip_reason"] = f"TF Monitor: Arah M5 berlawanan dengan Bias ({tfm_result['bias_column']})"
-                    if verbose:
-                        print(cprint(
-                            f"   ❌ [FC] TF Monitor BLOCKED: M5 Counter-Trend | {tfm_result['bias_column']}",
+                            f"   ❌ [FC] TF Monitor BLOCKED: {signal['skip_reason']}",
                             Colors.YELLOW
                         ))
                         print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))

@@ -71,14 +71,14 @@ class SignalRepo:
                 else:
                     emoji = "⏭️"
                     status = f"SKIPPED ({signal.get('pattern_type')})"
-                    notes = f" | Alasan: {signal.get('skip_reason')}"
-                
+                    skip_reasons = signal.get('skip_reasons')
+                    if isinstance(skip_reasons, list) and skip_reasons:
+                        notes = f" | Alasan: {' | '.join(skip_reasons)}"
+                    else:
+                        notes = f" | Alasan: {signal.get('skip_reason')}"
+
                 print(f"   {emoji} [Signal] {status} @ {signal['symbol']} {signal['timeframe']}{notes}")
             return True
-
-        except Exception as e:
-            print(f"❌ Error insert signal: {e}")
-            return False
 
     @staticmethod
     def get_recent(symbol: str | None = None, limit: int = 20) -> list:

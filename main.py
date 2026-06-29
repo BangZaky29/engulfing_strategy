@@ -212,6 +212,7 @@ def main():
                                             pass
                                     else:
                                         signal["skip_reason"] = exec_skip_reason or "Eksekusi MT5 gagal"
+                                        signal["skip_reasons"] = [signal["skip_reason"]]
                                         if exec_skip_reason and "Ada posisi aktif" in exec_skip_reason:
                                             # Bypass Supabase filter agar info ini dikirim ke WA
                                             signal["is_confirmed"] = True
@@ -219,6 +220,8 @@ def main():
                                             try:
                                                 notes_obj = json.loads(signal.get("notes", "{}"))
                                                 notes_obj["ticket_id"] = "INFO_ACTIVE"
+                                                notes_obj["skip_reason"] = signal["skip_reason"]
+                                                notes_obj["skip_reasons"] = signal["skip_reasons"]
                                                 if signal.get("tfm_status"):
                                                     notes_obj["tfm_status"] = signal["tfm_status"]
                                                     notes_obj["tfm_bias"] = signal.get("tfm_bias")
