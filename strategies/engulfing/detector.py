@@ -215,7 +215,7 @@ def detect_engulfing(
         # =============================================================
         # [FC] Filter C — TF Monitor Check
         # Hanya dijalankan jika sinyal sudah lolos Filter A/B.
-        # Blocking: WAIT/LATE → skip. STRONG → RR 1:2.
+        # Blocking: WAIT/LATE → skip. TP selalu 1:1 (jarak OP–SL).
         # =============================================================
         if cfg.filter_c_tfm_enabled:
             try:
@@ -269,7 +269,7 @@ def detect_engulfing(
                             new_sl    = h1_low - (range_ref * sl_h1_pct)
 
                         sl_dist    = abs(op - new_sl)
-                        new_rr     = signal.get("rr_ratio", 1.0)
+                        new_rr     = 1.0
                         new_sl_pts = round(sl_dist / point)
 
                         if pattern_type == "bearish_engulfing":
@@ -278,6 +278,7 @@ def detect_engulfing(
                             new_tp = op + (sl_dist * new_rr)
 
                         # Update signal
+                        signal["rr_ratio"] = new_rr
                         signal["sl_price"] = new_sl
                         signal["sl_pts"]   = new_sl_pts
                         signal["tp_price"] = new_tp
@@ -328,28 +329,22 @@ def detect_engulfing(
                             print(cprint(f"   ❌ [FC] TF Monitor BLOCKED: M5 Counter-Trend | {tfm_result['bias_column']}", Colors.YELLOW))
                             print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
                     else:
-                        # Sesuaikan RR berdasarkan status TF Monitor
-                        if tfm_result["status"] == "STRONG":
-                            signal["rr_ratio"] = 2.0
-                        elif tfm_result["status"] == "EARLY":
-                            signal["rr_ratio"] = 1.0
-
-                        # Re-hitung TP dengan rr_ratio terbaru (SL sudah dinamis dari H1)
+                        # TP selalu 1:1 — jarak TP = jarak OP ke SL
+                        signal["rr_ratio"] = 1.0
                         try:
                             import json as _json2
-                            new_rr = signal.get("rr_ratio", 1.0)
-                            op     = signal.get("op_price", 0.0)
-                            sl     = signal.get("sl_price", 0.0)
+                            op = signal.get("op_price", 0.0)
+                            sl = signal.get("sl_price", 0.0)
                             if op > 0 and sl > 0:
                                 sl_dist = abs(op - sl)
                                 if pattern_type == "bearish_engulfing":
-                                    new_tp = op - (sl_dist * new_rr)
+                                    new_tp = op - sl_dist
                                 else:
-                                    new_tp = op + (sl_dist * new_rr)
+                                    new_tp = op + sl_dist
                                 signal["tp_price"] = new_tp
                                 notes_obj = _json2.loads(signal.get("notes", "{}"))
-                                notes_obj["tp_price"]  = new_tp
-                                notes_obj["rr_ratio"]  = new_rr
+                                notes_obj["tp_price"] = new_tp
+                                notes_obj["rr_ratio"] = 1.0
                                 signal["notes"] = _json2.dumps(notes_obj)
                         except Exception:
                             pass
@@ -361,27 +356,21 @@ def detect_engulfing(
                 else:
                     # Non-blocking mode
                     if is_aligned:
-                        if tfm_result["status"] == "STRONG":
-                            signal["rr_ratio"] = 2.0
-                        elif tfm_result["status"] == "EARLY":
-                            signal["rr_ratio"] = 1.0
-
-                        # Re-hitung TP dengan rr_ratio terbaru
+                        signal["rr_ratio"] = 1.0
                         try:
                             import json as _json3
-                            new_rr = signal.get("rr_ratio", 1.0)
-                            op     = signal.get("op_price", 0.0)
-                            sl     = signal.get("sl_price", 0.0)
+                            op = signal.get("op_price", 0.0)
+                            sl = signal.get("sl_price", 0.0)
                             if op > 0 and sl > 0:
                                 sl_dist = abs(op - sl)
                                 if pattern_type == "bearish_engulfing":
-                                    new_tp = op - (sl_dist * new_rr)
+                                    new_tp = op - sl_dist
                                 else:
-                                    new_tp = op + (sl_dist * new_rr)
+                                    new_tp = op + sl_dist
                                 signal["tp_price"] = new_tp
                                 notes_obj = _json3.loads(signal.get("notes", "{}"))
                                 notes_obj["tp_price"] = new_tp
-                                notes_obj["rr_ratio"] = new_rr
+                                notes_obj["rr_ratio"] = 1.0
                                 signal["notes"] = _json3.dumps(notes_obj)
                         except Exception:
                             pass
