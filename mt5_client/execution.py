@@ -15,6 +15,32 @@ from mt5_client.trade_monitor import add_tracked_trade, load_tracked_trades, sav
 from mt5_client.error_helper import get_last_error
 
 
+def _get_min_profit_distance(min_profit_usd: float, lot_size: float, tick_value: float, tick_size: float) -> float:
+    if min_profit_usd <= 0 or lot_size <= 0 or tick_value <= 0 or tick_size <= 0:
+        return 0.0
+    value_per_tick = tick_value * lot_size
+    if value_per_tick <= 0:
+        return 0.0
+    ticks_needed = min_profit_usd / value_per_tick
+    return ticks_needed * tick_size
+
+
+def _normalize_tp_price(
+    price: float,
+    tp_price_payload: float | None,
+    tp_price_calc: float,
+    action_str: str,
+) -> float:
+    if tp_price_payload is None:
+        return tp_price_calc
+
+    if action_str == "BUY" and tp_price_payload >= price:
+        return max(tp_price_payload, tp_price_calc)
+    elif action_str == "SELL" and tp_price_payload <= price:
+        return min(tp_price_payload, tp_price_calc)
+    return tp_price_calc
+
+
 def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: ExecutionConfig, ema_cfg: EMAConfig) -> tuple[int | None, str | None]:
     """
     Eksekusi OP berdasarkan sinyal Engulfing. Returns (ticket_id, skip_reason).
@@ -146,6 +172,20 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             ticks_needed = exec_cfg.fixed_money_usd / value_per_tick
             fixed_distance = ticks_needed * tick_size
 
+    # =====================================================
+    # Minimal TP berdasarkan profit USD untuk lot tetap
+    # =====================================================
+    min_profit_distance = 0.0
+    if exec_cfg.min_profit_usd > 0:
+        tick_value = symbol_info.trade_tick_value
+        tick_size = symbol_info.trade_tick_size
+        min_profit_distance = _get_min_profit_distance(
+            exec_cfg.min_profit_usd,
+            exec_cfg.lot_size,
+            tick_value,
+            tick_size,
+        )
+
     # 2. Setup Parameter Order
     if action_str == "BUY":
         # --- OP Type & Price ---
@@ -160,19 +200,6 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             action     = mt5.TRADE_ACTION_PENDING
             price      = op_price_payload
             comment    = "SIGNAL_BUY_LIMIT"
-    elif action_str == "SELL":
-        # --- OP Type & Price ---
-        # use_fixed_money hanya menentukan apakah pakai MARKET langsung (bukan LIMIT)
-        if getattr(exec_cfg, 'use_fixed_money', False) or op_price_payload is None or op_price_payload <= bid:
-            order_type = mt5.ORDER_TYPE_SELL
-            action     = mt5.TRADE_ACTION_DEAL
-            price      = bid
-            comment    = "SIGNAL_SELL_FIXED" if getattr(exec_cfg, 'use_fixed_money', False) else "SIGNAL_SELL"
-        else:
-            order_type = mt5.ORDER_TYPE_SELL_LIMIT
-            action     = mt5.TRADE_ACTION_PENDING
-            price      = op_price_payload
-            comment    = "SIGNAL_SELL_LIMIT"
 
         # --- SL Logic (Prioritas: H1 Dynamic > Fixed Money > Fallback Ring M5) ---
         if sl_price_payload is not None:
@@ -199,11 +226,55 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
                 print(f"   [SL] Menggunakan SL Fallback Ring M5: {sl_price:.2f}")
 
         # --- TP Logic (Prioritas: Payload > Hitung dari SL actual) ---
-        if tp_price_payload is not None:
-            tp_price = tp_price_payload
+        sl_from_entry = abs(price - sl_price)
+        tp_price_calc = price + (sl_from_entry * rr_ratio)
+        tp_min_price = price + min_profit_distance
+        tp_price = _normalize_tp_price(price, tp_price_payload, max(tp_price_calc, tp_min_price), action_str)
+
+
+    elif action_str == "SELL":
+        # --- OP Type & Price ---
+        # use_fixed_money hanya menentukan apakah pakai MARKET langsung (bukan LIMIT)
+        if getattr(exec_cfg, 'use_fixed_money', False) or op_price_payload is None or op_price_payload <= bid:
+            order_type = mt5.ORDER_TYPE_SELL
+            action     = mt5.TRADE_ACTION_DEAL
+            price      = bid
+            comment    = "SIGNAL_SELL_FIXED" if getattr(exec_cfg, 'use_fixed_money', False) else "SIGNAL_SELL"
         else:
-            sl_from_entry = abs(price - sl_price)
-            tp_price      = price + (sl_from_entry * rr_ratio)
+            order_type = mt5.ORDER_TYPE_SELL_LIMIT
+            action     = mt5.TRADE_ACTION_PENDING
+            price      = op_price_payload
+            comment    = "SIGNAL_SELL_LIMIT"
+
+        # --- SL Logic (Prioritas: H1 Dynamic > Fixed Money > Fallback Ring M5) ---
+        if sl_price_payload is not None:
+            # ✅ Prioritas 1: SL H1 Dynamic dari detector.py (selalu menang)
+            sl_price = sl_price_payload
+            print(f"   [SL] Menggunakan SL H1 Dynamic dari detector: {sl_price:.2f}")
+        elif getattr(exec_cfg, 'use_fixed_money', False) and fixed_distance > 0:
+            # Prioritas 2: Fixed Money SL (hanya jika tidak ada H1 dynamic)
+            sl_price = price + fixed_distance
+            print(f"   [SL] Menggunakan SL Fixed Money: {sl_price:.2f} (jarak: {fixed_distance:.2f})")
+        else:
+            # Prioritas 3: Fallback H1 lokal dari signal field (jarang terjadi)
+            if signal.get("tfm_status") in ("STRONG", "VALID") and "h1_trigger_close" in signal:
+                h1_close = signal["h1_trigger_close"]
+                h1_high  = signal["h1_trigger_high"]
+                h1_ring_range = h1_high - h1_close
+                sl_h1_pct = float(os.getenv("SL_H1_PCT", "0.30"))
+                sl_price = h1_high + (h1_ring_range * sl_h1_pct)
+                print(f"   [SL] Menggunakan SL H1 Fallback (signal field): {sl_price:.2f}")
+            else:
+                ring_range  = curr_high - curr_close
+                sl_distance = ring_range * sl_pct_fallback
+                sl_price    = curr_close + sl_distance
+                print(f"   [SL] Menggunakan SL Fallback Ring M5: {sl_price:.2f}")
+
+        # --- TP Logic (Prioritas: Payload > Hitung dari SL actual) ---
+        sl_from_entry = abs(price - sl_price)
+        tp_price_calc = price - (sl_from_entry * rr_ratio)
+        tp_min_price = price - min_profit_distance
+        tp_price = _normalize_tp_price(price, tp_price_payload, min(tp_price_calc, tp_min_price), action_str)
 
 
     elif pattern == "bearish_engulfing":

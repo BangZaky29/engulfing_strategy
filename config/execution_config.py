@@ -3,6 +3,7 @@
 # Konfigurasi eksekusi MT5 (Lot, SL, TP, Slippage, dll)
 # =====================================================
 
+import math
 import os
 from dataclasses import dataclass, field
 
@@ -79,6 +80,9 @@ class ExecutionConfig:
     )
     tp_pct_b: float = field(
         default_factory=lambda: float(os.getenv("EXECUTION_TP_PCT_B", "100"))
+    )
+    min_profit_usd: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_MIN_PROFIT_USD", "7.0"))
     )
     pending_order_expire_candles: int = field(
         default_factory=lambda: int(os.getenv("PENDING_ORDER_EXPIRE_CANDLES", "2"))
