@@ -192,8 +192,8 @@ def check_tf_monitor(
     # 4. Calculate status & bias
     # =========================================================
     status = validity_status(
-        manager.h1_state, manager.m15_state,
-        h1_candles, m15_candles,
+        manager.h1_state, manager.m15_state, manager.m5_state,
+        h1_candles, m15_candles, m5_candles,
         h1_ema, m15_ema,
         cfg,
     )

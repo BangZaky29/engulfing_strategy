@@ -71,8 +71,8 @@ def h1_m15_aligned(h1_state: TFMState, m15_state: TFMState) -> bool:
 
 
 def validity_status(
-    h1_state: TFMState, m15_state: TFMState,
-    h1_candles: list[dict], m15_candles: list[dict],
+    h1_state: TFMState, m15_state: TFMState, m5_state: TFMState,
+    h1_candles: list[dict], m15_candles: list[dict], m5_candles: list[dict],
     h1_ema: list[float], m15_ema: list[float],
     cfg: FilterCConfig,
 ) -> str:
@@ -83,8 +83,8 @@ def validity_status(
     Rules:
     - WAIT: H1 dan M15 belum searah
     - LATE: H1 age >= 5
-    - STRONG: H1+M15 Trend, H1 age <= 3, M15 age <= 2
-    - EARLY: H1 atau M15 Rev, H1 age <= 3, M15 age <= 2
+    - STRONG: H1+M15 Trend, H1 age <= strong_h1_max_age, M15 age <= strong_m15_max_age, dan M5 age == 0 (fresh trigger)
+    - EARLY: H1 atau M15 Rev, H1 age <= strong_h1_max_age, M15 age <= strong_m15_max_age, dan M5 age == 0 (fresh trigger)
     - VALID: sisanya
     """
     if not h1_m15_aligned(h1_state, m15_state):
@@ -92,6 +92,7 @@ def validity_status(
 
     h1_age = state_age_candles(h1_state, h1_candles)
     m15_age = state_age_candles(m15_state, m15_candles)
+    m5_age = state_age_candles(m5_state, m5_candles)
 
     # EMA relation
     h1_close = 0.0
@@ -124,12 +125,17 @@ def validity_status(
     if h1_age >= cfg.h1_late_age:
         return "LATE"
 
-    # STRONG: keduanya Trend, H1 dan M15 masih fresh
-    if h1_trend and m15_trend and h1_age <= cfg.strong_h1_max_age and m15_age <= cfg.strong_m15_max_age:
+    # Cek keselarasan dan kebaruan M5 trigger
+    m5_has_trigger = m5_state.direction in (DIR_BUY, DIR_SELL) and m5_state.time is not None
+    m5_aligned = m5_has_trigger and (m5_state.direction == h1_state.direction)
+    m5_fresh = m5_aligned and (m5_age == 0)
+
+    # STRONG: keduanya Trend, H1 dan M15 masih fresh, M5 searah dan fresh (age=0)
+    if h1_trend and m15_trend and h1_age <= cfg.strong_h1_max_age and m15_age <= cfg.strong_m15_max_age and m5_fresh:
         return "STRONG"
 
-    # EARLY: ada unsur Rev, tapi masih fresh
-    if (h1_rev or m15_rev) and h1_age <= cfg.strong_h1_max_age and m15_age <= cfg.strong_m15_max_age:
+    # EARLY: ada unsur Rev, tapi masih fresh, M5 searah dan fresh (age=0)
+    if (h1_rev or m15_rev) and h1_age <= cfg.strong_h1_max_age and m15_age <= cfg.strong_m15_max_age and m5_fresh:
         return "EARLY"
 
     # VALID: searah tapi tidak STRONG/EARLY
