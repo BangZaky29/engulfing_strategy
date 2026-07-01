@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 class FilterCConfig:
     """Konfigurasi parameter TF Monitor (Filter C)."""
 
-    # === Trigger Toggles ===
+    # === Trigger Toggles (Global Fallbacks) ===
     use_engulfing: bool = field(
         default_factory=lambda: os.getenv("TFM_USE_ENGULFING", "true").lower() == "true"
     )
@@ -31,6 +31,42 @@ class FilterCConfig:
     use_multi_trigger: bool = field(
         default_factory=lambda: os.getenv("TFM_USE_MULTI_TRIGGER", "true").lower() == "true"
     )
+
+    def get_use_engulfing(self, tf: str) -> bool:
+        val = os.getenv(f"TFM_{tf}_USE_ENGULFING")
+        if val is not None:
+            return val.lower() == "true"
+        return self.use_engulfing
+
+    def get_use_marubozu(self, tf: str) -> bool:
+        val = os.getenv(f"TFM_{tf}_USE_MARUBOZU")
+        if val is not None:
+            return val.lower() == "true"
+        return self.use_marubozu
+
+    def get_use_ict(self, tf: str) -> bool:
+        val = os.getenv(f"TFM_{tf}_USE_ICT")
+        if val is not None:
+            return val.lower() == "true"
+        return self.use_ict
+
+    def get_use_pinbar(self, tf: str) -> bool:
+        val = os.getenv(f"TFM_{tf}_USE_PINBAR")
+        if val is not None:
+            return val.lower() == "true"
+        return self.use_pinbar
+
+    def get_use_dominan_break(self, tf: str) -> bool:
+        val = os.getenv(f"TFM_{tf}_USE_DOMINAN_BREAK")
+        if val is not None:
+            return val.lower() == "true"
+        return self.use_dominan_break
+
+    def get_use_multi_trigger(self, tf: str) -> bool:
+        val = os.getenv(f"TFM_{tf}_USE_MULTI_TRIGGER")
+        if val is not None:
+            return val.lower() == "true"
+        return self.use_multi_trigger
 
     # === EMA ===
     use_ema_filter: bool = field(

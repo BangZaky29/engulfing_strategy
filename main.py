@@ -35,6 +35,23 @@ def print_banner(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
     print("=" * 60)
 
 
+def print_tfm_trigger_status(fc_cfg: FilterCConfig):
+    for tf in ["M5", "M15", "H1"]:
+        print(cprint(f"   TF {tf}", Colors.CYAN))
+        
+        db_val = fc_cfg.get_use_dominan_break(tf)
+        eng_val = fc_cfg.get_use_engulfing(tf)
+        mar_val = fc_cfg.get_use_marubozu(tf)
+        pin_val = fc_cfg.get_use_pinbar(tf)
+        ict_val = fc_cfg.get_use_ict(tf)
+        
+        print(cprint(f"   * DB = {'Aktif (True)' if db_val else 'Non-Aktif (False)'}", Colors.CYAN))
+        print(cprint(f"   * Engulfing = {'Aktif (True)' if eng_val else 'Non-Aktif (False)'}", Colors.CYAN))
+        print(cprint(f"   * Marobosho = {'Aktif (True)' if mar_val else 'Non-Aktif (False)'}", Colors.CYAN))
+        print(cprint(f"   * Pinbar = {'Aktif (True)' if pin_val else 'Non-Aktif (False)'}", Colors.CYAN))
+        print(cprint(f"   * ITC = {'Aktif (True)' if ict_val else 'Non-Aktif (False)'}", Colors.CYAN))
+
+
 def main():
     # 1. Validasi Environment Variables
     try:
@@ -56,6 +73,7 @@ def main():
         print(cprint("📡 [TF Monitor] Filter C AKTIF — H1 Bias + M15 Confirm + M5 Trigger", Colors.CYAN))
         print(cprint(f"   EMA Filter: {'ON' if fc_cfg.use_ema_filter else 'OFF'} | Lookback: {fc_cfg.trigger_lookback_bars} bars", Colors.CYAN))
         print(cprint(f"   Blocking: {'ON (WAIT/LATE = skip)' if fc_cfg.filter_c_blocking else 'OFF (tag only)'}", Colors.CYAN))
+        print_tfm_trigger_status(fc_cfg)
 
     # 3. Inisialisasi MT5
     if not init_mt5(mt5_cfg):

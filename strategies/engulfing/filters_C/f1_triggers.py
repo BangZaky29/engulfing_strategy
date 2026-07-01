@@ -370,7 +370,7 @@ def check_dominan_break(
 # =====================================================
 def get_trigger_state(
     candles: list[dict], shift: int, point: float,
-    ema_values: list[float], cfg: FilterCConfig,
+    ema_values: list[float], cfg: FilterCConfig, tf: str
 ) -> dict | None:
     """
     Scan semua 5 trigger pada shift tertentu.
@@ -396,23 +396,23 @@ def get_trigger_state(
     db_buy = db_sell = False
     db_number = 0
 
-    if cfg.use_engulfing:
+    if cfg.get_use_engulfing(tf):
         engulf_buy = is_bullish_engulfing(candles, shift, ema_values, use_ema)
         engulf_sell = is_bearish_engulfing(candles, shift, ema_values, use_ema)
 
-    if cfg.use_marubozu:
+    if cfg.get_use_marubozu(tf):
         marubozu_buy = is_bullish_marubozu(candles, shift, point, ema_values, use_ema, cfg)
         marubozu_sell = is_bearish_marubozu(candles, shift, point, ema_values, use_ema, cfg)
 
-    if cfg.use_ict:
+    if cfg.get_use_ict(tf):
         ict_buy = is_bullish_ict(candles, shift, ema_values, use_ema)
         ict_sell = is_bearish_ict(candles, shift, ema_values, use_ema)
 
-    if cfg.use_pinbar:
+    if cfg.get_use_pinbar(tf):
         pinbar_buy = is_bullish_pinbar(candles, shift, point, ema_values, use_ema, cfg)
         pinbar_sell = is_bearish_pinbar(candles, shift, point, ema_values, use_ema, cfg)
 
-    if cfg.use_dominan_break:
+    if cfg.get_use_dominan_break(tf):
         db_dir, db_num = check_dominan_break(candles, shift, point, ema_values, use_ema, cfg)
         db_buy = db_dir == DIR_BUY
         db_sell = db_dir == DIR_SELL
@@ -461,7 +461,7 @@ def get_trigger_state(
     source = trigger_list
 
     if total_valid > 1:
-        if cfg.use_multi_trigger:
+        if cfg.get_use_multi_trigger(tf):
             source = "Multi:" + trigger_list
         else:
             # Priority: Engulfing > Marubozu > ICT > Pinbar > DB
@@ -496,7 +496,7 @@ def get_trigger_state(
 # =====================================================
 def find_latest_trigger(
     candles: list[dict], point: float,
-    ema_values: list[float], cfg: FilterCConfig,
+    ema_values: list[float], cfg: FilterCConfig, tf: str
 ) -> dict | None:
     """
     Scan semua shift dari lookback ke shift=1.
@@ -515,9 +515,8 @@ def find_latest_trigger(
         return None
 
     found = None
-    # Scan dari jauh ke dekat, terus override → akhirnya dapat yang paling baru
     for shift in range(max_shift, 0, -1):
-        state = get_trigger_state(candles, shift, point, ema_values, cfg)
+        state = get_trigger_state(candles, shift, point, ema_values, cfg, tf)
         if state is not None:
             found = state
 

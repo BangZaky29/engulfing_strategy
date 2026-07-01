@@ -36,7 +36,7 @@ def find_latest_h1_state(
 
     found = None
     for shift in range(max_shift, 0, -1):
-        state = get_trigger_state(h1_candles, shift, point, ema_values, cfg)
+        state = get_trigger_state(h1_candles, shift, point, ema_values, cfg, tf="H1")
         if state and state["direction"] in (DIR_BUY, DIR_SELL):
             found = TFMState(
                 direction=state["direction"],
