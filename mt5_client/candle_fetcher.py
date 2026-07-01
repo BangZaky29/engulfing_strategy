@@ -158,6 +158,8 @@ def get_closed_candles(symbol: str,
         # Info MT5 (untuk konversi point)
         "point": info.point,           # ukuran 1 MT5 point  (XAUUSD = 0.01)
         "digits": info.digits,         # jumlah desimal harga (XAUUSD = 2)
+        "trade_tick_value": info.trade_tick_value,
+        "trade_tick_size": info.trade_tick_size,
 
         # C2 (candle terakhir yg close)
         "timestamp": c2["time"],
@@ -166,7 +168,7 @@ def get_closed_candles(symbol: str,
         "low_": float(c2["low"]),
         "close_": float(c2["close"]),
         "volume": float(c2["tick_volume"]),
-        "spread": spread,
+        "spread": float(spread),
         "body_size": float(body_c2),
         "upper_wick": float(upper_wick_c2),
         "lower_wick": float(lower_wick_c2),
@@ -195,6 +197,6 @@ def get_closed_candles(symbol: str,
         "avg_range_20": float(avg_range_20),
         "ema_now": float(ema_now),
         "ema_20_ago": float(ema_20_ago),
-        "cross_count_20": cross_count,
+        "cross_count_20": int(cross_count),
         "side_strength_20": float(side_strength),
     }

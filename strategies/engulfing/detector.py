@@ -330,13 +330,33 @@ def detect_engulfing(
                             new_sl    = h1_low - (range_ref * sl_h1_pct)
 
                         sl_dist    = abs(op - new_sl)
-                        new_rr     = 1.0
                         new_sl_pts = round(sl_dist / point)
 
+                        # FIXED TARGET PROFIT $8 CALCULATION
+                        from config.execution_config import ExecutionConfig
+                        exec_cfg = ExecutionConfig()
+                        lot_size = exec_cfg.get_lot_size(symbol)
+                        target_usd = exec_cfg.target_profit_usd
+                        tick_val = candle_data.get("trade_tick_value", 0)
+                        tick_size = candle_data.get("trade_tick_size", 0)
+
+                        tp_dist = 0.0
+                        if target_usd > 0 and lot_size > 0 and tick_val > 0 and tick_size > 0:
+                            val_per_tick = tick_val * lot_size
+                            if val_per_tick > 0:
+                                ticks_needed = target_usd / val_per_tick
+                                tp_dist = ticks_needed * tick_size
+                        
+                        # Fallback to RR 1.0 if missing tick info (e.g. testing)
+                        if tp_dist == 0.0:
+                            tp_dist = sl_dist
+
+                        new_rr = round(tp_dist / sl_dist, 2) if sl_dist > 0 else 0.0
+
                         if pattern_type == "bearish_engulfing":
-                            new_tp = op - (sl_dist * new_rr)
+                            new_tp = op - tp_dist
                         else:
-                            new_tp = op + (sl_dist * new_rr)
+                            new_tp = op + tp_dist
 
                         # Update signal
                         signal["rr_ratio"] = new_rr
@@ -353,6 +373,7 @@ def detect_engulfing(
                             notes_obj["sl_source"]         = "H1"
                             notes_obj["sl_pct"]            = sl_h1_pct
                             notes_obj["rr_ratio"]          = new_rr
+                            notes_obj["target_usd"]        = target_usd
                             # ✅ Simpan h1_trigger_source dan trigger time ke notes agar WA bot bisa baca
                             notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
                             notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
@@ -404,21 +425,45 @@ def detect_engulfing(
                         ))
                         print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
                 else:
-                    signal["rr_ratio"] = 1.0
                     try:
                         import json as _json2
                         op = signal.get("op_price", 0.0)
                         sl = signal.get("sl_price", 0.0)
+                        
+                        # FIXED TARGET PROFIT $8 CALCULATION
+                        from config.execution_config import ExecutionConfig
+                        exec_cfg = ExecutionConfig()
+                        lot_size = exec_cfg.get_lot_size(symbol)
+                        target_usd = exec_cfg.target_profit_usd
+                        tick_val = candle_data.get("trade_tick_value", 0)
+                        tick_size = candle_data.get("trade_tick_size", 0)
+
                         if op > 0 and sl > 0:
                             sl_dist = abs(op - sl)
+                            
+                            tp_dist = 0.0
+                            if target_usd > 0 and lot_size > 0 and tick_val > 0 and tick_size > 0:
+                                val_per_tick = tick_val * lot_size
+                                if val_per_tick > 0:
+                                    ticks_needed = target_usd / val_per_tick
+                                    tp_dist = ticks_needed * tick_size
+                            
+                            if tp_dist == 0.0:
+                                tp_dist = sl_dist
+                                
+                            new_rr = round(tp_dist / sl_dist, 2) if sl_dist > 0 else 0.0
+
                             if pattern_type == "bearish_engulfing":
-                                new_tp = op - sl_dist
+                                new_tp = op - tp_dist
                             else:
-                                new_tp = op + sl_dist
+                                new_tp = op + tp_dist
+                            
+                            signal["rr_ratio"] = new_rr
                             signal["tp_price"] = new_tp
                             notes_obj = _json2.loads(signal.get("notes", "{}"))
                             notes_obj["tp_price"] = new_tp
-                            notes_obj["rr_ratio"] = 1.0
+                            notes_obj["rr_ratio"] = new_rr
+                            notes_obj["target_usd"] = target_usd
                             if signal.get("m5_trigger_source"):
                                 notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
                             signal["notes"] = _json2.dumps(notes_obj)

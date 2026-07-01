@@ -15,11 +15,44 @@ class ExecutionConfig:
     lot_size: float = field(
         default_factory=lambda: float(os.getenv("EXECUTION_LOT_SIZE", "0.01"))
     )
+
+    def get_lot_size(self, symbol: str) -> float:
+        """
+        Ambil lot size dari .env spesifik ke simbol (misal LOT_XAUUSD=0.05).
+        Jika tidak ada, fallback ke EXECUTION_LOT_SIZE default.
+        """
+        clean_sym = symbol.replace(" ", "_").replace("-", "_")
+        
+        # Check standard
+        val = os.getenv(f"LOT_{clean_sym}")
+        if val is None:
+            # Fallback exact
+            val = os.getenv(f"LOT_{symbol}")
+            
+        # Fallback aliases (e.g. BTC -> Bitcoin, NASDAQ-100 -> US_Tech_100)
+        if val is None:
+            if symbol == "BTC" or symbol == "BTCUSD":
+                val = os.getenv("LOT_Bitcoin")
+            elif symbol == "NASDAQ-100" or symbol == "US100" or symbol == "USTEC":
+                val = os.getenv("LOT_US_Tech_100_index") or os.getenv("LOT_NASDAQ_100")
+                
+        if val is not None:
+            try:
+                return float(val)
+            except ValueError:
+                pass
+        return self.lot_size
+
     slippage: int = field(
         default_factory=lambda: int(os.getenv("EXECUTION_SLIPPAGE", "20"))
     )
     magic_number: int = field(
         default_factory=lambda: int(os.getenv("EXECUTION_MAGIC_NUMBER", "777777"))
+    )
+
+    # === Fixed Target Profit ===
+    target_profit_usd: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_TARGET_PROFIT_USD", "8.0"))
     )
 
     # === Fixed USD Risk/Reward ===
