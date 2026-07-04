@@ -433,34 +433,34 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
             except:
                 exit_dt = None
 
-            max_neg = None
-            sum_neg = None
-            max_neg_pct = None
+        max_neg = None
+        sum_neg = None
+        max_neg_pct = None
 
-            if exit_dt:
-                # query langsung dari Supabase (lebih sederhana di tahap awal)
-                try:
-                    supabase = get_supabase()
-                    # ambil snapshot untuk ticket ini saja
-                    # fase BEFORE_PROFIT: saat trade closed, snapshot_time < exit_time
-                    resp = (
-                        supabase.table("trade_floating_snapshots")
-                        .select("floating_profit_usd,floating_pct_from_entry,snapshot_time")
-                        .eq("ticket_id", ticket)
-                        .lte("snapshot_time", exit_dt.isoformat())
-                        .execute()
-                    )
-                    rows = resp.data or []
-                    neg_rows = [r for r in rows if float(r.get("floating_profit_usd") or 0.0) < 0.0]
+        if exit_dt:
+            # query langsung dari Supabase (lebih sederhana di tahap awal)
+            try:
+                supabase = get_supabase()
+                resp = (
+                    supabase.table("trade_floating_snapshots")
+                    .select("floating_profit_usd,floating_pct_from_entry,snapshot_time")
+                    .eq("ticket_id", ticket)
+                    .lte("snapshot_time", exit_dt.isoformat())
+                    .execute()
+                )
+                rows = resp.data or []
+                neg_rows = [r for r in rows if float(r.get("floating_profit_usd") or 0.0) < 0.0]
 
-                    if neg_rows:
-                        neg_vals = [float(r.get("floating_profit_usd") or 0.0) for r in neg_rows]
-                        neg_pcts = [float(r.get("floating_pct_from_entry") or 0.0) for r in neg_rows]
-                        # max adverse excursion: nilai floating_profit paling kecil (paling negatif)
-                        max_neg_val = min(neg_vals)
-                        max_neg = abs(max_neg_val)  # simpan sebagai magnitudo negatif (positif angka)
-                        sum_neg = sum(abs(v) for v in neg_vals)
-                        max_neg_pct = max(neg_pcts) if neg_pcts else None
+                if neg_rows:
+                    neg_vals = [float(r.get("floating_profit_usd") or 0.0) for r in neg_rows]
+                    neg_pcts = [float(r.get("floating_pct_from_entry") or 0.0) for r in neg_rows]
+                    max_neg_val = min(neg_vals)
+                    max_neg = abs(max_neg_val)
+                    sum_neg = sum(abs(v) for v in neg_vals)
+                    max_neg_pct = max(neg_pcts) if neg_pcts else None
+            except Exception as ex:
+                print(f"⚠️ Gagal query trade_floating_snapshots untuk #{ticket}: {ex}")
+
         # insert/update agregat (UPSERT per day+symbol+trigger+mode)
         try:
             supabase = get_supabase()
@@ -490,14 +490,12 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                 "probability_profit": probability_profit,
             }
 
-            # upsert dengan unique constraint (trade_date, symbol, trigger_type, mode, tf_execute, tf_monitor)
             supabase.table("trade_trigger_analytics").upsert(
                 agg_payload,
                 on_conflict="trade_date,symbol,trigger_type,mode,tf_execute,tf_monitor",
             ).execute()
         except Exception as ex:
             print(f"⚠️ Gagal insert trade_trigger_analytics untuk #{ticket}: {ex}")
-        
         # --- CANCEL HEDGE JIKA OP-1 KENA TP PROFIT ---
         hedge_ticket = info.get("hedge_ticket")
         if result_str == "PROFIT" and hedge_ticket:
