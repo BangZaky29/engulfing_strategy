@@ -6,7 +6,12 @@
 
 import os
 import time
-import MetaTrader5 as mt5
+
+try:
+    import MetaTrader5 as mt5  # type: ignore
+except ImportError:  # pragma: no cover
+    mt5 = None  # type: ignore
+
 from config.mt5_config import MT5Config, EMAConfig
 from config.execution_config import ExecutionConfig
 from mt5_client.trade_monitor import add_tracked_trade, load_tracked_trades, save_tracked_trades
@@ -162,6 +167,9 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     # =====================================================
     # Kalkulasi Fixed USD Risk/Reward (hanya untuk SL Fixed Money fallback)
     # =====================================================
+    # NOTE: TP & SL versi percent tail/distance tidak lagi berbasis USD target profit.
+    # Fixed-money risk/reward tetap dibiarkan untuk backward compatibility SL fallback,
+    # namun TP akan tetap dihitung berbasis jarak OP->SL (tp_pct).
     fixed_distance = 0.0
     if getattr(exec_cfg, 'use_fixed_money', False):
         tick_value = symbol_info.trade_tick_value
@@ -170,6 +178,7 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             value_per_tick = tick_value * lot_size_used
             ticks_needed = exec_cfg.fixed_money_usd / value_per_tick
             fixed_distance = ticks_needed * tick_size
+
 
     # 2. Setup Parameter Order
     if action_str == "BUY":
@@ -193,34 +202,41 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             sl_price = price - fixed_distance
             print(f"   [SL] Menggunakan SL Fixed Money: {sl_price:.2f} (jarak: {fixed_distance:.2f})")
         else:
+            # Fallback: SL berbasis ekor candle trigger menggunakan exec_cfg.sl_pct
             if signal.get("tfm_status") in ("STRONG", "VALID") and "h1_trigger_close" in signal:
-                h1_close = signal["h1_trigger_close"]
-                h1_low   = signal["h1_trigger_low"]
-                h1_ring_range = h1_close - h1_low
-                sl_h1_pct = float(os.getenv("SL_H1_PCT", "0.30"))
-                sl_price = h1_low - (h1_ring_range * sl_h1_pct)
-                print(f"   [SL] Menggunakan SL H1 Fallback (signal field): {sl_price:.2f}")
+                # Tail BUY: 0% close | 100% low
+                sl_price = exec_cfg.calculate_sl_price(
+                    entry_price=price,
+                    current_close=signal["h1_trigger_close"],
+                    current_low=signal["h1_trigger_low"],
+                    current_high=signal.get("h1_trigger_high", signal["h1_trigger_close"]),
+                    action_str="BUY",
+                )
+                print(f"   [SL] Menggunakan SL Tail Fallback H1 (exec_cfg): {sl_price:.2f}")
             else:
-                ring_range  = curr_close - curr_low
-                sl_distance = ring_range * sl_pct_fallback
-                sl_price    = curr_close - sl_distance
-                print(f"   [SL] Menggunakan SL Fallback Ring M5: {sl_price:.2f}")
+                # Tail BUY: 0% close | 100% low
+                sl_price = exec_cfg.calculate_sl_price(
+                    entry_price=price,
+                    current_close=curr_close,
+                    current_low=curr_low,
+                    current_high=curr_high,
+                    action_str="BUY",
+                )
+                print(f"   [SL] Menggunakan SL Tail Fallback Ring M5 (exec_cfg): {sl_price:.2f}")
 
-        # --- TP Logic ($8 Target Profit) ---
-        target_usd = getattr(exec_cfg, 'target_profit_usd', 8.0)
-        tp_dist = 0.0
-        tick_val = symbol_info.trade_tick_value
-        tick_size = symbol_info.trade_tick_size
-        if target_usd > 0 and lot_size_used > 0 and tick_val > 0 and tick_size > 0:
-            val_per_tick = tick_val * lot_size_used
-            if val_per_tick > 0:
-                ticks_needed = target_usd / val_per_tick
-                tp_dist = ticks_needed * tick_size
-        
-        if tp_dist == 0.0:
-            tp_dist = abs(price - sl_price) # Fallback
+        # --- TP Logic (berbasis jarak OP ke SL) ---
+        if signal.get("tp_price") is not None:
+            tp_price = float(signal["tp_price"])
+            print(f"   [TP] Menggunakan TP payload dari detector: {tp_price:.2f}")
+        else:
+            tp_price = exec_cfg.calculate_tp_price(
+                entry_price=price,
+                sl_price=sl_price,
+                action_str="BUY",
+            )
+            print(f"   [TP] Menggunakan TP Tail berbasis distance (exec_cfg): {tp_price:.2f}")
 
-        tp_price = price + tp_dist
+
 
 
     elif action_str == "SELL":
@@ -244,38 +260,46 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             sl_price = price + fixed_distance
             print(f"   [SL] Menggunakan SL Fixed Money: {sl_price:.2f} (jarak: {fixed_distance:.2f})")
         else:
+            # Fallback: SL berbasis ekor candle trigger menggunakan exec_cfg.sl_pct
             if signal.get("tfm_status") in ("STRONG", "VALID") and "h1_trigger_close" in signal:
-                h1_close = signal["h1_trigger_close"]
-                h1_high  = signal["h1_trigger_high"]
-                h1_ring_range = h1_high - h1_close
-                sl_h1_pct = float(os.getenv("SL_H1_PCT", "0.30"))
-                sl_price = h1_high + (h1_ring_range * sl_h1_pct)
-                print(f"   [SL] Menggunakan SL H1 Fallback (signal field): {sl_price:.2f}")
+                # Tail SELL: 0% close | 100% high
+                sl_price = exec_cfg.calculate_sl_price(
+                    entry_price=price,
+                    current_close=signal["h1_trigger_close"],
+                    current_low=signal.get("h1_trigger_low", signal["h1_trigger_close"]),
+                    current_high=signal["h1_trigger_high"],
+                    action_str="SELL",
+                )
+                print(f"   [SL] Menggunakan SL Tail Fallback H1 (exec_cfg): {sl_price:.2f}")
             else:
-                ring_range  = curr_high - curr_close
-                sl_distance = ring_range * sl_pct_fallback
-                sl_price    = curr_close + sl_distance
-                print(f"   [SL] Menggunakan SL Fallback Ring M5: {sl_price:.2f}")
+                # Tail SELL: 0% close | 100% high
+                sl_price = exec_cfg.calculate_sl_price(
+                    entry_price=price,
+                    current_close=curr_close,
+                    current_low=curr_low,
+                    current_high=curr_high,
+                    action_str="SELL",
+                )
+                print(f"   [SL] Menggunakan SL Tail Fallback Ring M5 (exec_cfg): {sl_price:.2f}")
 
-        # --- TP Logic ($8 Target Profit) ---
-        target_usd = getattr(exec_cfg, 'target_profit_usd', 8.0)
-        tp_dist = 0.0
-        tick_val = symbol_info.trade_tick_value
-        tick_size = symbol_info.trade_tick_size
-        if target_usd > 0 and lot_size_used > 0 and tick_val > 0 and tick_size > 0:
-            val_per_tick = tick_val * lot_size_used
-            if val_per_tick > 0:
-                ticks_needed = target_usd / val_per_tick
-                tp_dist = ticks_needed * tick_size
-        
-        if tp_dist == 0.0:
-            tp_dist = abs(price - sl_price) # Fallback
-
-        tp_price = price - tp_dist
+        # --- TP Logic (berbasis jarak OP ke SL) ---
+        if signal.get("tp_price") is not None:
+            tp_price = float(signal["tp_price"])
+            print(f"   [TP] Menggunakan TP payload dari detector: {tp_price:.2f}")
+        else:
+            tp_price = exec_cfg.calculate_tp_price(
+                entry_price=price,
+                sl_price=sl_price,
+                action_str="SELL",
+            )
+            print(f"   [TP] Menggunakan TP Tail berbasis distance (exec_cfg): {tp_price:.2f}")
 
 
     elif pattern == "bearish_engulfing":
+        # Catatan: perubahan ini hanya untuk SL/TP versi tail & distance.
+        # Pattern bearish_engulfing juga menggunakan logika yang sama dengan SELL.
         # --- OP Type & Price ---
+
         if getattr(exec_cfg, 'use_fixed_money', False) or op_price_payload is None or op_price_payload <= bid:
             order_type = mt5.ORDER_TYPE_SELL
             action     = mt5.TRADE_ACTION_DEAL
@@ -295,34 +319,40 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             sl_price = price + fixed_distance
             print(f"   [SL] Menggunakan SL Fixed Money: {sl_price:.2f} (jarak: {fixed_distance:.2f})")
         else:
+            # Fallback: SL berbasis ekor candle trigger menggunakan exec_cfg.sl_pct
             if signal.get("tfm_status") in ("STRONG", "VALID") and "h1_trigger_close" in signal:
-                h1_close = signal["h1_trigger_close"]
-                h1_high  = signal["h1_trigger_high"]
-                h1_ring_range = h1_high - h1_close
-                sl_h1_pct = float(os.getenv("SL_H1_PCT", "0.30"))
-                sl_price = h1_high + (h1_ring_range * sl_h1_pct)
-                print(f"   [SL] Menggunakan SL H1 Fallback (signal field): {sl_price:.2f}")
+                # Tail SELL: 0% close | 100% high
+                sl_price = exec_cfg.calculate_sl_price(
+                    entry_price=price,
+                    current_close=signal["h1_trigger_close"],
+                    current_low=signal.get("h1_trigger_low", signal["h1_trigger_close"]),
+                    current_high=signal["h1_trigger_high"],
+                    action_str="SELL",
+                )
+                print(f"   [SL] Menggunakan SL Tail Fallback H1 (exec_cfg): {sl_price:.2f}")
             else:
-                ring_range  = curr_high - curr_close
-                sl_distance = ring_range * sl_pct_fallback
-                sl_price    = curr_close + sl_distance
-                print(f"   [SL] Menggunakan SL Fallback Ring M5: {sl_price:.2f}")
+                # Tail SELL: 0% close | 100% high
+                sl_price = exec_cfg.calculate_sl_price(
+                    entry_price=price,
+                    current_close=curr_close,
+                    current_low=curr_low,
+                    current_high=curr_high,
+                    action_str="SELL",
+                )
+                print(f"   [SL] Menggunakan SL Tail Fallback Ring M5 (exec_cfg): {sl_price:.2f}")
 
-        # --- TP Logic ($8 Target Profit) ---
-        target_usd = getattr(exec_cfg, 'target_profit_usd', 8.0)
-        tp_dist = 0.0
-        tick_val = symbol_info.trade_tick_value
-        tick_size = symbol_info.trade_tick_size
-        if target_usd > 0 and lot_size_used > 0 and tick_val > 0 and tick_size > 0:
-            val_per_tick = tick_val * lot_size_used
-            if val_per_tick > 0:
-                ticks_needed = target_usd / val_per_tick
-                tp_dist = ticks_needed * tick_size
-        
-        if tp_dist == 0.0:
-            tp_dist = abs(price - sl_price) # Fallback
+        # --- TP Logic (berbasis jarak OP ke SL) ---
+        if signal.get("tp_price") is not None:
+            tp_price = float(signal["tp_price"])
+            print(f"   [TP] Menggunakan TP payload dari detector: {tp_price:.2f}")
+        else:
+            tp_price = exec_cfg.calculate_tp_price(
+                entry_price=price,
+                sl_price=sl_price,
+                action_str="SELL",
+            )
+            print(f"   [TP] Menggunakan TP Tail berbasis distance (exec_cfg): {tp_price:.2f}")
 
-        tp_price = price - tp_dist
 
     else:
         err_msg = f"Pola tidak dikenali: {pattern}"
