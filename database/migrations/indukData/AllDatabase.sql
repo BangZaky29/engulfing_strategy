@@ -150,3 +150,10 @@ CREATE TABLE public.wa_outbox (
   dedupe_key text NOT NULL UNIQUE,
   CONSTRAINT wa_outbox_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.whatsapp_public_status (
+  id text NOT NULL,
+  status text NOT NULL DEFAULT 'UNPAIRED'::text,
+  qr_code text,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT whatsapp_public_status_pkey PRIMARY KEY (id)
+);
