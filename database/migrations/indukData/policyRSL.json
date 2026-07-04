@@ -481,102 +481,6 @@
   },
   {
     "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "anon",
-    "privilege_type": "SELECT"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "authenticated",
-    "privilege_type": "SELECT"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "postgres",
-    "privilege_type": "DELETE"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "postgres",
-    "privilege_type": "INSERT"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "postgres",
-    "privilege_type": "REFERENCES"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "postgres",
-    "privilege_type": "SELECT"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "postgres",
-    "privilege_type": "TRIGGER"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "postgres",
-    "privilege_type": "TRUNCATE"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "postgres",
-    "privilege_type": "UPDATE"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "service_role",
-    "privilege_type": "DELETE"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "service_role",
-    "privilege_type": "INSERT"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "service_role",
-    "privilege_type": "REFERENCES"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "service_role",
-    "privilege_type": "SELECT"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "service_role",
-    "privilege_type": "TRIGGER"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "service_role",
-    "privilege_type": "TRUNCATE"
-  },
-  {
-    "table_schema": "public",
-    "table_name": "trade_deep_analytics_view",
-    "grantee": "service_role",
-    "privilege_type": "UPDATE"
-  },
-  {
-    "table_schema": "public",
     "table_name": "v_latest_engulfing",
     "grantee": "anon",
     "privilege_type": "SELECT"
@@ -598,5 +502,101 @@
     "table_name": "v_latest_engulfing",
     "grantee": "postgres",
     "privilege_type": "INSERT"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "postgres",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "postgres",
+    "privilege_type": "SELECT"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "postgres",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "postgres",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "postgres",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "service_role",
+    "privilege_type": "DELETE"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "service_role",
+    "privilege_type": "INSERT"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "service_role",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "service_role",
+    "privilege_type": "SELECT"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "service_role",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "service_role",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "v_latest_engulfing",
+    "grantee": "service_role",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "wa_outbox",
+    "grantee": "postgres",
+    "privilege_type": "DELETE"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "wa_outbox",
+    "grantee": "postgres",
+    "privilege_type": "INSERT"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "wa_outbox",
+    "grantee": "postgres",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "wa_outbox",
+    "grantee": "postgres",
+    "privilege_type": "SELECT"
   }
 ]

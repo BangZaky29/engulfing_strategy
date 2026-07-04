@@ -157,3 +157,44 @@ CREATE TABLE public.whatsapp_public_status (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT whatsapp_public_status_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.trade_floating_snapshots (
+  id bigint NOT NULL DEFAULT nextval('trade_floating_snapshots_id_seq'::regclass),
+  ticket_id bigint NOT NULL,
+  symbol character varying NOT NULL,
+  timeframe character varying NOT NULL,
+  mode character varying NOT NULL CHECK (mode::text = ANY (ARRAY['BUY'::text, 'SELL'::text])),
+  trigger_type character varying NOT NULL,
+  tf_execute character varying NOT NULL DEFAULT 'M5'::character varying,
+  tf_monitor character varying NOT NULL DEFAULT 'M15'::character varying,
+  snapshot_time timestamp with time zone NOT NULL DEFAULT now(),
+  floating_profit_usd double precision NOT NULL,
+  floating_pct_from_entry double precision NOT NULL,
+  entry_price double precision,
+  current_price double precision,
+  sl_price double precision,
+  tp_price double precision,
+  phase character varying NOT NULL DEFAULT 'UNKNOWN'::character varying CHECK (phase::text = ANY (ARRAY['UNKNOWN'::text, 'BEFORE_PROFIT'::text, 'AFTER_PROFIT'::text])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT trade_floating_snapshots_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.trade_trigger_analytics (
+  id bigint NOT NULL DEFAULT nextval('trade_trigger_analytics_id_seq'::regclass),
+  trade_date date NOT NULL,
+  symbol character varying NOT NULL,
+  trigger_type character varying NOT NULL,
+  mode character varying NOT NULL CHECK (mode::text = ANY (ARRAY['BUY'::text, 'SELL'::text])),
+  tf_execute character varying NOT NULL DEFAULT 'M5'::character varying,
+  tf_monitor character varying NOT NULL DEFAULT 'M15'::character varying,
+  total_trades integer NOT NULL DEFAULT 0,
+  total_profit_count integer NOT NULL DEFAULT 0,
+  total_loss_count integer NOT NULL DEFAULT 0,
+  total_profit_usd double precision NOT NULL DEFAULT 0,
+  total_loss_usd double precision NOT NULL DEFAULT 0,
+  max_negative_floating_before_profit_usd double precision,
+  max_negative_floating_before_profit_pct double precision,
+  sum_negative_floating_before_profit_usd double precision,
+  probability_profit double precision,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT trade_trigger_analytics_pkey PRIMARY KEY (id)
+);
