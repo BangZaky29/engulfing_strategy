@@ -27,7 +27,7 @@ def load_tracked_trades() -> dict:
     with open(TRACKER_FILE, "r") as f:
         try:
             return json.load(f)
-        except:
+        except Exception:
             return {}
 
 
@@ -36,7 +36,19 @@ def save_tracked_trades(data: dict):
         json.dump(data, f, indent=4)
 
 
-def add_tracked_trade(ticket: int, symbol: str, mode: str, tf: str, op_price: float, sl_price: float, tp_price: float, status: str = "ACTIVE", trading_session: str = "Unknown", hedge_ticket: int | None = None):
+def add_tracked_trade(
+    ticket: int,
+    symbol: str,
+    mode: str,
+    tf: str,
+    op_price: float,
+    sl_price: float,
+    tp_price: float,
+    status: str = "ACTIVE",
+    trading_session: str = "Unknown",
+    hedge_ticket: int | None = None,
+    trigger_type: str | None = None,
+):
     """
     Simpan tiket order ke file tracker untuk dimonitor.
     """
@@ -52,7 +64,10 @@ def add_tracked_trade(ticket: int, symbol: str, mode: str, tf: str, op_price: fl
         "status": status,
         "trading_session": trading_session,
         "hedge_ticket": hedge_ticket,
-        "hedge_triggered": False
+        "hedge_triggered": False,
+        "trigger_type": trigger_type or "Engulfing",
+        "entry_time": None,  # akan diisi saat posisi ACTIVE terlihat
+        "latest_snapshot_time": None,  # agar sampling tidak terlalu rapat
     }
     save_tracked_trades(data)
 
@@ -239,6 +254,91 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
         if status == "ACTIVE":
             positions = mt5.positions_get(ticket=ticket)  # type: ignore
             
+            # --- sampling floating snapshots saat trade ACTIVE ---
+            # ambil snapshot tidak terlalu sering: minimal setiap 10 detik
+            try:
+                if positions is not None and len(positions) > 0:
+                    pos = positions[0]
+                    now_dt = datetime.now(timezone.utc)
+                    last_snap_str = info.get("latest_snapshot_time")
+                    last_snap = None
+                    if last_snap_str:
+                        try:
+                            last_snap = datetime.fromisoformat(last_snap_str)
+                            if last_snap.tzinfo is None:
+                                last_snap = last_snap.replace(tzinfo=timezone.utc)
+                        except:
+                            last_snap = None
+
+                    min_interval_sec = 10
+                    should_snap = True
+                    if last_snap:
+                        should_snap = (now_dt - last_snap).total_seconds() >= min_interval_sec
+
+                    if should_snap:
+                        entry_price = getattr(pos, "price_open", None) or getattr(pos, "price", None) or info.get("op_price")
+                        sl_price = info.get("sl_price", 0.0)
+                        current_profit = float(getattr(pos, "profit", 0.0) or 0.0)
+                        current_price = getattr(pos, "price_current", None) or getattr(pos, "price", None) or None
+
+                        # risk-normalized floating pct (berdasarkan entry dan jarak entry->sl)
+                        # BUY: adverse saat current < entry
+                        # SELL: adverse saat current > entry
+                        floating_pct = None
+                        try:
+                            if entry_price is not None and sl_price is not None:
+                                dist = abs(float(entry_price) - float(sl_price))
+                                if dist > 0 and current_price is not None:
+                                    if info.get("mode") == "BUY":
+                                        floating_pct = (float(current_price) - float(entry_price)) / dist * 100.0
+                                    else:
+                                        floating_pct = (float(entry_price) - float(current_price)) / dist * 100.0
+                        except:
+                            floating_pct = None
+
+                        if floating_pct is None:
+                            # fallback: gunakan 0 agar tidak crash
+                            floating_pct = 0.0
+
+                        # insert ke Supabase
+                        try:
+                            supabase = get_supabase()
+                            trigger_type = info.get("trigger_type") or "Engulfing"
+
+                            sb_payload = {
+                                "ticket_id": ticket,
+                                "symbol": info["symbol"],
+                                "timeframe": info["tf"],
+                                "mode": info["mode"],
+                                "trigger_type": trigger_type,
+                                "tf_execute": "M5",
+                                "tf_monitor": "M15",
+                                "snapshot_time": now_dt.isoformat(),
+                                "floating_profit_usd": current_profit,
+                                "floating_pct_from_entry": floating_pct,
+                                "entry_price": float(entry_price) if entry_price is not None else None,
+                                "current_price": float(current_price) if current_price is not None else None,
+                                "sl_price": float(sl_price) if sl_price is not None else None,
+                                "tp_price": float(info.get("tp_price") or 0.0),
+                                "phase": "UNKNOWN",
+                            }
+                            supabase.table("trade_floating_snapshots").insert(sb_payload).execute()
+                            info["latest_snapshot_time"] = now_dt.isoformat()
+                            if not info.get("entry_time"):
+                                try:
+                                    entry_time_ts = getattr(pos, "time", None)
+                                    if entry_time_ts:
+                                        # time biasanya berupa epoch seconds
+                                        info["entry_time"] = datetime.fromtimestamp(entry_time_ts, tz=timezone.utc).isoformat()
+                                except:
+                                    pass
+                            save_tracked_trades(data)
+                        except Exception as ex:
+                            print(f"⚠️ Gagal insert floating snapshot untuk #{ticket}: {ex}")
+            except Exception as ex:
+                # sampling jangan pernah block trade_monitor loop
+                print(f"⚠️ Gagal sampling floating snapshot untuk #{ticket}: {ex}")
+
             # --- CEK HEDGING OP-2 TERSENTUH ---
             hedge_ticket = info.get("hedge_ticket")
             hedge_triggered = info.get("hedge_triggered", False)
@@ -316,6 +416,87 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
         # Tentukan RESULT (LOSS / PROFIT)
         result_str = "PROFIT" if total_profit > 0 else "LOSS"
         print(f"🏁 TRADE CLOSED: #{ticket} ({info['symbol']}) | Result: {result_str} | Profit: ${total_profit:.2f} | Sesi: {session_str}")
+
+        # --- agregasi trigger analytics dari floating snapshots ---
+        # target: buat 1 row trade_trigger_analytics untuk (trade_date, symbol, trigger_type, mode)
+        trigger_type = info.get("trigger_type") or "Engulfing"
+        trade_date = datetime.now(timezone.utc).date().isoformat()
+
+        # ambil max & sum negatif floating sebelum profit terjadi:
+        # definisi awal (tanpa exit_time phase join): gunakan window sampai exit_time selesai.
+        # floating snapshots disimpan dengan snapshot_time; exit_time bisa berupa epoch seconds dari deals.
+        # jadi kita filter snapshot_time <= exit_time_utc.
+        exit_dt = None
+        if exit_time:
+            try:
+                exit_dt = datetime.fromtimestamp(exit_time, tz=timezone.utc)
+            except:
+                exit_dt = None
+
+            max_neg = None
+            sum_neg = None
+            max_neg_pct = None
+
+            if exit_dt:
+                # query langsung dari Supabase (lebih sederhana di tahap awal)
+                try:
+                    supabase = get_supabase()
+                    # ambil snapshot untuk ticket ini saja
+                    # fase BEFORE_PROFIT: saat trade closed, snapshot_time < exit_time
+                    resp = (
+                        supabase.table("trade_floating_snapshots")
+                        .select("floating_profit_usd,floating_pct_from_entry,snapshot_time")
+                        .eq("ticket_id", ticket)
+                        .lte("snapshot_time", exit_dt.isoformat())
+                        .execute()
+                    )
+                    rows = resp.data or []
+                    neg_rows = [r for r in rows if float(r.get("floating_profit_usd") or 0.0) < 0.0]
+
+                    if neg_rows:
+                        neg_vals = [float(r.get("floating_profit_usd") or 0.0) for r in neg_rows]
+                        neg_pcts = [float(r.get("floating_pct_from_entry") or 0.0) for r in neg_rows]
+                        # max adverse excursion: nilai floating_profit paling kecil (paling negatif)
+                        max_neg_val = min(neg_vals)
+                        max_neg = abs(max_neg_val)  # simpan sebagai magnitudo negatif (positif angka)
+                        sum_neg = sum(abs(v) for v in neg_vals)
+                        max_neg_pct = max(neg_pcts) if neg_pcts else None
+        # insert/update agregat (UPSERT per day+symbol+trigger+mode)
+        try:
+            supabase = get_supabase()
+            total_trades = 1
+            total_profit_count = 1 if result_str == "PROFIT" else 0
+            total_loss_count = 1 if result_str == "LOSS" else 0
+            total_profit_usd = float(total_profit) if result_str == "PROFIT" else 0.0
+            total_loss_usd = abs(float(total_profit)) if result_str == "LOSS" else 0.0
+
+            probability_profit = float(total_profit_count) / float(total_trades) if total_trades > 0 else 0.0
+
+            agg_payload = {
+                "trade_date": trade_date,
+                "symbol": info["symbol"],
+                "trigger_type": trigger_type,
+                "mode": info["mode"],
+                "tf_execute": "M5",
+                "tf_monitor": "M15",
+                "total_trades": total_trades,
+                "total_profit_count": total_profit_count,
+                "total_loss_count": total_loss_count,
+                "total_profit_usd": total_profit_usd,
+                "total_loss_usd": total_loss_usd,
+                "max_negative_floating_before_profit_usd": float(max_neg) if max_neg is not None else None,
+                "max_negative_floating_before_profit_pct": float(max_neg_pct) if max_neg_pct is not None else None,
+                "sum_negative_floating_before_profit_usd": float(sum_neg) if sum_neg is not None else 0.0,
+                "probability_profit": probability_profit,
+            }
+
+            # upsert dengan unique constraint (trade_date, symbol, trigger_type, mode, tf_execute, tf_monitor)
+            supabase.table("trade_trigger_analytics").upsert(
+                agg_payload,
+                on_conflict="trade_date,symbol,trigger_type,mode,tf_execute,tf_monitor",
+            ).execute()
+        except Exception as ex:
+            print(f"⚠️ Gagal insert trade_trigger_analytics untuk #{ticket}: {ex}")
         
         # --- CANCEL HEDGE JIKA OP-1 KENA TP PROFIT ---
         hedge_ticket = info.get("hedge_ticket")

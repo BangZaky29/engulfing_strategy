@@ -3,10 +3,17 @@
 # Technical indicators: EMA, dll
 # =====================================================
 
-import pandas as pd
+from __future__ import annotations
+
+from typing import Any
+
+try:
+    import pandas as pd  # type: ignore
+except ImportError:  # pragma: no cover
+    pd = Any  # type: ignore
 
 
-def get_ema(df: pd.DataFrame, span: int, offset: int = -2) -> float:
+def get_ema(df: "pd.DataFrame", span: int, offset: int = -2) -> float:
     """
     Hitung EMA dari kolom 'close'.
 
