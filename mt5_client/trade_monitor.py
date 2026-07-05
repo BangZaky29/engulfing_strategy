@@ -275,16 +275,19 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                     if last_snap:
                         should_snap = (now_dt - last_snap).total_seconds() >= min_interval_sec
 
-                    if should_snap:
-                        entry_price = getattr(pos, "price_open", None) or getattr(pos, "price", None) or info.get("op_price")
-                        sl_price = info.get("sl_price", 0.0)
-                        current_profit = float(getattr(pos, "profit", 0.0) or 0.0)
-                        current_price = getattr(pos, "price_current", None) or getattr(pos, "price", None) or None
+                        if should_snap:
+                            entry_price = getattr(pos, "price_open", None) or getattr(pos, "price", None) or info.get("op_price")
+                            sl_price = info.get("sl_price", 0.0)
+                            current_profit = float(getattr(pos, "profit", 0.0) or 0.0)
+                            current_price = getattr(pos, "price_current", None) or getattr(pos, "price", None) or None
 
-                        # risk-normalized floating pct (berdasarkan entry dan jarak entry->sl)
-                        # BUY: adverse saat current < entry
-                        # SELL: adverse saat current > entry
-                        floating_pct = None
+                            # lot size sangat penting untuk konversi USD <-> points/pips per symbol
+                            volume_lot = float(getattr(pos, "volume", 0.0) or 0.0)
+
+                            # risk-normalized floating pct (berdasarkan entry dan jarak entry->sl)
+                            # BUY: adverse saat current < entry
+                            # SELL: adverse saat current > entry
+                            floating_pct = None
                         try:
                             if entry_price is not None and sl_price is not None:
                                 dist = abs(float(entry_price) - float(sl_price))
@@ -318,6 +321,8 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "snapshot_time": now_dt.isoformat(),
                                 "floating_profit_usd": current_profit,
                                 "floating_pct_from_entry": floating_pct,
+                                "volume_lot": volume_lot,
+
                                 "entry_price": float(entry_price) if entry_price is not None else None,
                                 "current_price": float(current_price) if current_price is not None else None,
                                 "sl_price": float(sl_price) if sl_price is not None else None,
@@ -452,13 +457,19 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                 supabase = get_supabase()
                 resp = (
                     supabase.table("trade_floating_snapshots")
-                    .select("floating_profit_usd,floating_pct_from_entry,snapshot_time")
+                    .select(
+                        "floating_profit_usd,floating_pct_from_entry,snapshot_time,entry_price,current_price,point"
+                    )
                     .eq("ticket_id", ticket)
                     .lte("snapshot_time", exit_dt.isoformat())
                     .execute()
                 )
                 rows = resp.data or []
                 neg_rows = [r for r in rows if float(r.get("floating_profit_usd") or 0.0) < 0.0]
+
+                max_neg_distance_points = None
+                max_neg_distance_price_points = None
+                sum_neg_distance_points = 0.0
 
                 if neg_rows:
                     neg_vals = [float(r.get("floating_profit_usd") or 0.0) for r in neg_rows]
@@ -467,6 +478,39 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                     max_neg = abs(max_neg_val)
                     sum_neg = sum(abs(v) for v in neg_vals)
                     max_neg_pct = max(neg_pcts) if neg_pcts else None
+
+                    # distance_points = abs(current_price - entry_price) / point
+                    dist_points_list: list[float] = []
+                    for r in neg_rows:
+                        try:
+                            ep = r.get("entry_price")
+                            cp = r.get("current_price")
+                            pt = r.get("point")
+                            if ep is None or cp is None or pt in (None, 0):
+                                continue
+                            ep_f = float(ep)
+                            cp_f = float(cp)
+                            pt_f = float(pt)
+                            if pt_f == 0:
+                                continue
+                            d_price = abs(cp_f - ep_f)
+                            d_points = d_price / pt_f
+                            dist_points_list.append(d_points)
+                        except:
+                            continue
+
+                    if dist_points_list:
+                        max_neg_distance_points = max(dist_points_list)
+                        sum_neg_distance_points = sum(dist_points_list)
+
+                        # "distance price points" diset sebagai distance price (bukan points)
+                        # supaya nama kolomnya jelas: max distance price dalam harga units.
+                        max_neg_distance_price_points = max(
+                            (abs(float(r.get("current_price")) - float(r.get("entry_price"))))
+                            for r in neg_rows
+                            if r.get("entry_price") is not None and r.get("current_price") is not None
+                        )
+
             except Exception as ex:
                 print(f"⚠️ Gagal query trade_floating_snapshots untuk #{ticket}: {ex}")
 
@@ -496,6 +540,11 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                 "max_negative_floating_before_profit_usd": float(max_neg) if max_neg is not None else None,
                 "max_negative_floating_before_profit_pct": float(max_neg_pct) if max_neg_pct is not None else None,
                 "sum_negative_floating_before_profit_usd": float(sum_neg) if sum_neg is not None else 0.0,
+
+                "max_negative_distance_points": float(max_neg_distance_points) if max_neg_distance_points is not None else None,
+                "max_negative_distance_price_points": float(max_neg_distance_price_points) if max_neg_distance_price_points is not None else None,
+                "sum_negative_distance_points": float(sum_neg_distance_points) if sum_neg_distance_points is not None else 0.0,
+
                 "probability_profit": probability_profit,
             }
 
