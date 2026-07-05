@@ -305,6 +305,8 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                             supabase = get_supabase()
                             trigger_type = info.get("trigger_type") or "Engulfing"
 
+                            symbol_info = mt5.symbol_info(info["symbol"])  # type: ignore
+
                             sb_payload = {
                                 "ticket_id": ticket,
                                 "symbol": info["symbol"],
@@ -321,7 +323,14 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "sl_price": float(sl_price) if sl_price is not None else None,
                                 "tp_price": float(info.get("tp_price") or 0.0),
                                 "phase": "UNKNOWN",
+
+                                # spec symbol untuk konversi distance harga -> points/pip
+                                "digits": int(getattr(symbol_info, 'digits', 0) or 0) if symbol_info else None,
+                                "point": float(getattr(symbol_info, 'point', 0.0) or 0.0) if symbol_info else None,
+                                "tick_size": float(getattr(symbol_info, 'trade_tick_size', 0.0) or 0.0) if symbol_info else None,
+                                "tick_value": float(getattr(symbol_info, 'trade_tick_value', 0.0) or 0.0) if symbol_info else None,
                             }
+
                             supabase.table("trade_floating_snapshots").insert(sb_payload).execute()
                             info["latest_snapshot_time"] = now_dt.isoformat()
                             if not info.get("entry_time"):
