@@ -175,6 +175,11 @@ CREATE TABLE public.trade_floating_snapshots (
   tp_price double precision,
   phase character varying NOT NULL DEFAULT 'UNKNOWN'::character varying CHECK (phase::text = ANY (ARRAY['UNKNOWN'::text, 'BEFORE_PROFIT'::text, 'AFTER_PROFIT'::text])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  digits integer,
+  point double precision,
+  tick_size double precision,
+  tick_value double precision,
+  volume_lot double precision,
   CONSTRAINT trade_floating_snapshots_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.trade_trigger_analytics (

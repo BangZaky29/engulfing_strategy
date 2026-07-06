@@ -41,3 +41,4 @@ CREATE POLICY "Allow public read access on trade_analytics"
 -- Enable Realtime for trade_analytics
 ALTER PUBLICATION supabase_realtime ADD TABLE trade_analytics;
 
+ALTER PUBLICATION supabase_realtime ADD TABLE engulfing_signals;

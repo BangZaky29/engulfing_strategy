@@ -2,7 +2,10 @@
   "pythonVersion": "3.11",
   "pythonPlatform": "Windows",
   "include": ["."],
-  "extraPaths": ["."],
+  "extraPaths": [
+    ".",
+    "c:/codingVibes/mt5/.venv/Lib/site-packages"
+  ],
   "exclude": [
     "**/__pycache__",
     "temp_screenshots"

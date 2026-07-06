@@ -275,19 +275,19 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                     if last_snap:
                         should_snap = (now_dt - last_snap).total_seconds() >= min_interval_sec
 
-                        if should_snap:
-                            entry_price = getattr(pos, "price_open", None) or getattr(pos, "price", None) or info.get("op_price")
-                            sl_price = info.get("sl_price", 0.0)
-                            current_profit = float(getattr(pos, "profit", 0.0) or 0.0)
-                            current_price = getattr(pos, "price_current", None) or getattr(pos, "price", None) or None
+                    if should_snap:
+                        entry_price = getattr(pos, "price_open", None) or getattr(pos, "price", None) or info.get("op_price")
+                        sl_price = info.get("sl_price", 0.0)
+                        current_profit = float(getattr(pos, "profit", 0.0) or 0.0)
+                        current_price = getattr(pos, "price_current", None) or getattr(pos, "price", None) or None
 
-                            # lot size sangat penting untuk konversi USD <-> points/pips per symbol
-                            volume_lot = float(getattr(pos, "volume", 0.0) or 0.0)
+                        # lot size sangat penting untuk konversi USD <-> points/pips per symbol
+                        volume_lot = float(getattr(pos, "volume", 0.0) or 0.0)
 
-                            # risk-normalized floating pct (berdasarkan entry dan jarak entry->sl)
-                            # BUY: adverse saat current < entry
-                            # SELL: adverse saat current > entry
-                            floating_pct = None
+                        # risk-normalized floating pct (berdasarkan entry dan jarak entry->sl)
+                        # BUY: adverse saat current < entry
+                        # SELL: adverse saat current > entry
+                        floating_pct = None
                         try:
                             if entry_price is not None and sl_price is not None:
                                 dist = abs(float(entry_price) - float(sl_price))
@@ -303,6 +303,10 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                             # fallback: gunakan 0 agar tidak crash
                             floating_pct = 0.0
 
+                        # Tentukan tf_execute dan tf_monitor dari tracker info
+                        snap_tf_execute = info.get("tf", "M5")
+                        snap_tf_monitor = info.get("tf_monitor", "M15")
+
                         # insert ke Supabase
                         try:
                             supabase = get_supabase()
@@ -316,8 +320,8 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "timeframe": info["tf"],
                                 "mode": info["mode"],
                                 "trigger_type": trigger_type,
-                                "tf_execute": "M5",
-                                "tf_monitor": "M15",
+                                "tf_execute": snap_tf_execute,
+                                "tf_monitor": snap_tf_monitor,
                                 "snapshot_time": now_dt.isoformat(),
                                 "floating_profit_usd": current_profit,
                                 "floating_pct_from_entry": floating_pct,
@@ -327,7 +331,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "current_price": float(current_price) if current_price is not None else None,
                                 "sl_price": float(sl_price) if sl_price is not None else None,
                                 "tp_price": float(info.get("tp_price") or 0.0),
-                                "phase": "UNKNOWN",
+                                "phase": "BEFORE_PROFIT",
 
                                 # spec symbol untuk konversi distance harga -> points/pip
                                 "digits": int(getattr(symbol_info, 'digits', 0) or 0) if symbol_info else None,
@@ -450,6 +454,9 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
         max_neg = None
         sum_neg = None
         max_neg_pct = None
+        max_neg_distance_points = None
+        max_neg_distance_price_points = None
+        sum_neg_distance_points = 0.0
 
         if exit_dt:
             # query langsung dari Supabase (lebih sederhana di tahap awal)
@@ -477,7 +484,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                     max_neg_val = min(neg_vals)
                     max_neg = abs(max_neg_val)
                     sum_neg = sum(abs(v) for v in neg_vals)
-                    max_neg_pct = max(neg_pcts) if neg_pcts else None
+                    max_neg_pct = min(neg_pcts) if neg_pcts else None
 
                     # distance_points = abs(current_price - entry_price) / point
                     dist_points_list: list[float] = []
@@ -515,35 +522,81 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                 print(f"⚠️ Gagal query trade_floating_snapshots untuk #{ticket}: {ex}")
 
         # insert/update agregat (UPSERT per day+symbol+trigger+mode)
+        # Ambil tf_execute dan tf_monitor dari tracker info
+        agg_tf_execute = info.get("tf", "M5")
+        agg_tf_monitor = info.get("tf_monitor", "M15")
         try:
             supabase = get_supabase()
-            total_trades = 1
-            total_profit_count = 1 if result_str == "PROFIT" else 0
-            total_loss_count = 1 if result_str == "LOSS" else 0
-            total_profit_usd = float(total_profit) if result_str == "PROFIT" else 0.0
-            total_loss_usd = abs(float(total_profit)) if result_str == "LOSS" else 0.0
+
+            # Baca row existing untuk akumulasi (bukan overwrite)
+            existing_row = None
+            try:
+                resp = (
+                    supabase.table("trade_trigger_analytics")
+                    .select("total_trades,total_profit_count,total_loss_count,total_profit_usd,total_loss_usd,max_negative_floating_before_profit_usd,max_negative_floating_before_profit_pct,sum_negative_floating_before_profit_usd,max_negative_distance_points,max_negative_distance_price_points,sum_negative_distance_points")
+                    .eq("trade_date", trade_date)
+                    .eq("symbol", info["symbol"])
+                    .eq("trigger_type", trigger_type)
+                    .eq("mode", info["mode"])
+                    .eq("tf_execute", agg_tf_execute)
+                    .eq("tf_monitor", agg_tf_monitor)
+                    .limit(1)
+                    .execute()
+                )
+                if resp.data and len(resp.data) > 0:
+                    existing_row = resp.data[0]
+            except Exception:
+                existing_row = None
+
+            # Akumulasi dari row existing + trade baru
+            prev_total = int(existing_row.get("total_trades") or 0) if existing_row else 0
+            prev_profit_count = int(existing_row.get("total_profit_count") or 0) if existing_row else 0
+            prev_loss_count = int(existing_row.get("total_loss_count") or 0) if existing_row else 0
+            prev_profit_usd = float(existing_row.get("total_profit_usd") or 0.0) if existing_row else 0.0
+            prev_loss_usd = float(existing_row.get("total_loss_usd") or 0.0) if existing_row else 0.0
+
+            total_trades = prev_total + 1
+            total_profit_count = prev_profit_count + (1 if result_str == "PROFIT" else 0)
+            total_loss_count = prev_loss_count + (1 if result_str == "LOSS" else 0)
+            total_profit_usd = prev_profit_usd + (float(total_profit) if result_str == "PROFIT" else 0.0)
+            total_loss_usd = prev_loss_usd + (abs(float(total_profit)) if result_str == "LOSS" else 0.0)
 
             probability_profit = float(total_profit_count) / float(total_trades) if total_trades > 0 else 0.0
+
+            # Untuk floating metrics, ambil max/sum terbesar dari existing vs current
+            prev_max_neg_usd = float(existing_row.get("max_negative_floating_before_profit_usd") or 0.0) if existing_row else 0.0
+            prev_max_neg_pct = float(existing_row.get("max_negative_floating_before_profit_pct") or 0.0) if existing_row else 0.0
+            prev_sum_neg_usd = float(existing_row.get("sum_negative_floating_before_profit_usd") or 0.0) if existing_row else 0.0
+            prev_max_dist_pts = float(existing_row.get("max_negative_distance_points") or 0.0) if existing_row else 0.0
+            prev_max_dist_price = float(existing_row.get("max_negative_distance_price_points") or 0.0) if existing_row else 0.0
+            prev_sum_dist_pts = float(existing_row.get("sum_negative_distance_points") or 0.0) if existing_row else 0.0
+
+            cur_max_neg = float(max_neg) if max_neg is not None else 0.0
+            cur_max_neg_pct = float(max_neg_pct) if max_neg_pct is not None else 0.0
+            cur_sum_neg = float(sum_neg) if sum_neg is not None else 0.0
+            cur_max_dist_pts = float(max_neg_distance_points) if max_neg_distance_points is not None else 0.0
+            cur_max_dist_price = float(max_neg_distance_price_points) if max_neg_distance_price_points is not None else 0.0
+            cur_sum_dist_pts = float(sum_neg_distance_points) if sum_neg_distance_points is not None else 0.0
 
             agg_payload = {
                 "trade_date": trade_date,
                 "symbol": info["symbol"],
                 "trigger_type": trigger_type,
                 "mode": info["mode"],
-                "tf_execute": "M5",
-                "tf_monitor": "M15",
+                "tf_execute": agg_tf_execute,
+                "tf_monitor": agg_tf_monitor,
                 "total_trades": total_trades,
                 "total_profit_count": total_profit_count,
                 "total_loss_count": total_loss_count,
                 "total_profit_usd": total_profit_usd,
                 "total_loss_usd": total_loss_usd,
-                "max_negative_floating_before_profit_usd": float(max_neg) if max_neg is not None else None,
-                "max_negative_floating_before_profit_pct": float(max_neg_pct) if max_neg_pct is not None else None,
-                "sum_negative_floating_before_profit_usd": float(sum_neg) if sum_neg is not None else 0.0,
+                "max_negative_floating_before_profit_usd": max(prev_max_neg_usd, cur_max_neg) if (prev_max_neg_usd or cur_max_neg) else None,
+                "max_negative_floating_before_profit_pct": min(prev_max_neg_pct, cur_max_neg_pct) if (prev_max_neg_pct or cur_max_neg_pct) else None,
+                "sum_negative_floating_before_profit_usd": prev_sum_neg_usd + cur_sum_neg,
 
-                "max_negative_distance_points": float(max_neg_distance_points) if max_neg_distance_points is not None else None,
-                "max_negative_distance_price_points": float(max_neg_distance_price_points) if max_neg_distance_price_points is not None else None,
-                "sum_negative_distance_points": float(sum_neg_distance_points) if sum_neg_distance_points is not None else 0.0,
+                "max_negative_distance_points": max(prev_max_dist_pts, cur_max_dist_pts) if (prev_max_dist_pts or cur_max_dist_pts) else None,
+                "max_negative_distance_price_points": max(prev_max_dist_price, cur_max_dist_price) if (prev_max_dist_price or cur_max_dist_price) else None,
+                "sum_negative_distance_points": prev_sum_dist_pts + cur_sum_dist_pts,
 
                 "probability_profit": probability_profit,
             }
