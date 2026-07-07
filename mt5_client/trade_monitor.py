@@ -48,7 +48,8 @@ def add_tracked_trade(
     trading_session: str = "Unknown",
     hedge_ticket: int | None = None,
     trigger_type: str | None = None,
-    tf_list: list[str] | None = None
+    tf_list: list[str] | None = None,
+    tf_monitor: str | None = None,       # ← TAMBAH
 ):
     """
     Simpan tiket order ke file tracker untuk dimonitor.
@@ -58,6 +59,8 @@ def add_tracked_trade(
         "symbol": symbol,
         "mode": mode,  # BUY atau SELL
         "tf": tf,
+        "tf_monitor": tf_monitor or "M15",   # ← TAMBAH
+        "tf_list": tf_list or [tf],          # ← TAMBAH
         "op_price": op_price,
         "sl_price": sl_price,
         "tp_price": tp_price,
@@ -469,7 +472,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                 resp = (
                     supabase.table("trade_floating_snapshots")
                     .select(
-                        "floating_profit_usd,floating_pct_from_entry,snapshot_time,entry_price,current_price,point"
+                        "floating_profit_usd,floating_pct_from_entry,snapshot_time,entry_price,current_price,point,distance_price_units"
                     )
                     .eq("ticket_id", ticket)
                     .lte("snapshot_time", exit_dt.isoformat())
@@ -488,7 +491,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                     max_neg_val = min(neg_vals)
                     max_neg = abs(max_neg_val)
                     sum_neg = sum(abs(v) for v in neg_vals)
-                    max_neg_pct = min(neg_pcts) if neg_pcts else None
+                    max_neg_pct = max(neg_pcts) if neg_pcts else None
 
                     # distance_points = abs(current_price - entry_price) / point
                     dist_points_list: list[float] = []
@@ -595,7 +598,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                 "total_profit_usd": total_profit_usd,
                 "total_loss_usd": total_loss_usd,
                 "max_negative_floating_before_profit_usd": max(prev_max_neg_usd, cur_max_neg) if (prev_max_neg_usd or cur_max_neg) else None,
-                "max_negative_floating_before_profit_pct": min(prev_max_neg_pct, cur_max_neg_pct) if (prev_max_neg_pct or cur_max_neg_pct) else None,
+                "max_negative_floating_before_profit_pct": max(prev_max_neg_pct, cur_max_neg_pct) if (prev_max_neg_pct or cur_max_neg_pct) else None,
                 "sum_negative_floating_before_profit_usd": prev_sum_neg_usd + cur_sum_neg,
 
                 "max_negative_distance_points": max(prev_max_dist_pts, cur_max_dist_pts) if (prev_max_dist_pts or cur_max_dist_pts) else None,
@@ -700,6 +703,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "entry_time": datetime.fromtimestamp(entry_time, tz=timezone.utc).isoformat() if entry_time else None,
                                 "exit_time": datetime.fromtimestamp(exit_time, tz=timezone.utc).isoformat() if exit_time else None,
                                 "image_url": public_url,
+                                "trigger_type": trigger_type,
                                 "trading_session": session_str
                             }
                             supabase.table("trade_analytics").insert(analytics_data).execute()
