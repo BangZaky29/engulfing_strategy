@@ -336,6 +336,30 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     # Hedging OP-2 Dihapus Sesuai Permintaan User
 
     # =====================================================
+    # OP Level Calculation & Triggers
+    # =====================================================
+    op_level_pts = 0
+    op_level_pct = 0.0
+    if signal.get("tfm_status") in ("STRONG", "VALID") and "h1_trigger_close" in signal:
+        h1_c = float(signal["h1_trigger_close"])
+        h1_l = float(signal.get("h1_trigger_low", h1_c))
+        h1_h = float(signal.get("h1_trigger_high", h1_c))
+        if action_str == "BUY" or (pattern == "bullish_engulfing" and action_str != "SELL"):
+            op_level_pts = round((h1_c - price) / point) if point > 0 else 0
+            ring_range = h1_c - h1_l
+            if ring_range != 0:
+                op_level_pct = round(((h1_c - price) / ring_range) * 100, 2)
+        else: # SELL
+            op_level_pts = round((price - h1_c) / point) if point > 0 else 0
+            ring_range = h1_h - h1_c
+            if ring_range != 0:
+                op_level_pct = round(((price - h1_c) / ring_range) * 100, 2)
+
+    h1_trigger_src = signal.get("h1_trigger_source", "")
+    m15_trigger_src = signal.get("m15_trigger_source", "")
+    m5_trigger_src = signal.get("m5_trigger_source", "")
+
+    # =====================================================
     # Simpan ke Tracker untuk di-SS setelah closed
     # =====================================================
     try:
@@ -349,7 +373,12 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             tp_price=tp_price,
             status="PENDING" if action == mt5.TRADE_ACTION_PENDING else "ACTIVE",
             trading_session=session_str,
-            hedge_ticket=None
+            hedge_ticket=None,
+            h1_trigger_source=h1_trigger_src,
+            m15_trigger_source=m15_trigger_src,
+            m5_trigger_source=m5_trigger_src,
+            op_level_pts=op_level_pts,
+            op_level_pct=op_level_pct
         )
         print(f"⏳ Trade OP-1 masuk tracker. Screenshot akan digenerate saat close.")
     except Exception as e:

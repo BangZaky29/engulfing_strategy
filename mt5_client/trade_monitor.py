@@ -50,6 +50,11 @@ def add_tracked_trade(
     trigger_type: str | None = None,
     tf_list: list[str] | None = None,
     tf_monitor: str | None = None,       # ← TAMBAH
+    h1_trigger_source: str = "",
+    m15_trigger_source: str = "",
+    m5_trigger_source: str = "",
+    op_level_pts: int = 0,
+    op_level_pct: float = 0.0,
 ):
     """
     Simpan tiket order ke file tracker untuk dimonitor.
@@ -73,6 +78,11 @@ def add_tracked_trade(
         "entry_time": None,  # akan diisi saat posisi ACTIVE terlihat
         "latest_snapshot_time": None,  # agar sampling tidak terlalu rapat
         "tf_list": tf_list or [tf],  # simpan semua TF yang dipakai
+        "h1_trigger_source": h1_trigger_source,
+        "m15_trigger_source": m15_trigger_source,
+        "m5_trigger_source": m5_trigger_source,
+        "op_level_pts": op_level_pts,
+        "op_level_pct": op_level_pct,
     }
     save_tracked_trades(data)
 
@@ -688,6 +698,25 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                         # 5. Simpan data ke table trade_analytics
                         try:
                             supabase = get_supabase()
+                            
+                            # --- ANALYTICS DATA FOR DASHBOARD ---
+                            # Hitung persentase max floating (MAE) terhadap jarak SL
+                            dist_to_sl = abs(float(info.get("op_price", 0)) - float(info.get("sl_price", 0)))
+                            max_loss_to_sl_pct = 0
+                            if dist_to_sl > 0 and max_neg_distance_price_points is not None:
+                                max_loss_to_sl_pct = (max_neg_distance_price_points / dist_to_sl) * 100
+
+                            notes_obj = {
+                                "h1_trigger_source": info.get("h1_trigger_source", ""),
+                                "m15_trigger_source": info.get("m15_trigger_source", ""),
+                                "m5_trigger_source": info.get("m5_trigger_source", ""),
+                                "op_level_pts": info.get("op_level_pts", 0),
+                                "op_level_pct": info.get("op_level_pct", 0.0),
+                                "max_floating_usd": -max_neg if max_neg else 0,
+                                "max_floating_pts": max_neg_distance_points if max_neg_distance_points else 0,
+                                "max_loss_to_sl_pct": -max_loss_to_sl_pct if max_loss_to_sl_pct else 0
+                            }
+                            
                             analytics_data = {
                                 "ticket_id": ticket,
                                 "symbol": info['symbol'],
@@ -704,7 +733,8 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "exit_time": datetime.fromtimestamp(exit_time, tz=timezone.utc).isoformat() if exit_time else None,
                                 "image_url": public_url,
                                 "trigger_type": trigger_type,
-                                "trading_session": session_str
+                                "trading_session": session_str,
+                                "notes": json.dumps(notes_obj)
                             }
                             supabase.table("trade_analytics").insert(analytics_data).execute()
                             print(f"✅ Data analytics sukses disimpan ke Supabase untuk ticket #{ticket}")
