@@ -48,6 +48,7 @@ def add_tracked_trade(
     trading_session: str = "Unknown",
     hedge_ticket: int | None = None,
     trigger_type: str | None = None,
+    tf_list: list[str] | None = None
 ):
     """
     Simpan tiket order ke file tracker untuk dimonitor.
@@ -68,6 +69,7 @@ def add_tracked_trade(
         "trigger_type": trigger_type or "Engulfing",
         "entry_time": None,  # akan diisi saat posisi ACTIVE terlihat
         "latest_snapshot_time": None,  # agar sampling tidak terlalu rapat
+        "tf_list": tf_list or [tf],  # simpan semua TF yang dipakai
     }
     save_tracked_trades(data)
 
@@ -287,15 +289,14 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                         # risk-normalized floating pct (berdasarkan entry dan jarak entry->sl)
                         # BUY: adverse saat current < entry
                         # SELL: adverse saat current > entry
+                        # SESUDAH (persen pergerakan dari OP price):
                         floating_pct = None
                         try:
-                            if entry_price is not None and sl_price is not None:
-                                dist = abs(float(entry_price) - float(sl_price))
-                                if dist > 0 and current_price is not None:
-                                    if info.get("mode") == "BUY":
-                                        floating_pct = (float(current_price) - float(entry_price)) / dist * 100.0
-                                    else:
-                                        floating_pct = (float(entry_price) - float(current_price)) / dist * 100.0
+                            if entry_price is not None and float(entry_price) != 0 and current_price is not None:
+                                if info.get("mode") == "BUY":
+                                    floating_pct = (float(current_price) - float(entry_price)) / float(entry_price) * 100.0
+                                else:
+                                    floating_pct = (float(entry_price) - float(current_price)) / float(entry_price) * 100.0
                         except:
                             floating_pct = None
 
@@ -326,6 +327,8 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "floating_profit_usd": current_profit,
                                 "floating_pct_from_entry": floating_pct,
                                 "volume_lot": volume_lot,
+                                "distance_price_units": abs(float(current_price) - float(entry_price)) if current_price and entry_price else None,
+                                "trigger_tf_list": json.dumps(info.get("tf_list", [info.get("tf", "M5")])),
 
                                 "entry_price": float(entry_price) if entry_price is not None else None,
                                 "current_price": float(current_price) if current_price is not None else None,
@@ -338,6 +341,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "point": float(getattr(symbol_info, 'point', 0.0) or 0.0) if symbol_info else None,
                                 "tick_size": float(getattr(symbol_info, 'trade_tick_size', 0.0) or 0.0) if symbol_info else None,
                                 "tick_value": float(getattr(symbol_info, 'trade_tick_value', 0.0) or 0.0) if symbol_info else None,
+                                
                             }
 
                             supabase.table("trade_floating_snapshots").insert(sb_payload).execute()
