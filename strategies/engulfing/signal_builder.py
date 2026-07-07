@@ -94,46 +94,21 @@ def build_signal(
     if cfg.active_filter_strategy == 'B':
         # --- Filter B ---
         op_pct = exec_cfg.op_pct_b
-        sl_pct_b = exec_cfg.sl_pct_b
-        tp_pct = exec_cfg.tp_pct_b
         
         if pattern_type.startswith("bullish"):
             range_ref = c1_close - c1_low
             op_price = c1_close - (range_ref * (op_pct / 100.0))
-            sl_price = c1_close - (range_ref * (sl_pct_b / 100.0))
-            tp_distance = abs(op_price - sl_price) * (tp_pct / 100.0)
-            tp_price = op_price + tp_distance
         else:
             range_ref = c1_high - c1_close
             op_price = c1_close + (range_ref * (op_pct / 100.0))
-            sl_price = c1_close + (range_ref * (sl_pct_b / 100.0))
-            tp_distance = abs(op_price - sl_price) * (tp_pct / 100.0)
-            tp_price = op_price - tp_distance
             
-        sl_distance_price = abs(op_price - sl_price)
-        sl_pts = round(sl_distance_price / point) if point > 0 else 0
-        sl_pct_used = sl_pct_b
+        sl_pct_used = 0.0
+
 
     else:
         # --- Filter A ---
-        # Dynamic SL Percentage based on Grade
-        grade = scoring_res.get("grade", "D")
-        if grade == "A+": sl_pct_used = 100.0
-        elif grade == "A": sl_pct_used = 75.0
-        else: sl_pct_used = 50.0
-
-        if pattern_type == "bullish_engulfing":
-            # BUY: SL distance is based on Close - Low
-            range_ref = c1_close - c1_low
-            sl_distance_price = range_ref * (sl_pct_used / 100.0)
-            sl_price = c1_close - sl_distance_price
-        else:
-            # SELL: SL distance is based on High - Close
-            range_ref = c1_high - c1_close
-            sl_distance_price = range_ref * (sl_pct_used / 100.0)
-            sl_price = c1_close + sl_distance_price
-            
-        sl_pts = round(sl_distance_price / point) if point > 0 else 0
+        # No longer computing SL and TP here
+        sl_pct_used = 0.0
 
     # 2. (RR Ratio is now provided by F3 filter via arguments)
 
@@ -145,11 +120,11 @@ def build_signal(
         "cp_pct": scoring_res["cp_pct"],
         "sl_pct_used": sl_pct_used,
         "rr_ratio": rr_ratio,
-        "sl_pts": sl_pts,
+        "sl_pts": 0,
         "ring_pts": round(abs(c1_high - c1_low) / point) if point > 0 else 0,
         "op_price": float(op_price),
-        "sl_price": float(sl_price),
-        "tp_price": float(tp_price) if tp_price > 0 else None,
+        "sl_price": 0.0,
+        "tp_price": None,
         "total_score": scoring_res["total_score"],
         "market_state": scoring_res["market_state"],
         "trading_session": trading_session,
@@ -196,10 +171,10 @@ def build_signal(
         
         # Ekstra return fields agar bisa dipakai oleh print di detector.py
         "rr_ratio": rr_ratio,
-        "sl_pts": sl_pts,
+        "sl_pts": 0,
         "op_price": float(op_price),
-        "sl_price": float(sl_price),
-        "tp_price": float(tp_price) if tp_price > 0 else None,
+        "sl_price": 0.0,
+        "tp_price": None,
         "trading_session": trading_session
     }
 

@@ -316,64 +316,15 @@ def detect_engulfing(
                         h1_close   = hc["close"]
                         h1_high    = hc["high"]
                         h1_low     = hc["low"]
-                        sl_h1_pct  = fc_cfg.sl_h1_pct  # default 0.30
 
-                        if pattern_type == "bearish_engulfing":
-                            # SELL: range dari H1_close ke H1_high (ujung ekor atas)
-                            # SL ditaruh 30% DI ATAS High
-                            range_ref = h1_high - h1_close
-                            new_sl    = h1_high + (range_ref * sl_h1_pct)
-                        else:
-                            # BUY: range dari H1_close ke H1_low (ujung ekor bawah)
-                            # SL ditaruh 30% DI BAWAH Low
-                            range_ref = h1_close - h1_low
-                            new_sl    = h1_low - (range_ref * sl_h1_pct)
-
-                        sl_dist    = abs(op - new_sl)
-                        new_sl_pts = round(sl_dist / point)
-
-                        # FIXED TARGET PROFIT $8 CALCULATION
-                        from config.execution_config import ExecutionConfig
-                        exec_cfg = ExecutionConfig()
-                        lot_size = exec_cfg.get_lot_size(symbol)
-                        target_usd = exec_cfg.target_profit_usd
-                        tick_val = candle_data.get("trade_tick_value", 0)
-                        tick_size = candle_data.get("trade_tick_size", 0)
-
-                        tp_dist = 0.0
-                        if target_usd > 0 and lot_size > 0 and tick_val > 0 and tick_size > 0:
-                            val_per_tick = tick_val * lot_size
-                            if val_per_tick > 0:
-                                ticks_needed = target_usd / val_per_tick
-                                tp_dist = ticks_needed * tick_size
-                        
-                        # Fallback to RR 1.0 if missing tick info (e.g. testing)
-                        if tp_dist == 0.0:
-                            tp_dist = sl_dist
-
-                        new_rr = round(tp_dist / sl_dist, 2) if sl_dist > 0 else 0.0
-
-                        if pattern_type == "bearish_engulfing":
-                            new_tp = op - tp_dist
-                        else:
-                            new_tp = op + tp_dist
-
-                        # Update signal
-                        signal["rr_ratio"] = new_rr
-                        signal["sl_price"] = new_sl
-                        signal["sl_pts"]   = new_sl_pts
-                        signal["tp_price"] = new_tp
+                        # Hapus signal['sl_price'] & signal['tp_price'] agar execution.py fallback ke exec_cfg
+                        # signal.pop("sl_price", None)
+                        # signal.pop("tp_price", None)
 
                         # Update notes JSON
                         try:
                             notes_obj = _json.loads(signal.get("notes", "{}"))
-                            notes_obj["sl_price"]          = new_sl
-                            notes_obj["sl_pts"]            = new_sl_pts
-                            notes_obj["tp_price"]          = new_tp
                             notes_obj["sl_source"]         = "H1"
-                            notes_obj["sl_pct"]            = sl_h1_pct
-                            notes_obj["rr_ratio"]          = new_rr
-                            notes_obj["target_usd"]        = target_usd
                             # ✅ Simpan h1_trigger_source dan trigger time ke notes agar WA bot bisa baca
                             notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
                             notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
@@ -387,6 +338,15 @@ def detect_engulfing(
                                 notes_obj["m15_trigger_source"] = signal["m15_trigger_source"]
                             if signal.get("m5_trigger_source"):
                                 notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
+                            
+                            # Clean up old legacy fields from notes if they exist
+                            notes_obj.pop("sl_price", None)
+                            notes_obj.pop("sl_pts", None)
+                            notes_obj.pop("tp_price", None)
+                            notes_obj.pop("sl_pct", None)
+                            notes_obj.pop("rr_ratio", None)
+                            notes_obj.pop("target_usd", None)
+
                             signal["notes"] = _json.dumps(notes_obj)
                         except Exception:
                             pass
@@ -394,10 +354,8 @@ def detect_engulfing(
                         if verbose:
                             h1_src = tfm_result.get("h1_trigger_source", "?")
                             print(cprint(
-                                f"   🎯 [FC] Dynamic SL (H1) | Trigger: {h1_src} | "
-                                f"H1 Close={h1_close:.2f} High={h1_high:.2f} Low={h1_low:.2f} | "
-                                f"Range={range_ref:.2f} | SL={new_sl:.2f} ({new_sl_pts}pts) | "
-                                f"TP={new_tp:.2f} | RR={new_rr}",
+                                f"   🎯 [FC] H1 Trigger Attached | Source: {h1_src} | "
+                                f"H1 Close={h1_close:.2f} High={h1_high:.2f} Low={h1_low:.2f}",
                                 Colors.CYAN
                             ))
 
@@ -427,46 +385,21 @@ def detect_engulfing(
                 else:
                     try:
                         import json as _json2
-                        op = signal.get("op_price", 0.0)
-                        sl = signal.get("sl_price", 0.0)
+                        notes_obj = _json2.loads(signal.get("notes", "{}"))
+                        # Clean up legacy fields
+                        notes_obj.pop("tp_price", None)
+                        notes_obj.pop("rr_ratio", None)
+                        notes_obj.pop("target_usd", None)
+
+                        if signal.get("m5_trigger_source"):
+                            notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
+                        signal["notes"] = _json2.dumps(notes_obj)
                         
-                        # FIXED TARGET PROFIT $8 CALCULATION
-                        from config.execution_config import ExecutionConfig
-                        exec_cfg = ExecutionConfig()
-                        lot_size = exec_cfg.get_lot_size(symbol)
-                        target_usd = exec_cfg.target_profit_usd
-                        tick_val = candle_data.get("trade_tick_value", 0)
-                        tick_size = candle_data.get("trade_tick_size", 0)
-
-                        if op > 0 and sl > 0:
-                            sl_dist = abs(op - sl)
-                            
-                            tp_dist = 0.0
-                            if target_usd > 0 and lot_size > 0 and tick_val > 0 and tick_size > 0:
-                                val_per_tick = tick_val * lot_size
-                                if val_per_tick > 0:
-                                    ticks_needed = target_usd / val_per_tick
-                                    tp_dist = ticks_needed * tick_size
-                            
-                            if tp_dist == 0.0:
-                                tp_dist = sl_dist
-                                
-                            new_rr = round(tp_dist / sl_dist, 2) if sl_dist > 0 else 0.0
-
-                            if pattern_type == "bearish_engulfing":
-                                new_tp = op - tp_dist
-                            else:
-                                new_tp = op + tp_dist
-                            
-                            signal["rr_ratio"] = new_rr
-                            signal["tp_price"] = new_tp
-                            notes_obj = _json2.loads(signal.get("notes", "{}"))
-                            notes_obj["tp_price"] = new_tp
-                            notes_obj["rr_ratio"] = new_rr
-                            notes_obj["target_usd"] = target_usd
-                            if signal.get("m5_trigger_source"):
-                                notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
-                            signal["notes"] = _json2.dumps(notes_obj)
+                        # Remove legacy calculated fields from signal payload
+                        signal.pop("sl_price", None)
+                        signal.pop("tp_price", None)
+                        signal.pop("sl_pts", None)
+                        signal.pop("rr_ratio", None)
                     except Exception:
                         pass
 

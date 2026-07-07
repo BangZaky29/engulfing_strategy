@@ -33,7 +33,6 @@ def main():
     live_bid = info.bid
     
     # Matikan fixed money di test ini agar SL H1 tidak ditimpa
-    exec_cfg.use_fixed_money = False
 
     print("Mengambil data live TF Monitor (H1, M15, M5) dari MT5...")
     tfm_result = check_tf_monitor(symbol, cfg=fc_cfg)
