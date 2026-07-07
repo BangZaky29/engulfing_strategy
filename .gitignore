@@ -26,3 +26,5 @@ Thumbs.db
 database/ea_mt5
 database/migrations
 strategies/perubahan-recently
+
+perbaikinTPSL.md
