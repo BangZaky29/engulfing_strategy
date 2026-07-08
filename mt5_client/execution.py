@@ -131,6 +131,10 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
     # OP Price Payload
     # =====================================================
     op_price_payload = signal.get("op_price")
+    
+    if not exec_cfg.use_limit_orders:
+        op_price_payload = None
+        print("⚡ Mode Eksekusi Langsung (Market Execution) Aktif. Limit Order Dibatalkan.")
 
     action = mt5.TRADE_ACTION_DEAL
     lot_size_used = exec_cfg.get_lot_size(symbol)

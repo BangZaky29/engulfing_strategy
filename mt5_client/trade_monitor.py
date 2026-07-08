@@ -167,6 +167,57 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                 except Exception as ex:
                     print(f"⚠️ Gagal menyimpan log aktif ke Supabase: {ex}")
                     
+                # --- SNAPSHOT INSTAN saat order baru fill (jangan tunggu poll berikutnya) ---
+                try:
+                    pos0 = positions[0]
+                    entry_price0 = getattr(pos0, "price_open", None) or info.get("op_price")
+                    current_price0 = getattr(pos0, "price_current", None) or entry_price0
+                    current_profit0 = float(getattr(pos0, "profit", 0.0) or 0.0)
+                    volume_lot0 = float(getattr(pos0, "volume", 0.0) or 0.0)
+                    now_dt0 = datetime.now(timezone.utc)
+
+                    floating_pct0 = 0.0
+                    try:
+                        if entry_price0 and float(entry_price0) != 0:
+                            if info.get("mode") == "BUY":
+                                floating_pct0 = (float(current_price0) - float(entry_price0)) / float(entry_price0) * 100.0
+                            else:
+                                floating_pct0 = (float(entry_price0) - float(current_price0)) / float(entry_price0) * 100.0
+                    except:
+                        floating_pct0 = 0.0
+
+                    symbol_info0 = mt5.symbol_info(info["symbol"])  # type: ignore
+                    sb_payload0 = {
+                        "ticket_id": ticket,
+                        "symbol": info["symbol"],
+                        "timeframe": info["tf"],
+                        "mode": info["mode"],
+                        "trigger_type": info.get("trigger_type") or "Engulfing",
+                        "tf_execute": info.get("tf", "M5"),
+                        "tf_monitor": info.get("tf_monitor", "M15"),
+                        "snapshot_time": now_dt0.isoformat(),
+                        "floating_profit_usd": current_profit0,
+                        "floating_pct_from_entry": floating_pct0,
+                        "volume_lot": volume_lot0,
+                        "distance_price_units": abs(float(current_price0) - float(entry_price0)) if current_price0 and entry_price0 else None,
+                        "trigger_tf_list": json.dumps(info.get("tf_list", [info.get("tf", "M5")])),
+                        "entry_price": float(entry_price0) if entry_price0 is not None else None,
+                        "current_price": float(current_price0) if current_price0 is not None else None,
+                        "sl_price": float(info.get("sl_price") or 0.0),
+                        "tp_price": float(info.get("tp_price") or 0.0),
+                        "phase": "BEFORE_PROFIT",
+                        "digits": int(getattr(symbol_info0, 'digits', 0) or 0) if symbol_info0 else None,
+                        "point": float(getattr(symbol_info0, 'point', 0.0) or 0.0) if symbol_info0 else None,
+                        "tick_size": float(getattr(symbol_info0, 'trade_tick_size', 0.0) or 0.0) if symbol_info0 else None,
+                        "tick_value": float(getattr(symbol_info0, 'trade_tick_value', 0.0) or 0.0) if symbol_info0 else None,
+                    }
+                    supabase.table("trade_floating_snapshots").insert(sb_payload0).execute()
+                    info["latest_snapshot_time"] = now_dt0.isoformat()
+                    save_tracked_trades(data)
+                except Exception as ex:
+                    print(f"⚠️ Gagal insert snapshot instan untuk #{ticket}: {ex}")
+                # -------------------------------------------------------------------------
+
                 continue
             
             # Jika tidak ada di orders dan tidak ada di positions, 
@@ -285,7 +336,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                         except:
                             last_snap = None
 
-                    min_interval_sec = 10
+                    min_interval_sec = 3
                     should_snap = True
                     if last_snap:
                         should_snap = (now_dt - last_snap).total_seconds() >= min_interval_sec

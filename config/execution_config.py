@@ -22,6 +22,11 @@ class ExecutionConfig:
     # TP_distance = |entry - sl| * (tp_pct/100)
     tp_pct: float = field(default_factory=lambda: float(os.getenv("EXECUTION_TP_PCT", "100.0")))
 
+    # Toggle untuk menonaktifkan Limit Order dan memaksa Market Execution
+    use_limit_orders: bool = field(
+        default_factory=lambda: os.getenv("EXECUTION_USE_LIMIT", "true").lower() == "true"
+    )
+
 
 
     lot_size: float = field(
