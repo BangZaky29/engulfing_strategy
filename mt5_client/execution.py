@@ -177,13 +177,32 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             )
             print(f"   [SL] Menggunakan SL Fallback M5 (exec_cfg): {sl_price:.2f}")
 
-        # --- TP Logic (Jarak OP ke SL) ---
-        tp_price = exec_cfg.calculate_tp_price(
-            entry_price=price,
-            sl_price=sl_price,
-            action_str="BUY",
-        )
-        print(f"   [TP] Menggunakan TP Distance OP-SL (exec_cfg): {tp_price:.2f}")
+        # --- TP Logic (berbasis jarak OP ke SL, ATAU statis USD) ---
+        if signal.get("tp_price") is not None:
+            tp_price = float(signal["tp_price"])
+            print(f"   [TP] Menggunakan TP payload dari detector: {tp_price:.2f}")
+        elif getattr(exec_cfg, 'tp_mode_b', 'PCT') == "USD":
+            tick_value = symbol_info.trade_tick_value
+            tick_size  = symbol_info.trade_tick_size
+            try:
+                tp_price = exec_cfg.calculate_tp_price_usd(
+                    entry_price=price,
+                    action_str="BUY",
+                    lot_size=lot_size_used,
+                    tick_value=tick_value,
+                    tick_size=tick_size,
+                )
+                print(f"   [TP] TP Statis ${exec_cfg.tp_target_usd_b:.2f} USD (lot={lot_size_used}, tick_val={tick_value}, tick_sz={tick_size}): {tp_price:.5f}")
+            except Exception as e:
+                tp_price = exec_cfg.calculate_tp_price(entry_price=price, sl_price=sl_price, action_str="BUY")
+                print(f"   ⚠️ [TP] Gagal hitung TP USD ({e}), fallback ke PCT: {tp_price:.2f}")
+        else:
+            tp_price = exec_cfg.calculate_tp_price(
+                entry_price=price,
+                sl_price=sl_price,
+                action_str="BUY",
+            )
+            print(f"   [TP] Menggunakan TP Distance OP-SL (exec_cfg): {tp_price:.2f}")
 
 
 
@@ -224,13 +243,32 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             )
             print(f"   [SL] Menggunakan SL Fallback M5 (exec_cfg): {sl_price:.2f}")
 
-        # --- TP Logic (Jarak OP ke SL) ---
-        tp_price = exec_cfg.calculate_tp_price(
-            entry_price=price,
-            sl_price=sl_price,
-            action_str="SELL",
-        )
-        print(f"   [TP] Menggunakan TP Distance OP-SL (exec_cfg): {tp_price:.2f}")
+        # --- TP Logic (berbasis jarak OP ke SL, ATAU statis USD) ---
+        if signal.get("tp_price") is not None:
+            tp_price = float(signal["tp_price"])
+            print(f"   [TP] Menggunakan TP payload dari detector: {tp_price:.2f}")
+        elif getattr(exec_cfg, 'tp_mode_b', 'PCT') == "USD":
+            tick_value = symbol_info.trade_tick_value
+            tick_size  = symbol_info.trade_tick_size
+            try:
+                tp_price = exec_cfg.calculate_tp_price_usd(
+                    entry_price=price,
+                    action_str="SELL",
+                    lot_size=lot_size_used,
+                    tick_value=tick_value,
+                    tick_size=tick_size,
+                )
+                print(f"   [TP] TP Statis ${exec_cfg.tp_target_usd_b:.2f} USD (lot={lot_size_used}, tick_val={tick_value}, tick_sz={tick_size}): {tp_price:.5f}")
+            except Exception as e:
+                tp_price = exec_cfg.calculate_tp_price(entry_price=price, sl_price=sl_price, action_str="SELL")
+                print(f"   ⚠️ [TP] Gagal hitung TP USD ({e}), fallback ke PCT: {tp_price:.2f}")
+        else:
+            tp_price = exec_cfg.calculate_tp_price(
+                entry_price=price,
+                sl_price=sl_price,
+                action_str="SELL",
+            )
+            print(f"   [TP] Menggunakan TP Distance OP-SL (exec_cfg): {tp_price:.2f}")
 
 
     elif pattern == "bearish_engulfing":
@@ -272,13 +310,32 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             )
             print(f"   [SL] Menggunakan SL Fallback M5 (exec_cfg): {sl_price:.2f}")
 
-        # --- TP Logic (Jarak OP ke SL) ---
-        tp_price = exec_cfg.calculate_tp_price(
-            entry_price=price,
-            sl_price=sl_price,
-            action_str="SELL",
-        )
-        print(f"   [TP] Menggunakan TP Distance OP-SL (exec_cfg): {tp_price:.2f}")
+        # --- TP Logic (berbasis jarak OP ke SL, ATAU statis USD) ---
+        if signal.get("tp_price") is not None:
+            tp_price = float(signal["tp_price"])
+            print(f"   [TP] Menggunakan TP payload dari detector: {tp_price:.2f}")
+        elif getattr(exec_cfg, 'tp_mode_b', 'PCT') == "USD":
+            tick_value = symbol_info.trade_tick_value
+            tick_size  = symbol_info.trade_tick_size
+            try:
+                tp_price = exec_cfg.calculate_tp_price_usd(
+                    entry_price=price,
+                    action_str="SELL",
+                    lot_size=lot_size_used,
+                    tick_value=tick_value,
+                    tick_size=tick_size,
+                )
+                print(f"   [TP] TP Statis ${exec_cfg.tp_target_usd_b:.2f} USD (lot={lot_size_used}, tick_val={tick_value}, tick_sz={tick_size}): {tp_price:.5f}")
+            except Exception as e:
+                tp_price = exec_cfg.calculate_tp_price(entry_price=price, sl_price=sl_price, action_str="SELL")
+                print(f"   ⚠️ [TP] Gagal hitung TP USD ({e}), fallback ke PCT: {tp_price:.2f}")
+        else:
+            tp_price = exec_cfg.calculate_tp_price(
+                entry_price=price,
+                sl_price=sl_price,
+                action_str="SELL",
+            )
+            print(f"   [TP] Menggunakan TP Distance OP-SL (exec_cfg): {tp_price:.2f}")
 
 
     else:

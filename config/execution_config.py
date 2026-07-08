@@ -76,6 +76,25 @@ class ExecutionConfig:
         default_factory=lambda: int(os.getenv("PENDING_ORDER_EXPIRE_CANDLES", "2"))
     )
 
+    sl_pct_b: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_SL_PCT_B", "50.0"))
+    )
+    tp_pct_b: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_TP_PCT_B", "100.0"))
+    )
+
+    # === TP Mode Selector (Filter B) ===
+    # 'PCT' = TP dari % jarak OP->SL (tp_pct_b), perilaku lama.
+    # 'USD' = TP statis dalam USD, dikonversi ke jarak harga otomatis
+    #         per symbol berdasarkan lot size & tick value MT5.
+    tp_mode_b: str = field(
+        default_factory=lambda: os.getenv("EXECUTION_TP_MODE_B", "PCT").upper()
+    )
+    tp_target_usd_b: float = field(
+        default_factory=lambda: float(os.getenv("EXECUTION_TP_TARGET_USD_B", "5.0"))
+    )
+    """Target profit statis (USD) dari OP price, dipakai kalau tp_mode_b == 'USD'."""
+
     def calculate_sl_price(
         self,
         *,
@@ -132,3 +151,42 @@ class ExecutionConfig:
         else:
             raise ValueError(f"Unknown action_str for TP: {action_str}")
 
+    def calculate_tp_price_usd(
+        self,
+        *,
+        entry_price: float,
+        action_str: str,
+        lot_size: float,
+        tick_value: float,
+        tick_size: float,
+    ) -> float:
+        """Hitung TP berbasis target profit statis dalam USD.
+
+        Konversi: tp_distance (harga) = target_usd / (lot_size * tick_value / tick_size)
+        Formula:  value_per_tick = tick_value * lot_size
+                  ticks_needed   = target_usd / value_per_tick
+                  tp_distance    = ticks_needed * tick_size
+
+        Otomatis menyesuaikan per symbol berdasarkan tick_value & tick_size
+        yang diambil dari symbol_info MT5 (tidak hardcode per symbol).
+
+        BUY  → tp = entry + tp_distance
+        SELL → tp = entry - tp_distance
+        """
+        if lot_size <= 0 or tick_value <= 0 or tick_size <= 0:
+            raise ValueError(
+                f"Invalid tick info for TP USD calc: lot={lot_size}, "
+                f"tick_value={tick_value}, tick_size={tick_size}"
+            )
+        value_per_tick = tick_value * lot_size
+        ticks_needed   = self.tp_target_usd_b / value_per_tick
+        tp_distance    = ticks_needed * tick_size
+
+        action = str(action_str).upper().strip()
+        if action == "BUY":
+            return float(entry_price) + tp_distance
+        elif action == "SELL":
+            return float(entry_price) - tp_distance
+        else:
+            raise ValueError(f"Unknown action_str for TP USD: {action_str}")
+    
