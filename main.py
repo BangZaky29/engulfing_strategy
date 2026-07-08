@@ -21,7 +21,7 @@ from strategies.engulfing import detect_engulfing
 from utils.colors import Colors, cprint, candle_color
 
 
-def print_banner(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
+def print_banner(mt5_cfg: MT5Config, ema_cfg: EMAConfig, exec_cfg: ExecutionConfig):
     print("=" * 60)
     print("🕯️  ENGULFING PATTERN SCANNER (MODULAR)")
     print(f"   Symbols   : {', '.join(mt5_cfg.symbols)}")
@@ -67,13 +67,28 @@ def main():
     exec_cfg = ExecutionConfig()
     fc_cfg = FilterCConfig() if engulf_cfg.filter_c_tfm_enabled else None
 
-    print_banner(mt5_cfg, ema_cfg)
+    print_banner(mt5_cfg, ema_cfg, exec_cfg)
 
     if engulf_cfg.filter_c_tfm_enabled and fc_cfg:
         print(cprint("📡 [TF Monitor] Filter C AKTIF — H1 Bias + M15 Confirm + M5 Trigger", Colors.CYAN))
         print(cprint(f"   EMA Filter: {'ON' if fc_cfg.use_ema_filter else 'OFF'} | Lookback: {fc_cfg.trigger_lookback_bars} bars", Colors.CYAN))
         print(cprint(f"   Blocking: {'ON (WAIT/LATE = skip)' if fc_cfg.filter_c_blocking else 'OFF (tag only)'}", Colors.CYAN))
         print_tfm_trigger_status(fc_cfg)
+
+    # --- Execution Config Info ---
+    op_mode_str  = "LIMIT (Pending Order)" if exec_cfg.use_limit_orders else "MARKET (Langsung Execute)"
+    sl_mode_str  = f"Dinamis — {exec_cfg.sl_pct}% ekor candle trigger (EXECUTION_SL_PCT)"
+    tp_mode_str  = (
+        f"Statis USD — target ${exec_cfg.tp_target_usd_b:.2f} per trade (EXECUTION_TP_TARGET_USD_B)"
+        if getattr(exec_cfg, 'tp_mode_b', 'PCT') == "USD"
+        else f"Dinamis PCT — {exec_cfg.tp_pct}% jarak OP→SL (EXECUTION_TP_PCT)"
+    )
+    lot_per_sym  = ", ".join(f"{sym}={exec_cfg.get_lot_size(sym)}" for sym in mt5_cfg.symbols)
+    print(cprint("⚙️  [Execution Config]", Colors.CYAN))
+    print(cprint(f"   OP Mode : {op_mode_str}", Colors.CYAN))
+    print(cprint(f"   SL Mode : {sl_mode_str}", Colors.CYAN))
+    print(cprint(f"   TP Mode : {tp_mode_str}", Colors.CYAN))
+    print(cprint(f"   Lot     : {lot_per_sym}", Colors.CYAN))
 
     # 3. Inisialisasi MT5
     if not init_mt5(mt5_cfg):
