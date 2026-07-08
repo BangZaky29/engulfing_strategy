@@ -102,19 +102,25 @@ class ExecutionConfig:
         current_low: float,
         current_high: float,
         action_str: str,
+        use_sl_pct_b: bool = True,
     ) -> float:
-        """Hitung SL berbasis ekor (tail) candle trigger menggunakan sl_pct.
+        """Hitung SL berbasis ekor (tail) candle trigger.
+
+        use_sl_pct_b=True  (default) → pakai EXECUTION_SL_PCT_B (Strategy B)
+        use_sl_pct_b=False           → pakai EXECUTION_SL_PCT    (Strategy A / fallback)
 
         Sesuai test:
-          BUY  : sl = low  + (close-low) * (1 - sl_pct/100)
-                 Dengan sl_pct=100 -> sl=low
-                      sl_pct=80  -> sl berada di antara close dan low (lebih dekat low)
+          BUY  : sl = close - (close - low)  * (sl_pct / 100)
+                 sl_pct=100 → sl = low  (ujung ekor)
+                 sl_pct=50  → sl = tengah antara close dan low
 
-          SELL : sl = high - (high-close) * (1 - sl_pct/100)
-                 Dengan sl_pct=100 -> sl=high
+          SELL : sl = close + (high - close) * (sl_pct / 100)
+                 sl_pct=100 → sl = high (ujung ekor)
+                 sl_pct=50  → sl = tengah antara close dan high
         """
         action = str(action_str).upper().strip()
-        sl_pct_ratio = float(self.sl_pct) / 100.0
+        pct = self.sl_pct_b if use_sl_pct_b else self.sl_pct
+        sl_pct_ratio = float(pct) / 100.0
 
         if action == "BUY":
             # 0% = close, 100% = low
@@ -122,7 +128,6 @@ class ExecutionConfig:
         elif action == "SELL":
             # 0% = close, 100% = high
             return current_close + (current_high - current_close) * sl_pct_ratio
-
         else:
             raise ValueError(f"Unknown action_str for SL: {action_str}")
 

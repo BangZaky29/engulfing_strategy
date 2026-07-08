@@ -77,7 +77,7 @@ def main():
 
     # --- Execution Config Info ---
     op_mode_str  = "LIMIT (Pending Order)" if exec_cfg.use_limit_orders else "MARKET (Langsung Execute)"
-    sl_mode_str  = f"Dinamis — {exec_cfg.sl_pct}% ekor candle trigger (EXECUTION_SL_PCT)"
+    sl_mode_str  = f"Dinamis — {exec_cfg.sl_pct_b}% ekor candle H1 trigger (EXECUTION_SL_PCT_B)"
     tp_mode_str  = (
         f"Statis USD — target ${exec_cfg.tp_target_usd_b:.2f} per trade (EXECUTION_TP_TARGET_USD_B)"
         if getattr(exec_cfg, 'tp_mode_b', 'PCT') == "USD"
