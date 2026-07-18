@@ -20,6 +20,15 @@ TRACKER_FILE = "trade_tracker.json"
 TEMP_DIR = "temp_screenshots"
 BUCKET_NAME = "engulfing"
 
+# =====================================================
+# SCREENSHOT_TIMEFRAME: TF untuk chart screenshot hasil trade.
+# Jika diset (misal "H1"), screenshot akan pakai TF tersebut
+# terlepas dari TF eksekusi trade. Kosong = ikut TF trade.
+# SCREENSHOT_CANDLES : jumlah candle yang ditampilkan di chart.
+# =====================================================
+_SS_TF_ENV    = os.getenv("SCREENSHOT_TIMEFRAME", "").strip()
+_SS_CANDLES   = int(os.getenv("SCREENSHOT_CANDLES", "30"))
+
 
 def load_tracked_trades() -> dict:
     if not os.path.exists(TRACKER_FILE):
@@ -709,12 +718,14 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
         # ---------------------------------------------
         
         # 3. Generate Screenshot Saat Ini
+        # Gunakan SCREENSHOT_TIMEFRAME dari .env jika ada, fallback ke TF trade
+        ss_tf_label = _SS_TF_ENV if _SS_TF_ENV else info['tf']
         time_suffix = info["timestamp"].split("_")[1]
-        new_filename = f"{info['mode']}_{result_str}_{info['symbol']}_{info['tf']}_{time_suffix}.png"
+        new_filename = f"{info['mode']}_{result_str}_{info['symbol']}_{ss_tf_label}_{time_suffix}.png"
         new_path = os.path.join(TEMP_DIR, new_filename)
         
         try:
-            tf_const = mt5_cfg.get_mt5_timeframe(info['tf'])
+            tf_const = mt5_cfg.get_mt5_timeframe(ss_tf_label)
             # Ambil candle lebih banyak agar kelihatan dari OP sampai Close
             rates = mt5.copy_rates_from_pos(info['symbol'], tf_const, 0, mt5_cfg.candle_count)  # type: ignore
             if rates is not None and len(rates) > 0:
@@ -730,9 +741,9 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                     entry_price=entry_price,
                     exit_time=exit_time,
                     exit_price=exit_price,
-                    tf_label=info['tf'],
+                    tf_label=ss_tf_label,
                     output_dir=TEMP_DIR,
-                    num_candles=30  # Capture 30 candle terakhir agar history tradenya kelihatan semua
+                    num_candles=_SS_CANDLES  # Configurable via SCREENSHOT_CANDLES di .env
                 )
                 
                 if img_path and os.path.exists(img_path):
