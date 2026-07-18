@@ -37,7 +37,9 @@ def process_candle_signal(
         if signal.get("skip_reason"):
             if tf == target_tf:
                 # Simpan skipped signal agar WA bisa mengirim notifikasi ke PRIVATE_JID
-                SignalRepo.upsert(signal)
+                # Jangan simpan jika pattern_type tidak valid (contoh: 'none' karena Doji)
+                if signal.get("pattern_type") and signal.get("pattern_type") != "none":
+                    SignalRepo.upsert(signal)
         else:
             if tf == target_tf:
                 total_signals_added += 1
