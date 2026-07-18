@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 from config.filter_c_config import FilterCConfig
-from .f1_triggers import find_latest_trigger, get_trigger_state, DIR_NONE, DIR_BUY, DIR_SELL, DIR_MIXED
+from .trigger_scanner import find_latest_trigger, get_trigger_state, DIR_NONE, DIR_BUY, DIR_SELL, DIR_MIXED
 from .f3_ema_utils import get_ema_value, ema_relation_text
 from .f4_state_manager import (
     TFMState, clear_state, direction_to_string, state_key,

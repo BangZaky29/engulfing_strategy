@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import MetaTrader5 as mt5
 
 from config.filter_c_config import FilterCConfig
-from .f1_triggers import find_latest_trigger, DIR_NONE, DIR_BUY, DIR_SELL
+from .trigger_scanner import find_latest_trigger, DIR_NONE, DIR_BUY, DIR_SELL
 from .f2_bias_logic import (
     find_latest_h1_state, main_bias_column, validity_status,
     build_event_key, build_snapshot,
