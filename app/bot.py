@@ -9,6 +9,7 @@ from config.mt5_config import MT5Config, EMAConfig
 from config.engulfing_config import EngulfingConfig
 from config.execution_config import ExecutionConfig
 from config.filter_c_config import FilterCConfig
+from config.trading_schedule import is_trading_active, get_trading_status_text
 
 from mt5_client import shutdown_mt5, get_closed_candles
 from mt5_client.trade_monitor import check_closed_trades
@@ -39,7 +40,8 @@ def run_bot():
     total_candles = 0
     total_signals = 0
 
-    print(f"\n🔄 Memulai scan realtime (interval: {POLL_INTERVAL}s)...\n")
+    print(f"\n🔄 Memulai scan realtime (interval: {POLL_INTERVAL}s)...")
+    print(f"⏰ Trading Schedule: {get_trading_status_text()}\n")
 
     try:
         while True:
@@ -51,7 +53,10 @@ def run_bot():
                 for symbol in mt5_cfg.symbols:
                     log_tfm_snapshot(symbol, fc_cfg, last_tfm_snapshot)
 
-            # C. Scan Tiap Mata Uang dan Timeframe
+            # C. Cek Trading Schedule — skip execution jika di luar jam aktif
+            trading_active = is_trading_active()
+
+            # D. Scan Tiap Mata Uang dan Timeframe
             for symbol in mt5_cfg.symbols:
                 target_tf = mt5_cfg.get_symbol_timeframe(symbol)
                 
@@ -89,8 +94,8 @@ def run_bot():
                     # Simpan candle ke Supabase
                     CandleRepo.upsert(candle_data)
 
-                    # Deteksi pola Engulfing
-                    if tf == target_tf or tf in mt5_cfg.info_timeframes:
+                    # Deteksi pola Engulfing (hanya jika di dalam jam trading aktif)
+                    if trading_active and (tf == target_tf or tf in mt5_cfg.info_timeframes):
                         added_sig = process_candle_signal(
                             symbol, tf, target_tf, candle_data,
                             engulf_cfg, mt5_cfg, exec_cfg, ema_cfg, clr
