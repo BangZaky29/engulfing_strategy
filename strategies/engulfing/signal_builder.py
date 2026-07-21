@@ -143,6 +143,10 @@ def build_signal(
         "m15_trigger_age": None,
         "m5_trigger_source": None,
         "m5_trigger_time": None,
+        "ema_distance_pts": scoring_res.get("ema_distance_pts"),
+        "ema_distance_status": scoring_res.get("ema_distance_status"),
+        "ema_distance_min": scoring_res.get("ema_distance_min"),
+        "ema_distance_max": scoring_res.get("ema_distance_max"),
     }
     notes_str = json.dumps(notes_payload)
 

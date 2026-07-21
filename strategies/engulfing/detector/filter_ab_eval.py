@@ -101,9 +101,9 @@ def evaluate_filters_ab(
                     if verbose:
                         print(cprint(f"   [F1_B] Fallback M5 trigger accepted: {m5_source}", color) + " " + Colors.GREEN)
                 else:
-                    return "ABORT", scoring_res, rr_ratio, pattern_type, valid_f3
+                    return "ABORT", scoring_res, rr_ratio, pattern_type or "none", valid_f3
             else:
-                return "ABORT", scoring_res, rr_ratio, pattern_type, valid_f3
+                return "ABORT", scoring_res, rr_ratio, pattern_type or "none", valid_f3
             
         # [F3_B] EMA Ring Filter
         if not fallback_m5_trigger and cfg.filter_f3_ema_ring_b_enabled:
@@ -112,7 +112,7 @@ def evaluate_filters_ab(
                 ema_now, pattern_type, verbose, color
             )
             if not valid_ema_ring:
-                return "ABORT", scoring_res, rr_ratio, pattern_type, valid_f3
+                return "ABORT", scoring_res, rr_ratio, pattern_type or "none", valid_f3
 
         # [F2_B] Pattern Size
         if not fallback_m5_trigger:
@@ -192,5 +192,40 @@ def evaluate_filters_ab(
             skip_reason = f"Pattern size invalid ({pattern_size_pts} pts)"
         elif curr_grade < min_allowed:
             skip_reason = f"Grade {grade_str} di bawah batas {cfg.min_grade_allowed}"
+
+    # -----------------------------------------------------------------
+    # [F5] EMA Distance Filter (H1 Open to EMA20 Distance)
+    # -----------------------------------------------------------------
+    if cfg.filter_ema_distance_enabled and ema_now > 0:
+        dist_raw = abs(c1_open - ema_now)
+        dist_pts = round(dist_raw / point) if point > 0 else 0
+        min_pts, max_pts = cfg.get_ema_distance_limits(symbol)
+
+        if dist_pts < min_pts:
+            ema_dist_status = "INVALID"
+            ema_skip = f"EMA Distance terlalu dekat ({dist_pts} pts < {min_pts} min) [INVALID]"
+        elif dist_pts > max_pts:
+            ema_dist_status = "VALID"
+            ema_skip = f"EMA Distance terlalu jauh ({dist_pts} pts > {max_pts} max) [VALID-OVEREXTENDED]"
+        else:
+            ema_dist_status = "STRONG"
+            ema_skip = None
+
+        scoring_res["ema_distance_pts"] = dist_pts
+        scoring_res["ema_distance_status"] = ema_dist_status
+        scoring_res["ema_distance_min"] = min_pts
+        scoring_res["ema_distance_max"] = max_pts
+
+        if verbose:
+            if ema_dist_status == "STRONG":
+                print(cprint(f"   [EMA DISTANCE] {symbol}: {dist_pts} pts -> STRONG SIGNAL ({min_pts} - {max_pts} pts) ✅", Colors.GREEN, bold=True))
+            elif ema_dist_status == "VALID":
+                print(cprint(f"   [EMA DISTANCE] {symbol}: {dist_pts} pts -> VALID SIGNAL (> {max_pts} pts MAX) 🟡", Colors.YELLOW))
+            else:
+                print(cprint(f"   [EMA DISTANCE] {symbol}: {dist_pts} pts -> INVALID SIGNAL (< {min_pts} pts MIN) 🔴", Colors.RED))
+
+        # Filter out signals that are not STRONG (only keep murni setup terbaik)
+        if ema_skip and not skip_reason:
+            skip_reason = ema_skip
 
     return skip_reason, scoring_res, rr_ratio, pattern_type, valid_f3

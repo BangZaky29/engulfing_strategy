@@ -37,6 +37,9 @@ class EngulfingConfig:
     filter_c_tfm_enabled: bool = field(
         default_factory=lambda: os.getenv("FILTER_C_TFM_ENABLED", "false").lower() == "true"
     )
+    filter_ema_distance_enabled: bool = field(
+        default_factory=lambda: os.getenv("FILTER_EMA_DISTANCE_ENABLED", "true").lower() == "true"
+    )
     
     score_weight_body: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_BODY", "40")))
     score_weight_range: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_RANGE", "30")))
@@ -65,4 +68,27 @@ class EngulfingConfig:
         min_val = int(os.getenv(f"RING_B_{symbol.upper()}_MIN", self.min_ring_c1_points_b))
         max_val = int(os.getenv(f"RING_B_{symbol.upper()}_MAX", self.max_ring_c1_points_b))
         return min_val, max_val
+
+    def get_ema_distance_limits(self, symbol: str) -> tuple[int, int]:
+        """Fetch symbol-specific min/max EMA distance limits in points."""
+        sym_clean = symbol.upper().replace("-", "_").replace(" ", "_")
+        
+        default_min, default_max = 250, 1000
+        if "NASDAQ" in sym_clean or "US100" in sym_clean or "USTEC" in sym_clean:
+            default_min, default_max = 2100, 7500
+        elif "BTC" in sym_clean:
+            default_min, default_max = 12500, 37000
+
+        # Look up env variables
+        min_key = f"EMA_DISTANCE_{sym_clean}_MIN"
+        max_key = f"EMA_DISTANCE_{sym_clean}_MAX"
+        
+        if "NASDAQ" in sym_clean and min_key not in os.environ:
+            min_key = "EMA_DISTANCE_NASDAQ_MIN"
+            max_key = "EMA_DISTANCE_NASDAQ_MAX"
+
+        min_val = int(os.getenv(min_key, str(default_min)))
+        max_val = int(os.getenv(max_key, str(default_max)))
+        return min_val, max_val
+
 

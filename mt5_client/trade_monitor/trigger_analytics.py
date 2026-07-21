@@ -40,6 +40,14 @@ def build_and_upsert_trigger_analytics(
     max_neg_distance_price_points = None
     sum_neg_distance_points = 0.0
 
+    # MFE positif (mirror dari MAE negatif)
+    max_pos = None
+    sum_pos = None
+    max_pos_pct = None
+    max_pos_distance_points = None
+    max_pos_distance_price_points = None
+    sum_pos_distance_points = 0.0
+
     if exit_dt:
         # query langsung dari Supabase (lebih sederhana di tahap awal)
         try:
@@ -55,6 +63,7 @@ def build_and_upsert_trigger_analytics(
             )
             rows = resp.data or []
             neg_rows = [r for r in rows if float(r.get("floating_profit_usd") or 0.0) < 0.0]
+            pos_rows = [r for r in rows if float(r.get("floating_profit_usd") or 0.0) > 0.0]
 
             max_neg_distance_points = None
             max_neg_distance_price_points = None
@@ -100,6 +109,44 @@ def build_and_upsert_trigger_analytics(
                         if r.get("entry_price") is not None and r.get("current_price") is not None
                     )
 
+            # ─── BARU: mirror logic buat floating positif (MFE) ───
+            max_pos = None
+            sum_pos = None
+            max_pos_pct = None
+            max_pos_distance_points = None
+            max_pos_distance_price_points = None
+            sum_pos_distance_points = 0.0
+
+            if pos_rows:
+                pos_vals = [float(r.get("floating_profit_usd") or 0.0) for r in pos_rows]
+                pos_pcts = [float(r.get("floating_pct_from_entry") or 0.0) for r in pos_rows]
+                max_pos = max(pos_vals)
+                sum_pos = sum(pos_vals)
+                max_pos_pct = max(pos_pcts) if pos_pcts else None
+
+                dist_points_list_pos: list[float] = []
+                for r in pos_rows:
+                    try:
+                        ep = r.get("entry_price")
+                        cp = r.get("current_price")
+                        pt = r.get("point")
+                        if ep is None or cp is None or pt in (None, 0):
+                            continue
+                        d_price = abs(float(cp) - float(ep))
+                        dist_points_list_pos.append(d_price / float(pt))
+                    except:
+                        continue
+
+                if dist_points_list_pos:
+                    max_pos_distance_points = max(dist_points_list_pos)
+                    sum_pos_distance_points = sum(dist_points_list_pos)
+                    max_pos_distance_price_points = max(
+                        abs(float(r.get("current_price")) - float(r.get("entry_price")))
+                        for r in pos_rows
+                        if r.get("entry_price") is not None and r.get("current_price") is not None
+                    )
+            # ─────────────────────────────────────────────────────
+
         except Exception as ex:
             print(f"⚠️ Gagal query trade_floating_snapshots untuk #{ticket}: {ex}")
 
@@ -115,7 +162,7 @@ def build_and_upsert_trigger_analytics(
         try:
             resp = (
                 supabase.table("trade_trigger_analytics")
-                .select("total_trades,total_profit_count,total_loss_count,total_profit_usd,total_loss_usd,max_negative_floating_before_profit_usd,max_negative_floating_before_profit_pct,sum_negative_floating_before_profit_usd,max_negative_distance_points,max_negative_distance_price_points,sum_negative_distance_points")
+                .select("total_trades,total_profit_count,total_loss_count,total_profit_usd,total_loss_usd,max_negative_floating_before_profit_usd,max_negative_floating_before_profit_pct,sum_negative_floating_before_profit_usd,max_negative_distance_points,max_negative_distance_price_points,sum_negative_distance_points,max_positive_floating_before_loss_usd,max_positive_floating_before_loss_pct,sum_positive_floating_before_loss_usd,max_positive_distance_points,max_positive_distance_price_points,sum_positive_distance_points")
                 .eq("trade_date", trade_date)
                 .eq("symbol", info["symbol"])
                 .eq("trigger_type", trigger_type)
@@ -153,12 +200,28 @@ def build_and_upsert_trigger_analytics(
         prev_max_dist_price = float(existing_row.get("max_negative_distance_price_points") or 0.0) if existing_row else 0.0
         prev_sum_dist_pts = float(existing_row.get("sum_negative_distance_points") or 0.0) if existing_row else 0.0
 
+        # ─── BARU: prev untuk positif (MFE) ───
+        prev_max_pos_usd = float(existing_row.get("max_positive_floating_before_loss_usd") or 0.0) if existing_row else 0.0
+        prev_max_pos_pct = float(existing_row.get("max_positive_floating_before_loss_pct") or 0.0) if existing_row else 0.0
+        prev_sum_pos_usd = float(existing_row.get("sum_positive_floating_before_loss_usd") or 0.0) if existing_row else 0.0
+        prev_max_pos_dist_pts = float(existing_row.get("max_positive_distance_points") or 0.0) if existing_row else 0.0
+        prev_max_pos_dist_price = float(existing_row.get("max_positive_distance_price_points") or 0.0) if existing_row else 0.0
+        prev_sum_pos_dist_pts = float(existing_row.get("sum_positive_distance_points") or 0.0) if existing_row else 0.0
+
         cur_max_neg = float(max_neg) if max_neg is not None else 0.0
         cur_max_neg_pct = float(max_neg_pct) if max_neg_pct is not None else 0.0
         cur_sum_neg = float(sum_neg) if sum_neg is not None else 0.0
         cur_max_dist_pts = float(max_neg_distance_points) if max_neg_distance_points is not None else 0.0
         cur_max_dist_price = float(max_neg_distance_price_points) if max_neg_distance_price_points is not None else 0.0
         cur_sum_dist_pts = float(sum_neg_distance_points) if sum_neg_distance_points is not None else 0.0
+
+        # ─── BARU: current untuk positif (MFE) ───
+        cur_max_pos = float(max_pos) if max_pos is not None else 0.0
+        cur_max_pos_pct = float(max_pos_pct) if max_pos_pct is not None else 0.0
+        cur_sum_pos = float(sum_pos) if sum_pos is not None else 0.0
+        cur_max_pos_dist_pts = float(max_pos_distance_points) if max_pos_distance_points is not None else 0.0
+        cur_max_pos_dist_price = float(max_pos_distance_price_points) if max_pos_distance_price_points is not None else 0.0
+        cur_sum_pos_dist_pts = float(sum_pos_distance_points) if sum_pos_distance_points is not None else 0.0
 
         agg_payload = {
             "trade_date": trade_date,
@@ -180,6 +243,14 @@ def build_and_upsert_trigger_analytics(
             "max_negative_distance_price_points": max(prev_max_dist_price, cur_max_dist_price) if (prev_max_dist_price or cur_max_dist_price) else None,
             "sum_negative_distance_points": prev_sum_dist_pts + cur_sum_dist_pts,
 
+            # ─── BARU: field positif (MFE) ───
+            "max_positive_floating_before_loss_usd": max(prev_max_pos_usd, cur_max_pos) if (prev_max_pos_usd or cur_max_pos) else None,
+            "max_positive_floating_before_loss_pct": max(prev_max_pos_pct, cur_max_pos_pct) if (prev_max_pos_pct or cur_max_pos_pct) else None,
+            "sum_positive_floating_before_loss_usd": prev_sum_pos_usd + cur_sum_pos,
+            "max_positive_distance_points": max(prev_max_pos_dist_pts, cur_max_pos_dist_pts) if (prev_max_pos_dist_pts or cur_max_pos_dist_pts) else None,
+            "max_positive_distance_price_points": max(prev_max_pos_dist_price, cur_max_pos_dist_price) if (prev_max_pos_dist_price or cur_max_pos_dist_price) else None,
+            "sum_positive_distance_points": prev_sum_pos_dist_pts + cur_sum_pos_dist_pts,
+
             "probability_profit": probability_profit,
         }
 
@@ -197,4 +268,10 @@ def build_and_upsert_trigger_analytics(
         "max_neg_distance_points": max_neg_distance_points,
         "max_neg_distance_price_points": max_neg_distance_price_points,
         "sum_neg_distance_points": sum_neg_distance_points,
+        "max_pos": max_pos,
+        "sum_pos": sum_pos,
+        "max_pos_pct": max_pos_pct,
+        "max_pos_distance_points": max_pos_distance_points,
+        "max_pos_distance_price_points": max_pos_distance_price_points,
+        "sum_pos_distance_points": sum_pos_distance_points,
     }
