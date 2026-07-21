@@ -194,9 +194,10 @@ def evaluate_filters_ab(
             skip_reason = f"Grade {grade_str} di bawah batas {cfg.min_grade_allowed}"
 
     # -----------------------------------------------------------------
-    # [F5] EMA Distance Filter (H1 Open to EMA20 Distance)
+    # [F5] EMA Distance Filter (Khusus H1 Trigger)
     # -----------------------------------------------------------------
-    if cfg.filter_ema_distance_enabled and ema_now > 0:
+    tf = candle_data.get("timeframe", "")
+    if cfg.filter_ema_distance_enabled and tf == "H1" and ema_now > 0:
         dist_raw = abs(c1_open - ema_now)
         dist_pts = round(dist_raw / point) if point > 0 else 0
         min_pts, max_pts = cfg.get_ema_distance_limits(symbol)
