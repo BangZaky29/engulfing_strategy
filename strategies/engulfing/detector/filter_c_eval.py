@@ -128,6 +128,14 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
             signal["is_confirmed"] = False
             signal["skip_reasons"] = skip_reasons
             signal["skip_reason"] = " | ".join(skip_reasons)
+            try:
+                import json as _json
+                notes_obj = _json.loads(signal.get("notes", "{}"))
+                notes_obj["skip_reason"] = signal["skip_reason"]
+                notes_obj["skip_reasons"] = signal["skip_reasons"]
+                signal["notes"] = _json.dumps(notes_obj)
+            except Exception:
+                pass
             if verbose:
                 print(cprint(
                     f"   ❌ [FC] TF Monitor BLOCKED: {signal['skip_reason']}",
