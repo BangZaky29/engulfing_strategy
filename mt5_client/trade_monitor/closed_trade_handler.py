@@ -41,6 +41,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
     if not data:
         return
 
+    supabase = get_supabase()
     keys_to_remove = []
 
     for ticket_str, info in data.items():
@@ -68,7 +69,6 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                 
                 # Kirim log ke Supabase agar WA bot men-trigger notifikasi
                 try:
-                    supabase = get_supabase()
                     log_data = {
                         "ticket_id": ticket,
                         "symbol": info['symbol'],
@@ -211,7 +211,6 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                             "trading_session": session_str,
                             "image_url": public_url
                         }
-                        supabase = get_supabase()
                         supabase.table("trade_active_logs").insert(log_data).execute()
                     except Exception as ex:
                         print(f"⚠️ Gagal menyimpan log expired ke Supabase: {ex}")
@@ -318,14 +317,35 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                         
                         # 5. Simpan data ke table trade_analytics
                         try:
-                            supabase = get_supabase()
-                            
                             # --- ANALYTICS DATA FOR DASHBOARD ---
                             # Hitung persentase max floating (MAE) terhadap jarak SL
                             dist_to_sl = abs(float(info.get("op_price", 0)) - float(info.get("sl_price", 0)))
                             max_loss_to_sl_pct = 0
                             if dist_to_sl > 0 and max_neg_distance_price_points is not None:
                                 max_loss_to_sl_pct = (max_neg_distance_price_points / dist_to_sl) * 100
+
+                            ema_dist_pts = info.get("ema_distance_pts") or info.get("h1_ema_distance_pts")
+                            ema_dist_status = info.get("ema_distance_status") or info.get("h1_ema_distance_status")
+                            ema_dist_min = info.get("ema_distance_min") or info.get("h1_ema_distance_min")
+                            ema_dist_max = info.get("ema_distance_max") or info.get("h1_ema_distance_max")
+                            h1_trig_time = info.get("h1_trigger_time")
+
+                            if ema_dist_pts is None:
+                                try:
+                                    sig_res = supabase.table("engulfing_signals").select("notes").eq("ticket_id", ticket).execute()
+                                    if sig_res.data and len(sig_res.data) > 0:
+                                        sig_notes_raw = sig_res.data[0].get("notes") or {}
+                                        if isinstance(sig_notes_raw, str):
+                                            sig_notes = json.loads(sig_notes_raw)
+                                        else:
+                                            sig_notes = dict(sig_notes_raw)
+                                        ema_dist_pts = sig_notes.get("ema_distance_pts") or sig_notes.get("h1_ema_distance_pts")
+                                        ema_dist_status = sig_notes.get("ema_distance_status") or sig_notes.get("h1_ema_distance_status")
+                                        ema_dist_min = sig_notes.get("ema_distance_min") or sig_notes.get("h1_ema_distance_min")
+                                        ema_dist_max = sig_notes.get("ema_distance_max") or sig_notes.get("h1_ema_distance_max")
+                                        h1_trig_time = sig_notes.get("h1_trigger_time")
+                                except Exception as sig_ex:
+                                    print(f"⚠️ Gagal fetch fallback signal notes untuk #{ticket}: {sig_ex}")
 
                             notes_obj = {
                                 "h1_trigger_source": info.get("h1_trigger_source", ""),
@@ -335,7 +355,14 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 "op_level_pct": info.get("op_level_pct", 0.0),
                                 "max_floating_usd": -max_neg if max_neg else 0,
                                 "max_floating_pts": max_neg_distance_points if max_neg_distance_points else 0,
-                                "max_loss_to_sl_pct": -max_loss_to_sl_pct if max_loss_to_sl_pct else 0
+                                "max_loss_to_sl_pct": -max_loss_to_sl_pct if max_loss_to_sl_pct else 0,
+                                "ema_distance_pts": ema_dist_pts,
+                                "h1_ema_distance_pts": ema_dist_pts,
+                                "ema_distance_status": ema_dist_status,
+                                "h1_ema_distance_status": ema_dist_status,
+                                "ema_distance_min": ema_dist_min,
+                                "ema_distance_max": ema_dist_max,
+                                "h1_trigger_time": h1_trig_time,
                             }
                             
                             analytics_data = {

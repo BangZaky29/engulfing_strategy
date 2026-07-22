@@ -137,9 +137,33 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             if ring_range != 0:
                 op_level_pct = round(((price - h1_c) / ring_range) * 100, 2)
 
+    import json
     h1_trigger_src = signal.get("h1_trigger_source", "")
     m15_trigger_src = signal.get("m15_trigger_source", "")
     m5_trigger_src = signal.get("m5_trigger_source", "")
+
+    notes_payload = {}
+    if "notes" in signal and signal["notes"]:
+        if isinstance(signal["notes"], str):
+            try:
+                notes_payload = json.loads(signal["notes"])
+            except Exception:
+                notes_payload = {}
+        elif isinstance(signal["notes"], dict):
+            notes_payload = signal["notes"]
+
+    ema_dist_pts = notes_payload.get("ema_distance_pts") or signal.get("ema_distance_pts")
+    ema_dist_status = notes_payload.get("ema_distance_status") or signal.get("ema_distance_status")
+    ema_dist_min = notes_payload.get("ema_distance_min") or signal.get("ema_distance_min")
+    ema_dist_max = notes_payload.get("ema_distance_max") or signal.get("ema_distance_max")
+    h1_trig_time = notes_payload.get("h1_trigger_time") or signal.get("h1_trigger_time")
+
+    if not h1_trigger_src:
+        h1_trigger_src = notes_payload.get("h1_trigger_source", "")
+    if not m15_trigger_src:
+        m15_trigger_src = notes_payload.get("m15_trigger_source", "")
+    if not m5_trigger_src:
+        m5_trigger_src = notes_payload.get("m5_trigger_source", "")
 
     # =====================================================
     # Simpan ke Tracker untuk di-SS setelah closed
@@ -161,7 +185,12 @@ def execute_engulfing_order(signal: dict, mt5_cfg: MT5Config, exec_cfg: Executio
             m15_trigger_source=m15_trigger_src,
             m5_trigger_source=m5_trigger_src,
             op_level_pts=op_level_pts,
-            op_level_pct=op_level_pct
+            op_level_pct=op_level_pct,
+            ema_distance_pts=ema_dist_pts,
+            ema_distance_status=ema_dist_status,
+            ema_distance_min=ema_dist_min,
+            ema_distance_max=ema_dist_max,
+            h1_trigger_time=h1_trig_time
         )
         print(f"⏳ Trade OP-1 masuk tracker. Screenshot akan digenerate saat close.")
     except Exception as e:

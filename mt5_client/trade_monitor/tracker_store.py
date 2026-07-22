@@ -49,12 +49,17 @@ def add_tracked_trade(
     hedge_ticket: int | None = None,
     trigger_type: str | None = None,
     tf_list: list[str] | None = None,
-    tf_monitor: str | None = None,       # ← TAMBAH
+    tf_monitor: str | None = None,
     h1_trigger_source: str = "",
     m15_trigger_source: str = "",
     m5_trigger_source: str = "",
     op_level_pts: int = 0,
     op_level_pct: float = 0.0,
+    ema_distance_pts: int | float | None = None,
+    ema_distance_status: str | None = None,
+    ema_distance_min: int | float | None = None,
+    ema_distance_max: int | float | None = None,
+    h1_trigger_time: str | None = None,
 ):
     """
     Simpan tiket order ke file tracker untuk dimonitor.
@@ -64,8 +69,8 @@ def add_tracked_trade(
         "symbol": symbol,
         "mode": mode,  # BUY atau SELL
         "tf": tf,
-        "tf_monitor": tf_monitor or "M15",   # ← TAMBAH
-        "tf_list": tf_list or [tf],          # ← TAMBAH
+        "tf_monitor": tf_monitor or "M15",
+        "tf_list": tf_list or [tf],
         "op_price": op_price,
         "sl_price": sl_price,
         "tp_price": tp_price,
@@ -77,11 +82,18 @@ def add_tracked_trade(
         "trigger_type": trigger_type or "Engulfing",
         "entry_time": None,  # akan diisi saat posisi ACTIVE terlihat
         "latest_snapshot_time": None,  # agar sampling tidak terlalu rapat
-        "tf_list": tf_list or [tf],  # simpan semua TF yang dipakai
         "h1_trigger_source": h1_trigger_source,
         "m15_trigger_source": m15_trigger_source,
         "m5_trigger_source": m5_trigger_source,
         "op_level_pts": op_level_pts,
         "op_level_pct": op_level_pct,
+        "ema_distance_pts": ema_distance_pts,
+        "h1_ema_distance_pts": ema_distance_pts,
+        "ema_distance_status": ema_distance_status,
+        "h1_ema_distance_status": ema_distance_status,
+        "ema_distance_min": ema_distance_min,
+        "ema_distance_max": ema_distance_max,
+        "h1_trigger_time": h1_trigger_time,
     }
     save_tracked_trades(data)
+
