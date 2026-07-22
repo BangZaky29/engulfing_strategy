@@ -7,6 +7,13 @@ from utils.colors import Colors, cprint
 from config.engulfing_config import EngulfingConfig
 from ..filters_C import check_tf_monitor
 
+from .skip_reasons_def import (
+    skip_ema_distance_too_close_h1,
+    skip_ema_distance_too_far_h1,
+    skip_tfm_not_strong,
+    skip_tfm_direction_mismatch
+)
+
 def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: str, cfg: EngulfingConfig, verbose: bool):
     """
     Apply Filter C (TF Monitor Check) and update the signal dictionary in-place.
@@ -98,13 +105,13 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
                         
                         if dist_pts < min_pts:
                             notes_obj["h1_ema_distance_status"] = "INVALID"
-                            signal.setdefault("skip_reasons", []).append(f"EMA Distance terlalu dekat, H1 C1 ({dist_pts} pts < {min_pts} min) [INVALID]")
+                            signal.setdefault("skip_reasons", []).append(skip_ema_distance_too_close_h1(dist_pts, min_pts))
                             if tfm_result.get("status") == "STRONG":
                                 tfm_result["status"] = "VALID"
                                 tfm_result["status_reason"] = "H1 EMA Distance terlalu dekat"
                         elif dist_pts > max_pts:
                             notes_obj["h1_ema_distance_status"] = "VALID"
-                            signal.setdefault("skip_reasons", []).append(f"EMA Distance terlalu jauh, H1 C1 ({dist_pts} pts > {max_pts} max) [VALID-OVEREXTENDED]")
+                            signal.setdefault("skip_reasons", []).append(skip_ema_distance_too_far_h1(dist_pts, max_pts))
                             if tfm_result.get("status") == "STRONG":
                                 tfm_result["status"] = "VALID"
                                 tfm_result["status_reason"] = "H1 EMA Distance overextended (kejauhan)"
@@ -148,9 +155,9 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
         skip_reasons = signal.get("skip_reasons", [])
         if tfm_result["status"] != "STRONG":
             reason_detail = tfm_result.get("status_reason", "")
-            skip_reasons.append(f"TF Monitor: status {tfm_result['status']} bukan STRONG ({reason_detail})" if reason_detail else f"TF Monitor: status {tfm_result['status']} bukan STRONG")
+            skip_reasons.append(skip_tfm_not_strong(tfm_result['status'], reason_detail))
         if not is_aligned:
-            skip_reasons.append(f"TF Monitor: Arah M5 berlawanan dengan Bias ({tfm_result['bias_column']})")
+            skip_reasons.append(skip_tfm_direction_mismatch(tfm_result['bias_column']))
 
         if skip_reasons:
             signal["is_confirmed"] = False

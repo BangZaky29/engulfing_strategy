@@ -13,6 +13,16 @@ from ..filters_B import check_engulfing_trigger_b, check_pattern_size_b, check_e
 from ..filters_C import check_tf_monitor
 from ..filters_C.f4_state_manager import DIR_BUY, DIR_SELL
 
+from .skip_reasons_def import (
+    skip_c1_doji,
+    skip_c2_doji_invalid,
+    skip_pattern_size_invalid_b,
+    skip_pattern_size_invalid,
+    skip_grade_below_min,
+    skip_ema_distance_too_close_m5,
+    skip_ema_distance_too_far_m5
+)
+
 def evaluate_filters_ab(
     candle_data: dict,
     cfg: EngulfingConfig,
@@ -56,12 +66,14 @@ def evaluate_filters_ab(
 
     # DOJI CHECKS
     if c1_is_doji:
-        skip_reason = "C1 is Doji, trigger candle too weak"
+        skip_reason = skip_c1_doji()
     elif c2_is_doji:
         if cfg.active_filter_strategy != 'B':
-            skip_reason = "C2 is Doji, invalid engulfing (Hanya diizinkan di Filter B)"
+            skip_reason = skip_c2_doji_invalid()
 
     if skip_reason:
+        if verbose:
+            print(cprint(f"   ❌ [REJECT] {skip_reason}", Colors.RED))
         scoring_res = {
             "range_pts": 0, "body_pct": candle_data.get("body_pct", 0), "wick_pct": 0, "cp_pct": 0,
             "ema_label": "None", "market_state": "Doji", "total_score": 0,
@@ -120,7 +132,7 @@ def evaluate_filters_ab(
                 valid_f2_b = check_pattern_size_b(c1_high, c1_low, point, symbol, cfg, verbose, color)
                 if not valid_f2_b:
                     pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
-                    skip_reason = f"Pattern size invalid ({pattern_size_pts} pts) untuk Filter B"
+                    skip_reason = skip_pattern_size_invalid_b(pattern_size_pts)
                     valid_f3 = False
             else:
                 if verbose:
@@ -185,13 +197,14 @@ def evaluate_filters_ab(
         min_allowed = grade_mapping.get(cfg.min_grade_allowed, 3) # default C+
         grade_str = str(scoring_res.get("grade", "D"))
         curr_grade = grade_mapping.get(grade_str, 1)
+        allowed_grade = curr_grade >= min_allowed
 
         # Tentukan alasan skip jika ada
         if not valid_f3:
             pattern_size_pts = round(abs(c1_high - c1_low) / point) if point > 0 else 0
-            skip_reason = f"Pattern size invalid ({pattern_size_pts} pts)"
-        elif curr_grade < min_allowed:
-            skip_reason = f"Grade {grade_str} di bawah batas {cfg.min_grade_allowed}"
+            skip_reason = skip_pattern_size_invalid(pattern_size_pts)
+        elif not allowed_grade:
+            skip_reason = skip_grade_below_min(grade_str, cfg.min_grade_allowed)
 
     # -----------------------------------------------------------------
     # [F5] EMA Distance Filter (Khusus H1 Trigger)
@@ -204,10 +217,10 @@ def evaluate_filters_ab(
 
         if dist_pts < min_pts:
             ema_dist_status = "INVALID"
-            ema_skip = f"EMA Distance terlalu dekat, H1 candle c1 trigger ({dist_pts} pts < {min_pts} min) [INVALID]"
+            ema_skip = skip_ema_distance_too_close_m5(dist_pts, min_pts)
         elif dist_pts > max_pts:
             ema_dist_status = "VALID"
-            ema_skip = f"EMA Distance terlalu jauh, H1 candle c1 trigger ({dist_pts} pts > {max_pts} max) [VALID-OVEREXTENDED]"
+            ema_skip = skip_ema_distance_too_far_m5(dist_pts, max_pts)
         else:
             ema_dist_status = "STRONG"
             ema_skip = None
