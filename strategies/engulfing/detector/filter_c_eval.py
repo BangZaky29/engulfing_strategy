@@ -38,21 +38,23 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
         signal["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
         signal["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
 
+        import json as _json
+        notes_obj = {}
         try:
-            import json as _json
             notes_obj = _json.loads(signal.get("notes", "{}"))
-            notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
-            notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
-            notes_obj["m15_trigger_source"] = tfm_result.get("m15_trigger_source", "")
-            notes_obj["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
-            notes_obj["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
-            notes_obj["m5_trigger_source"] = tfm_result.get("m5_trigger_source", "")
-            notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
-            notes_obj["skip_reason"] = signal.get("skip_reason")
-            notes_obj["skip_reasons"] = signal.get("skip_reasons", [])
-            signal["notes"] = _json.dumps(notes_obj)
         except Exception:
             pass
+
+        notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
+        notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
+        notes_obj["m15_trigger_source"] = tfm_result.get("m15_trigger_source", "")
+        notes_obj["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
+        notes_obj["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
+        notes_obj["m5_trigger_source"] = tfm_result.get("m5_trigger_source", "")
+        notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+        notes_obj["skip_reason"] = signal.get("skip_reason")
+        notes_obj["skip_reasons"] = signal.get("skip_reasons", [])
+        signal["notes"] = _json.dumps(notes_obj)
 
         # ─────────────────────────────────────────────────────────
         # Dynamic SL dari H1 Trigger Candle
@@ -81,61 +83,56 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
                 h1_low     = hc["low"]
 
                 # Update notes JSON
-                try:
-                    notes_obj = _json.loads(signal.get("notes", "{}"))
-                    notes_obj["sl_source"]         = "H1"
-                    # ✅ Simpan h1_trigger_source dan trigger time ke notes agar WA bot bisa baca
-                    notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
-                    notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
-                    notes_obj["m15_trigger_source"] = tfm_result.get("m15_trigger_source", "")
-                    notes_obj["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
-                    notes_obj["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
-                    notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+                notes_obj["sl_source"] = "H1"
+                notes_obj["h1_trigger_source"] = tfm_result.get("h1_trigger_source", "")
+                notes_obj["h1_trigger_time"] = tfm_result.get("h1_trigger_time")
+                notes_obj["m15_trigger_source"] = tfm_result.get("m15_trigger_source", "")
+                notes_obj["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
+                notes_obj["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
+                notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+                
+                # ✅ Calculate H1 EMA Distance
+                h1_ema_val = tfm_result.get("h1_trigger_ema")
+                if h1_ema_val and hc.get("open") and cfg.filter_ema_distance_enabled:
+                    dist_raw = abs(hc["open"] - h1_ema_val)
+                    dist_pts = round(dist_raw / point) if point > 0 else 0
+                    min_pts, max_pts = cfg.get_ema_distance_limits(symbol)
                     
-                    # ✅ Calculate H1 EMA Distance
-                    h1_ema_val = tfm_result.get("h1_trigger_ema")
-                    if h1_ema_val and hc.get("open") and cfg.filter_ema_distance_enabled:
-                        dist_raw = abs(hc["open"] - h1_ema_val)
-                        dist_pts = round(dist_raw / point) if point > 0 else 0
-                        min_pts, max_pts = cfg.get_ema_distance_limits(symbol)
-                        
-                        notes_obj["h1_ema_distance_pts"] = dist_pts
-                        notes_obj["h1_ema_distance_min"] = min_pts
-                        notes_obj["h1_ema_distance_max"] = max_pts
-                        
-                        if dist_pts < min_pts:
-                            notes_obj["h1_ema_distance_status"] = "INVALID"
-                            signal.setdefault("skip_reasons", []).append(skip_ema_distance_too_close_h1(dist_pts, min_pts))
-                            if tfm_result.get("status") == "STRONG":
-                                tfm_result["status"] = "VALID"
-                                tfm_result["status_reason"] = "H1 EMA Distance terlalu dekat"
-                        elif dist_pts > max_pts:
-                            notes_obj["h1_ema_distance_status"] = "VALID"
-                            signal.setdefault("skip_reasons", []).append(skip_ema_distance_too_far_h1(dist_pts, max_pts))
-                            if tfm_result.get("status") == "STRONG":
-                                tfm_result["status"] = "VALID"
-                                tfm_result["status_reason"] = "H1 EMA Distance overextended (kejauhan)"
-                        else:
-                            notes_obj["h1_ema_distance_status"] = "STRONG"
-                            
-                    notes_obj["skip_reason"] = signal.get("skip_reason")
-                    notes_obj["skip_reasons"] = signal.get("skip_reasons", [])
-                    if signal.get("m15_trigger_source"):
-                        notes_obj["m15_trigger_source"] = signal["m15_trigger_source"]
-                    if signal.get("m5_trigger_source"):
-                        notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
+                    notes_obj["h1_ema_distance_pts"] = dist_pts
+                    notes_obj["h1_ema_distance_min"] = min_pts
+                    notes_obj["h1_ema_distance_max"] = max_pts
                     
-                    # Clean up old legacy fields from notes if they exist
-                    notes_obj.pop("sl_price", None)
-                    notes_obj.pop("sl_pts", None)
-                    notes_obj.pop("tp_price", None)
-                    notes_obj.pop("sl_pct", None)
-                    notes_obj.pop("rr_ratio", None)
-                    notes_obj.pop("target_usd", None)
+                    if dist_pts < min_pts:
+                        notes_obj["h1_ema_distance_status"] = "INVALID"
+                        signal.setdefault("skip_reasons", []).append(skip_ema_distance_too_close_h1(dist_pts, min_pts))
+                        if tfm_result.get("status") == "STRONG":
+                            tfm_result["status"] = "VALID"
+                            tfm_result["status_reason"] = "H1 EMA Distance terlalu dekat"
+                    elif dist_pts > max_pts:
+                        notes_obj["h1_ema_distance_status"] = "VALID"
+                        signal.setdefault("skip_reasons", []).append(skip_ema_distance_too_far_h1(dist_pts, max_pts))
+                        if tfm_result.get("status") == "STRONG":
+                            tfm_result["status"] = "VALID"
+                            tfm_result["status_reason"] = "H1 EMA Distance overextended (kejauhan)"
+                    else:
+                        notes_obj["h1_ema_distance_status"] = "STRONG"
+                        
+                notes_obj["skip_reason"] = signal.get("skip_reason")
+                notes_obj["skip_reasons"] = signal.get("skip_reasons", [])
+                if signal.get("m15_trigger_source"):
+                    notes_obj["m15_trigger_source"] = signal["m15_trigger_source"]
+                if signal.get("m5_trigger_source"):
+                    notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
+                
+                # Clean up old legacy fields from notes if they exist
+                notes_obj.pop("sl_price", None)
+                notes_obj.pop("sl_pts", None)
+                notes_obj.pop("tp_price", None)
+                notes_obj.pop("sl_pct", None)
+                notes_obj.pop("rr_ratio", None)
+                notes_obj.pop("target_usd", None)
 
-                    signal["notes"] = _json.dumps(notes_obj)
-                except Exception:
-                    pass
+                signal["notes"] = _json.dumps(notes_obj)
 
                 if verbose:
                     h1_src = tfm_result.get("h1_trigger_source", "?")
@@ -164,8 +161,7 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
             signal["skip_reasons"] = skip_reasons
             signal["skip_reason"] = " | ".join(skip_reasons)
             try:
-                import json as _json
-                notes_obj = _json.loads(signal.get("notes", "{}"))
+                # notes_obj is already loaded and modified at the top, just use it
                 notes_obj["skip_reason"] = signal["skip_reason"]
                 notes_obj["skip_reasons"] = signal["skip_reasons"]
                 signal["notes"] = _json.dumps(notes_obj)
@@ -179,8 +175,7 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
                 print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
         else:
             try:
-                import json as _json2
-                notes_obj = _json2.loads(signal.get("notes", "{}"))
+                # notes_obj is already loaded and modified at the top, just use it
                 # Clean up legacy fields
                 notes_obj.pop("tp_price", None)
                 notes_obj.pop("rr_ratio", None)
@@ -188,7 +183,7 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
 
                 if signal.get("m5_trigger_source"):
                     notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
-                signal["notes"] = _json2.dumps(notes_obj)
+                signal["notes"] = _json.dumps(notes_obj)
                 
                 # Remove legacy calculated fields from signal payload
                 signal.pop("sl_price", None)
