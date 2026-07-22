@@ -241,10 +241,12 @@ def check_tf_monitor(
     # 6. Cari H1 Trigger Candle
     # =========================================================
     h1_trigger_candle = None
+    h1_trigger_ema = None
     if manager.h1_state and manager.h1_state.time:
-        for c in h1_candles:
+        for i, c in enumerate(h1_candles):
             if c["time"] == manager.h1_state.time:
                 h1_trigger_candle = c
+                h1_trigger_ema = h1_ema[i]
                 break
 
     return {
@@ -256,6 +258,7 @@ def check_tf_monitor(
         "m15_state": manager.m15_state,
         "m5_state": manager.m5_state,
         "h1_trigger_candle": h1_trigger_candle,
+        "h1_trigger_ema": h1_trigger_ema,
         "h1_trigger_source": manager.h1_state.source if manager.h1_state else None,
         "h1_trigger_time": manager.h1_state.time.strftime("%H:%M") if manager.h1_state and manager.h1_state.time else None,
         "m15_trigger_source": manager.m15_state.source if manager.m15_state else None,

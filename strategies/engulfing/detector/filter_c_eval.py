@@ -84,6 +84,25 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
                     notes_obj["m15_trigger_time"] = tfm_result.get("m15_trigger_time")
                     notes_obj["m15_trigger_age"] = tfm_result.get("m15_trigger_age")
                     notes_obj["m5_trigger_time"] = tfm_result.get("m5_trigger_time")
+                    
+                    # ✅ Calculate H1 EMA Distance
+                    h1_ema_val = tfm_result.get("h1_trigger_ema")
+                    if h1_ema_val and hc.get("open") and cfg.filter_ema_distance_enabled:
+                        dist_raw = abs(hc["open"] - h1_ema_val)
+                        dist_pts = round(dist_raw / point) if point > 0 else 0
+                        min_pts, max_pts = cfg.get_ema_distance_limits(symbol)
+                        
+                        notes_obj["h1_ema_distance_pts"] = dist_pts
+                        notes_obj["h1_ema_distance_min"] = min_pts
+                        notes_obj["h1_ema_distance_max"] = max_pts
+                        
+                        if dist_pts < min_pts:
+                            notes_obj["h1_ema_distance_status"] = "INVALID"
+                        elif dist_pts > max_pts:
+                            notes_obj["h1_ema_distance_status"] = "VALID"
+                        else:
+                            notes_obj["h1_ema_distance_status"] = "STRONG"
+                            
                     notes_obj["skip_reason"] = signal.get("skip_reason")
                     notes_obj["skip_reasons"] = signal.get("skip_reasons", [])
                     if signal.get("m15_trigger_source"):
