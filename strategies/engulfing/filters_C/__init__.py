@@ -191,7 +191,7 @@ def check_tf_monitor(
     # =========================================================
     # 4. Calculate status & bias
     # =========================================================
-    status = validity_status(
+    status, status_reason = validity_status(
         manager.h1_state, manager.m15_state, manager.m5_state,
         h1_candles, m15_candles, m5_candles,
         h1_ema, m15_ema,
@@ -251,6 +251,7 @@ def check_tf_monitor(
 
     return {
         "status": status,
+        "status_reason": status_reason,
         "bias_column": bias_col,
         "snapshot": snapshot,
         "is_new_event": is_new_event,

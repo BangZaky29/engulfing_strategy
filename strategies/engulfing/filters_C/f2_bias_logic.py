@@ -75,7 +75,7 @@ def validity_status(
     h1_candles: list[dict], m15_candles: list[dict], m5_candles: list[dict],
     h1_ema: list[float], m15_ema: list[float],
     cfg: FilterCConfig,
-) -> str:
+) -> tuple[str, str]:
     """
     Hitung status validitas: STRONG / VALID / EARLY / LATE / WAIT.
     Transfer dari TFM_ValidityStatus() di BiasLogic.mqh.
@@ -88,7 +88,7 @@ def validity_status(
     - VALID: sisanya
     """
     if not h1_m15_aligned(h1_state, m15_state):
-        return "WAIT"
+        return "WAIT", "H1 dan M15 belum searah"
 
     h1_age = state_age_candles(h1_state, h1_candles)
     m15_age = state_age_candles(m15_state, m15_candles)
@@ -123,7 +123,7 @@ def validity_status(
 
     # LATE: H1 terlalu tua
     if h1_age >= cfg.h1_late_age:
-        return "LATE"
+        return "LATE", f"H1 terlalu tua (age={h1_age})"
 
     # Cek keselarasan dan kebaruan M5 trigger
     m5_has_trigger = m5_state.direction in (DIR_BUY, DIR_SELL) and m5_state.time is not None
@@ -132,14 +132,33 @@ def validity_status(
 
     # STRONG: keduanya Trend, H1 dan M15 masih fresh, M5 searah dan fresh (age=0)
     if h1_trend and m15_trend and h1_age <= cfg.strong_h1_max_age and m15_age <= cfg.strong_m15_max_age and m5_fresh:
-        return "STRONG"
+        return "STRONG", "Semua syarat STRONG terpenuhi"
 
     # EARLY: ada unsur Rev, tapi masih fresh, M5 searah dan fresh (age=0)
     if (h1_rev or m15_rev) and h1_age <= cfg.strong_h1_max_age and m15_age <= cfg.strong_m15_max_age and m5_fresh:
-        return "EARLY"
+        return "EARLY", "Ada unsur Reversal, namun trigger masih fresh"
 
     # VALID: searah tapi tidak STRONG/EARLY
-    return "VALID"
+    reasons = []
+    if not m5_has_trigger:
+        reasons.append("M5 belum ada trigger valid")
+    elif not m5_aligned:
+        reasons.append("M5 berlawanan dengan Bias H1")
+    elif not m5_fresh:
+        reasons.append(f"M5 tidak fresh (age={m5_age})")
+        
+    if h1_age > cfg.strong_h1_max_age:
+        reasons.append(f"H1 tidak fresh (age={h1_age})")
+    if m15_age > cfg.strong_m15_max_age:
+        reasons.append(f"M15 tidak fresh (age={m15_age})")
+        
+    if not h1_trend:
+        reasons.append(f"H1 status = {h1_ema_text}")
+    if not m15_trend:
+        reasons.append(f"M15 status = {m15_ema_text}")
+        
+    reason_str = ", ".join(reasons) if reasons else "Kondisi belum memenuhi kriteria STRONG"
+    return "VALID", reason_str
 
 
 def build_event_key(
