@@ -142,6 +142,16 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
                         Colors.CYAN
                     ))
 
+        if verbose:
+            dist_pts = notes_obj.get("h1_ema_distance_pts")
+            dist_status = notes_obj.get("h1_ema_distance_status")
+            dist_time = notes_obj.get("h1_trigger_time", "")
+            
+            if dist_pts is not None and dist_status:
+                dist_emoji = "🟢🔥" if dist_status == "STRONG" else "🟡" if dist_status == "VALID" else "🔴"
+                time_str = f" ({dist_time})" if dist_time else ""
+                print(cprint(f"   📏 EMA Distance H1 C1{time_str}: {dist_emoji} {dist_status} ({dist_pts} pts)", Colors.MAGENTA, bold=True))
+
         # Cek apakah arah M5 (pattern_type) searah dengan Bias TF Monitor
         is_aligned = True
         if "Buy" in tfm_result["bias_column"] and pattern_type == "bearish_engulfing":
