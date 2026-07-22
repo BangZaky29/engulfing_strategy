@@ -204,10 +204,10 @@ def evaluate_filters_ab(
 
         if dist_pts < min_pts:
             ema_dist_status = "INVALID"
-            ema_skip = f"EMA Distance terlalu dekat ({dist_pts} pts < {min_pts} min) [INVALID]"
+            ema_skip = f"EMA Distance terlalu dekat, H1 candle c1 trigger ({dist_pts} pts < {min_pts} min) [INVALID]"
         elif dist_pts > max_pts:
             ema_dist_status = "VALID"
-            ema_skip = f"EMA Distance terlalu jauh ({dist_pts} pts > {max_pts} max) [VALID-OVEREXTENDED]"
+            ema_skip = f"EMA Distance terlalu jauh, H1 candle c1 trigger ({dist_pts} pts > {max_pts} max) [VALID-OVEREXTENDED]"
         else:
             ema_dist_status = "STRONG"
             ema_skip = None
