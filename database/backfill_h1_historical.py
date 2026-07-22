@@ -74,14 +74,14 @@ def backfill_historical():
         else:
             notes = dict(notes_str)
             
-        # Jika sudah ada data H1, skip
-        if "h1_ema_distance_pts" in notes:
-            continue
-            
         sym = sig.get("symbol")
         created_at = sig.get("created_at")
         ticket_id = sig.get("ticket_id") or notes.get("ticket_id")
         
+        # HANYA PROSES TIKET INI SESUAI REQUEST USER
+        if str(ticket_id) != "869047289":
+            continue
+            
         if not sym or not created_at:
             continue
             
@@ -171,7 +171,10 @@ def backfill_historical():
         else:
             notes = dict(notes_str)
             
-        if "h1_ema_distance_pts" in notes:
+        ticket_id = trade.get("ticket_id") or notes.get("ticket_id")
+        
+        # HANYA PROSES TIKET INI
+        if str(ticket_id) != "869047289":
             continue
             
         ticket_id = trade.get("ticket_id") or notes.get("ticket_id")

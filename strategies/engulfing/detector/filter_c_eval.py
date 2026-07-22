@@ -149,33 +149,39 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
         elif "Sell" in tfm_result["bias_column"] and pattern_type == "bullish_engulfing":
             is_aligned = False
 
-        skip_reasons = signal.get("skip_reasons", [])
+        # Kumpulkan skip reasons khusus dari Filter C
+        new_skip_reasons = []
         if tfm_result["status"] != "STRONG":
             reason_detail = tfm_result.get("status_reason", "")
-            skip_reasons.append(skip_tfm_not_strong(tfm_result['status'], reason_detail))
+            new_skip_reasons.append(skip_tfm_not_strong(tfm_result['status'], reason_detail))
         if not is_aligned:
-            skip_reasons.append(skip_tfm_direction_mismatch(tfm_result['bias_column']))
+            new_skip_reasons.append(skip_tfm_direction_mismatch(tfm_result['bias_column']))
 
-        if skip_reasons:
+        # Gabungkan dengan skip reasons sebelumnya (misal dari Filter A/B)
+        existing_skip_reasons = signal.get("skip_reasons", [])
+        
+        if new_skip_reasons:
             signal["is_confirmed"] = False
-            signal["skip_reasons"] = skip_reasons
-            signal["skip_reason"] = " | ".join(skip_reasons)
+            existing_skip_reasons.extend(new_skip_reasons)
+            signal["skip_reasons"] = existing_skip_reasons
+            signal["skip_reason"] = " | ".join(existing_skip_reasons)
+            
             try:
-                # notes_obj is already loaded and modified at the top, just use it
                 notes_obj["skip_reason"] = signal["skip_reason"]
                 notes_obj["skip_reasons"] = signal["skip_reasons"]
                 signal["notes"] = _json.dumps(notes_obj)
             except Exception:
                 pass
+                
             if verbose:
                 print(cprint(
-                    f"   ❌ [FC] TF Monitor BLOCKED: {signal['skip_reason']}",
+                    f"   ❌ [FC] TF Monitor BLOCKED: {' | '.join(new_skip_reasons)}",
                     Colors.YELLOW
                 ))
                 print(cprint(f"   📡 {tfm_result['snapshot']}", Colors.CYAN))
         else:
+            # Tidak ada tambahan skip reason dari Filter C
             try:
-                # notes_obj is already loaded and modified at the top, just use it
                 # Clean up legacy fields
                 notes_obj.pop("tp_price", None)
                 notes_obj.pop("rr_ratio", None)
@@ -183,6 +189,14 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
 
                 if signal.get("m5_trigger_source"):
                     notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
+                    
+                # Update notes in case it was skipped previously by Filter A/B
+                if existing_skip_reasons:
+                    signal["is_confirmed"] = False
+                    signal["skip_reason"] = " | ".join(existing_skip_reasons)
+                    notes_obj["skip_reason"] = signal["skip_reason"]
+                    notes_obj["skip_reasons"] = signal["skip_reasons"]
+                
                 signal["notes"] = _json.dumps(notes_obj)
                 
                 # Remove legacy calculated fields from signal payload

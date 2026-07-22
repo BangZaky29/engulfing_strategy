@@ -70,25 +70,19 @@ def detect_engulfing(
     if skip_reason:
         signal["is_confirmed"] = False
         signal["skip_reason"] = skip_reason
-        if verbose:
-            print(cprint(f"   {skip_msg(skip_reason)}", Colors.YELLOW))
-        try:
-            import json as _json
-            notes_obj = _json.loads(signal.get("notes", "{}"))
-            notes_obj["skip_reason"] = signal["skip_reason"]
-            notes_obj["skip_reasons"] = signal["skip_reasons"]
-            signal["notes"] = _json.dumps(notes_obj)
-        except Exception:
-            pass
     else:
         signal["is_confirmed"] = True
         signal["skip_reason"] = None
 
-        # --- Terapkan Filter C ---
-        apply_filter_c(signal, symbol, candle_data, pattern_type, cfg, verbose)
+    # --- Terapkan Filter C UNTUK SEMUA SINYAL (Agar TFM dan EMA Distance terecord) ---
+    apply_filter_c(signal, symbol, candle_data, pattern_type, cfg, verbose)
 
-        # --- Cetak hasil sukses ---
-        if verbose and signal.get("is_confirmed"):
+    # --- Cetak hasil/skip ---
+    if not signal.get("is_confirmed"):
+        if verbose:
+            print(cprint(f"   {skip_msg(signal.get('skip_reason', 'Skipped'))}", Colors.YELLOW))
+    else:
+        if verbose:
             sl_pts = signal.get("sl_pts", 0)
             sl_price = signal.get("sl_price", 0.0)
             print(cprint(f"   {'-'*52}", color))
