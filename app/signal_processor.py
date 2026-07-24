@@ -41,7 +41,21 @@ def process_candle_signal(
                 if signal.get("pattern_type") and signal.get("pattern_type") != "none":
                     SignalRepo.upsert(signal)
         else:
-            if tf == target_tf:
+            is_h1_direct = False
+            if tf == "H1" and engulf_cfg.h1_direct_execute_enabled:
+                _, max_dist = engulf_cfg.get_ema_distance_limits(symbol)
+                try:
+                    notes_obj = json.loads(signal.get("notes", "{}"))
+                    ema_dist = notes_obj.get("ema_distance_pts")
+                    if ema_dist is not None and ema_dist <= max_dist:
+                        is_h1_direct = True
+                        notes_obj["h1_direct_execute"] = True
+                        notes_obj["h1_direct_max_dist"] = max_dist
+                        signal["notes"] = json.dumps(notes_obj)
+                except:
+                    pass
+
+            if tf == target_tf or is_h1_direct:
                 total_signals_added += 1
 
                 # =====================================================

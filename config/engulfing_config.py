@@ -40,6 +40,9 @@ class EngulfingConfig:
     filter_ema_distance_enabled: bool = field(
         default_factory=lambda: os.getenv("FILTER_EMA_DISTANCE_ENABLED", "true").lower() == "true"
     )
+    h1_direct_execute_enabled: bool = field(
+        default_factory=lambda: os.getenv("H1_DIRECT_EXECUTE_ENABLED", "false").lower() == "true"
+    )
     
     score_weight_body: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_BODY", "40")))
     score_weight_range: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_RANGE", "30")))
