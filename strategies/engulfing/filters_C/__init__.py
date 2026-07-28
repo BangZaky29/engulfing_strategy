@@ -151,7 +151,7 @@ def check_tf_monitor(
     # H1
     h1_last_time = h1_candles[-1]["time"] if h1_candles else None
     if manager.should_rescan("H1", h1_last_time):
-        h1_result = find_latest_h1_state(h1_candles, point, h1_ema, cfg)
+        h1_result = find_latest_h1_state(h1_candles, point, h1_ema, cfg, symbol=symbol)
         if h1_result:
             manager.h1_state = h1_result
         elif not manager.state_ready.get("H1", False):

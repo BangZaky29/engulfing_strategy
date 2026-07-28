@@ -16,7 +16,7 @@ from .f4_state_manager import (
 
 def find_latest_h1_state(
     h1_candles: list[dict], point: float,
-    ema_values: list[float], cfg: FilterCConfig,
+    ema_values: list[float], cfg: FilterCConfig, symbol: str
 ) -> TFMState | None:
     """
     Scan H1 trigger terbaru. Hanya terima Buy atau Sell (skip Mixed).
@@ -36,7 +36,7 @@ def find_latest_h1_state(
 
     found = None
     for shift in range(max_shift, 0, -1):
-        state = get_trigger_state(h1_candles, shift, point, ema_values, cfg, tf="H1")
+        state = get_trigger_state(h1_candles, shift, point, ema_values, cfg, tf="H1", symbol=symbol)
         if state and state["direction"] in (DIR_BUY, DIR_SELL):
             found = TFMState(
                 direction=state["direction"],
