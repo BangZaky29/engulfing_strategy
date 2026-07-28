@@ -21,7 +21,7 @@ DIR_MIXED = 2
 
 def get_trigger_state(
     candles: list[dict], shift: int, point: float,
-    ema_values: list[float], cfg: FilterCConfig, tf: str
+    ema_values: list[float], cfg: FilterCConfig, tf: str, symbol: str
 ) -> dict | None:
     """
     Scan semua 5 trigger pada shift tertentu.
@@ -52,8 +52,8 @@ def get_trigger_state(
         engulf_sell = is_bearish_engulfing(candles, shift, ema_values, use_ema)
 
     if cfg.get_use_marubozu(tf):
-        marubozu_buy = is_bullish_marubozu(candles, shift, point, ema_values, use_ema, cfg)
-        marubozu_sell = is_bearish_marubozu(candles, shift, point, ema_values, use_ema, cfg)
+        marubozu_buy = is_bullish_marubozu(candles, shift, point, ema_values, use_ema, cfg, symbol)
+        marubozu_sell = is_bearish_marubozu(candles, shift, point, ema_values, use_ema, cfg, symbol)
 
     if cfg.get_use_ict(tf):
         ict_buy = is_bullish_ict(candles, shift, ema_values, use_ema)
@@ -141,7 +141,7 @@ def get_trigger_state(
 
 def find_latest_trigger(
     candles: list[dict], point: float,
-    ema_values: list[float], cfg: FilterCConfig, tf: str
+    ema_values: list[float], cfg: FilterCConfig, tf: str, symbol: str
 ) -> dict | None:
     """
     Scan semua shift dari lookback ke shift=1.
@@ -161,7 +161,7 @@ def find_latest_trigger(
 
     found = None
     for shift in range(max_shift, 0, -1):
-        state = get_trigger_state(candles, shift, point, ema_values, cfg, tf)
+        state = get_trigger_state(candles, shift, point, ema_values, cfg, tf, symbol)
         if state is not None:
             found = state
 

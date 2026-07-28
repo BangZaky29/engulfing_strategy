@@ -161,7 +161,7 @@ def check_tf_monitor(
     # M15
     m15_last_time = m15_candles[-1]["time"] if m15_candles else None
     if manager.should_rescan("M15", m15_last_time):
-        m15_result = find_latest_trigger(m15_candles, point, m15_ema, cfg, tf="M15")
+        m15_result = find_latest_trigger(m15_candles, point, m15_ema, cfg, tf="M15", symbol=symbol)
         if m15_result:
             manager.m15_state = TFMState(
                 direction=m15_result["direction"],
@@ -176,7 +176,7 @@ def check_tf_monitor(
     # M5
     m5_last_time = m5_candles[-1]["time"] if m5_candles else None
     if manager.should_rescan("M5", m5_last_time):
-        m5_result = find_latest_trigger(m5_candles, point, m5_ema, cfg, tf="M5")
+        m5_result = find_latest_trigger(m5_candles, point, m5_ema, cfg, tf="M5", symbol=symbol)
         if m5_result:
             manager.m5_state = TFMState(
                 direction=m5_result["direction"],

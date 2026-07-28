@@ -8,5 +8,37 @@
         "tp_price": 4320.57,
         "timestamp": "20260616_135600",
         "trading_session": "Asia"
+    },
+    "894313880": {
+        "symbol": "NASDAQ-100",
+        "mode": "SELL",
+        "tf": "M5",
+        "tf_monitor": "M15",
+        "tf_list": [
+            "M5"
+        ],
+        "op_price": 27908.4,
+        "sl_price": 27989.3,
+        "tp_price": 27838.4,
+        "timestamp": "20260728_080501",
+        "status": "ACTIVE",
+        "trading_session": "Asia Only",
+        "hedge_ticket": null,
+        "hedge_triggered": false,
+        "trigger_type": "Engulfing",
+        "entry_time": "2026-07-28T04:05:01+00:00",
+        "latest_snapshot_time": "2026-07-28T01:43:36.731154+00:00",
+        "h1_trigger_source": "Multi:Engulfing+ICT",
+        "m15_trigger_source": "Engulfing",
+        "m5_trigger_source": "DB-6",
+        "op_level_pts": -3170,
+        "op_level_pct": -25.77,
+        "ema_distance_pts": null,
+        "h1_ema_distance_pts": null,
+        "ema_distance_status": null,
+        "h1_ema_distance_status": null,
+        "ema_distance_min": null,
+        "ema_distance_max": null,
+        "h1_trigger_time": "03:00"
     }
 }

@@ -10,7 +10,7 @@ from .trigger_utils import _get, _range_points, _upper_wick_points, _lower_wick_
 def is_bullish_marubozu(
     candles: list[dict], shift: int, point: float,
     ema_values: list[float], use_ema_filter: bool,
-    cfg: FilterCConfig,
+    cfg: FilterCConfig, symbol: str
 ) -> bool:
     c1_open = _get(candles, shift, "open")
     c1_close = _get(candles, shift, "close")
@@ -22,9 +22,10 @@ def is_bullish_marubozu(
     upper_wick = _upper_wick_points(candles, shift, point)
     lower_wick = _lower_wick_points(candles, shift, point)
 
-    if upper_wick > cfg.marubozu_wick_buffer_points:
+    wick_buffer = cfg.get_marubozu_wick_buffer_points(symbol)
+    if upper_wick > wick_buffer:
         return False
-    if lower_wick > cfg.marubozu_wick_buffer_points:
+    if lower_wick > wick_buffer:
         return False
 
     avg_range = _get_avg_previous_range(candles, shift, cfg.marubozu_compare_candles, point)
@@ -38,7 +39,7 @@ def is_bullish_marubozu(
 def is_bearish_marubozu(
     candles: list[dict], shift: int, point: float,
     ema_values: list[float], use_ema_filter: bool,
-    cfg: FilterCConfig,
+    cfg: FilterCConfig, symbol: str
 ) -> bool:
     c1_open = _get(candles, shift, "open")
     c1_close = _get(candles, shift, "close")
@@ -50,9 +51,10 @@ def is_bearish_marubozu(
     upper_wick = _upper_wick_points(candles, shift, point)
     lower_wick = _lower_wick_points(candles, shift, point)
 
-    if upper_wick > cfg.marubozu_wick_buffer_points:
+    wick_buffer = cfg.get_marubozu_wick_buffer_points(symbol)
+    if upper_wick > wick_buffer:
         return False
-    if lower_wick > cfg.marubozu_wick_buffer_points:
+    if lower_wick > wick_buffer:
         return False
 
     avg_range = _get_avg_previous_range(candles, shift, cfg.marubozu_compare_candles, point)

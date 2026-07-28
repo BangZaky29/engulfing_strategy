@@ -87,6 +87,13 @@ class FilterCConfig:
         default_factory=lambda: float(os.getenv("TFM_MARUBOZU_RANGE_MULTIPLIER", "2.0"))
     )
 
+    def get_marubozu_wick_buffer_points(self, symbol: str) -> int:
+        safe_symbol = symbol.replace("-", "_").replace(".", "_").upper()
+        val = os.getenv(f"TFM_{safe_symbol}_MARUBOZU_WICK_BUFFER_POINTS")
+        if val is not None:
+            return int(val)
+        return self.marubozu_wick_buffer_points
+
     # === Pinbar Params ===
     pinbar_wick_body_multiplier: float = field(
         default_factory=lambda: float(os.getenv("TFM_PINBAR_WICK_BODY_MULTIPLIER", "4.0"))
