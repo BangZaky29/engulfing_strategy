@@ -80,6 +80,7 @@ def run_itr_bot():
         current_direction = itr_cfg.initial_direction
 
         last_state_check_time = 0
+        last_debug_time = 0
         cached_command_state = 'PAUSED'
 
         while True:
@@ -97,11 +98,8 @@ def run_itr_bot():
                         if req_action == 'REQUEST_PROFIT_INFO':
                             supabase.table('itr_command_state').update({'updated_by': 'OK'}).eq('id', 'main_itr').execute()
                             
-                            # Hitung profit
                             deals = mt5.history_deals_get(session_start_time, datetime.datetime.now())
                             session_pnl = sum([d.profit for d in deals if d.magic == itr_cfg.magic_number]) if deals else 0.0
-                            
-                            # Cek posisi floating
                             my_pos = mt5.positions_get(symbol=symbol) or []
                             floating_pnl = sum([p.profit for p in my_pos if p.magic == itr_cfg.magic_number])
                             net_pnl = session_pnl + floating_pnl
@@ -127,7 +125,14 @@ def run_itr_bot():
                                 }).execute()
                 except Exception as e:
                     pass
-            
+
+            if now_ts - last_debug_time > 10.0:
+                last_debug_time = now_ts
+                all_pos_debug = mt5.positions_get(symbol=symbol) or []
+                my_pos_debug = [p for p in all_pos_debug if p.magic == itr_cfg.magic_number]
+                floating_debug = sum([p.profit for p in my_pos_debug])
+                print(f"📡 [HEARTBEAT] Status: {cached_command_state} | Posisi Terdeteksi: {len(my_pos_debug)} | Floating: ${floating_debug:.2f}")
+
             if cached_command_state == 'PAUSED':
                 time.sleep(1.0)
                 continue
@@ -151,15 +156,8 @@ def run_itr_bot():
 
             point = info.point
 
-            # Kalkulasi USD ke Pts
-            tick_size = info.trade_tick_size if info.trade_tick_size > 0 else point
-            tick_value = info.trade_tick_value if info.trade_tick_value > 0 else 1.0
-            usd_per_point = (point / tick_size) * tick_value * itr_cfg.lot_size
-            if usd_per_point <= 0:
-                usd_per_point = 0.1 # fallback aman
-            
-            dist_pts = itr_cfg.pending_distance_usd / usd_per_point
-            step_pts = itr_cfg.trailing_step_usd / usd_per_point
+            # Jarak trailing dalam Points
+            dist_pts = itr_cfg.pending_distance_pts
 
             # Ambil semua positions dan orders milik ITR
             all_pos = mt5.positions_get(symbol=symbol) or []
@@ -321,29 +319,21 @@ def run_itr_bot():
                 
                 pos_dir = "BUY" if pos.type == mt5.ORDER_TYPE_BUY else "SELL"
                 dist = dist_pts * point
-                step = step_pts * point
 
                 if pos_dir == "BUY":
-                    # OP2 adalah SELL STOP, max_price = harga OP2 + dist
-                    max_reached = ord.price_open + dist
-                    if tick.bid > max_reached:
-                        diff = tick.bid - max_reached
-                        if diff >= step:
-                            steps_to_move = int(diff // step)
-                            new_max = max_reached + (steps_to_move * step)
-                            new_ord_price = new_max - dist
-                            modify_pending_order(ord.ticket, new_ord_price)
+                    # OP2 adalah SELL STOP, jarak dari current Bid
+                    new_ord_price = tick.bid - dist
+                    # Hanya modifikasi jika harga baru lebih tinggi dari harga OP2 saat ini 
+                    # (kasih toleransi 2 point agar tidak spam server MT5 tiap tick)
+                    if new_ord_price >= ord.price_open + (2 * point):
+                        modify_pending_order(ord.ticket, new_ord_price)
 
                 elif pos_dir == "SELL":
-                    # OP2 adalah BUY STOP, min_price = harga OP2 - dist
-                    min_reached = ord.price_open - dist
-                    if tick.ask < min_reached:
-                        diff = min_reached - tick.ask
-                        if diff >= step:
-                            steps_to_move = int(diff // step)
-                            new_min = min_reached - (steps_to_move * step)
-                            new_ord_price = new_min + dist
-                            modify_pending_order(ord.ticket, new_ord_price)
+                    # OP2 adalah BUY STOP, jarak dari current Ask
+                    new_ord_price = tick.ask + dist
+                    # Hanya modifikasi jika harga baru lebih rendah dari harga OP2 saat ini
+                    if new_ord_price <= ord.price_open - (2 * point):
+                        modify_pending_order(ord.ticket, new_ord_price)
 
             # KASUS 4: Ada OP1 tapi OP2 (Pending) hilang (mungkin dihapus manual)
             elif len(my_pos) == 1 and len(my_ord) == 0:

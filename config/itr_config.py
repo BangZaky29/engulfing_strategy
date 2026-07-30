@@ -20,11 +20,8 @@ class ITRConfig:
     initial_direction: str = field(
         default_factory=lambda: os.getenv("ITR_INITIAL_DIRECTION", "BUY").upper()
     )
-    pending_distance_usd: float = field(
-        default_factory=lambda: float(os.getenv("ITR_PENDING_DISTANCE_USD", "10.0"))
-    )
-    trailing_step_usd: float = field(
-        default_factory=lambda: float(os.getenv("ITR_TRAILING_STEP_USD", "5.0"))
+    pending_distance_pts: float = field(
+        default_factory=lambda: float(os.getenv("ITR_PENDING_DISTANCE_PTS", "25.0"))
     )
     magic_number: int = field(
         default_factory=lambda: int(os.getenv("ITR_MAGIC_NUMBER", "888888"))
