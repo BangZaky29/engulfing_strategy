@@ -74,6 +74,7 @@ def _resolve_order_params(
     elif getattr(exec_cfg, 'tp_mode_b', 'PCT') == "USD":
         tick_value = symbol_info.trade_tick_value
         tick_size  = symbol_info.trade_tick_size
+        target_usd = exec_cfg.get_tp_target_usd_b(symbol_info.name)
         try:
             tp_price = exec_cfg.calculate_tp_price_usd(
                 entry_price=price,
@@ -81,8 +82,9 @@ def _resolve_order_params(
                 lot_size=lot_size_used,
                 tick_value=tick_value,
                 tick_size=tick_size,
+                target_usd=target_usd,
             )
-            print(f"   [TP] TP Statis ${exec_cfg.tp_target_usd_b:.2f} USD (lot={lot_size_used}, tick_val={tick_value}, tick_sz={tick_size}): {tp_price:.5f}")
+            print(f"   [TP] TP Statis ${target_usd:.2f} USD (lot={lot_size_used}, tick_val={tick_value}, tick_sz={tick_size}): {tp_price:.5f}")
         except Exception as e:
             tp_price = exec_cfg.calculate_tp_price(entry_price=price, sl_price=sl_price, action_str=action_str)
             print(f"   ⚠️ [TP] Gagal hitung TP USD ({e}), fallback ke PCT: {tp_price:.2f}")

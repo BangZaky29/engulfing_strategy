@@ -95,6 +95,32 @@ class ExecutionConfig:
     )
     """Target profit statis (USD) dari OP price, dipakai kalau tp_mode_b == 'USD'."""
 
+    def get_tp_target_usd_b(self, symbol: str) -> float:
+        """
+        Ambil target profit USD spesifik per symbol.
+        Jika tidak ada, fallback ke EXECUTION_TP_TARGET_USD_B global.
+        """
+        clean_sym = symbol.replace(" ", "_").replace("-", "_")
+        
+        # Coba format TP_USD_XAUUSD
+        val = os.getenv(f"TP_USD_{clean_sym}")
+        if val is None:
+            val = os.getenv(f"TP_USD_{symbol}")
+            
+        if val is None:
+            if symbol == "BTC" or symbol == "BTCUSD":
+                val = os.getenv("TP_USD_Bitcoin") or os.getenv("TP_USD_BTC")
+            elif symbol == "NASDAQ-100" or symbol == "US100" or symbol == "USTEC":
+                val = os.getenv("TP_USD_NASDAQ_100")
+                
+        if val is not None:
+            try:
+                return float(val)
+            except ValueError:
+                pass
+                
+        return self.tp_target_usd_b
+
     def calculate_sl_price(
         self,
         *,
@@ -164,6 +190,7 @@ class ExecutionConfig:
         lot_size: float,
         tick_value: float,
         tick_size: float,
+        target_usd: float,
     ) -> float:
         """Hitung TP berbasis target profit statis dalam USD.
 
@@ -184,7 +211,7 @@ class ExecutionConfig:
                 f"tick_value={tick_value}, tick_size={tick_size}"
             )
         value_per_tick = tick_value * lot_size
-        ticks_needed   = self.tp_target_usd_b / value_per_tick
+        ticks_needed   = target_usd / value_per_tick
         tp_distance    = ticks_needed * tick_size
 
         action = str(action_str).upper().strip()
