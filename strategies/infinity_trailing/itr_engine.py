@@ -44,8 +44,21 @@ def run_itr_bot():
     print(f"🔹 Pending Dist : ${itr_cfg.pending_distance_usd}")
     print(f"🔹 Trailing Step: ${itr_cfg.trailing_step_usd}")
     print(f"🔹 Magic Number : {itr_cfg.magic_number}")
-    print("="*50)
-    print("="*50)
+    print("--------------------------------------------------")
+    print(f"📲 WA Group SAR : {itr_cfg.group_sar}")
+    print(f"📲 WA Executor  : {itr_cfg.executor}")
+    print("--------------------------------------------------")
+    print(f"🎯 [OPSI 1] Mode      : {'ON' if itr_cfg.opsi1_enabled else 'OFF'}")
+    if itr_cfg.opsi1_enabled:
+        print(f"🎯 [OPSI 1] Target    : ${itr_cfg.opsi1_target_usd}")
+    print("--------------------------------------------------")
+    print(f"🛑 [OPSI 2] Mode      : {'ON' if itr_cfg.opsi2_enabled else 'OFF'}")
+    if itr_cfg.opsi2_enabled:
+        print(f"🛑 [OPSI 2] Target TP : ${itr_cfg.opsi2_profit_target_usd}")
+        print(f"🛑 [OPSI 2] Target SL : ${itr_cfg.opsi2_loss_target_usd}")
+        print(f"🛑 [OPSI 2] Cooldown  : {itr_cfg.opsi2_cooldown_minutes} Menit")
+    print("==================================================")
+    print("==================================================")
 
     try:
         supabase = get_supabase()
