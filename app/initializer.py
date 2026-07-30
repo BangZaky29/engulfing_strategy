@@ -75,10 +75,14 @@ def startup_checks(
         else f"Dinamis PCT — {exec_cfg.tp_pct}% jarak OP→SL (EXECUTION_TP_PCT)"
     )
     lot_per_sym  = ", ".join(f"{sym}={exec_cfg.get_lot_size(sym)}" for sym in mt5_cfg.symbols)
+    tp_per_sym   = ", ".join(f"{sym}=${exec_cfg.get_tp_target_usd_b(sym)}" for sym in mt5_cfg.symbols)
+    
     print(cprint("⚙️  [Execution Config]", Colors.CYAN))
     print(cprint(f"   OP Mode : {op_mode_str}", Colors.CYAN))
     print(cprint(f"   SL Mode : {sl_mode_str}", Colors.CYAN))
     print(cprint(f"   TP Mode : {tp_mode_str}", Colors.CYAN))
+    if getattr(exec_cfg, 'tp_mode_b', 'PCT') == "USD":
+        print(cprint(f"   TP USD  : {tp_per_sym}", Colors.CYAN))
     print(cprint(f"   Lot     : {lot_per_sym}", Colors.CYAN))
 
     # Inisialisasi MT5
