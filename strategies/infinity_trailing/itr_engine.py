@@ -168,6 +168,116 @@ def run_itr_bot():
             my_pos = [p for p in all_pos if p.magic == itr_cfg.magic_number]
             my_ord = [o for o in all_ord if o.magic == itr_cfg.magic_number]
 
+            # =======================================================
+            # GLOBAL CHECK: OPSI 2 (Session Limit)
+            # =======================================================
+            if itr_cfg.opsi2_enabled and len(my_pos) > 0:
+                from_time = session_start_time
+                to_time = datetime.datetime.now()
+                deals = mt5.history_deals_get(from_time, to_time)
+                session_pnl = sum([d.profit for d in deals if d.magic == itr_cfg.magic_number]) if deals else 0.0
+                total_pnl = session_pnl + sum([p.profit for p in my_pos])
+
+                if total_pnl >= itr_cfg.opsi2_profit_target_usd or total_pnl <= itr_cfg.opsi2_loss_target_usd:
+                    status = 'PROFIT_TARGET_HIT' if total_pnl >= itr_cfg.opsi2_profit_target_usd else 'LOSS_TARGET_HIT'
+                    print("=======================================")
+                    print(f"🛑 OPSI 2: Session Limit Tercapai! PnL Sesi: ${total_pnl:.2f} | Status: {status}")
+                    
+                    # Close semuanya
+                    for p in my_pos:
+                        close_position(symbol, p, itr_cfg.magic_number)
+                    for o in my_ord:
+                        mt5.order_send({"action": mt5.TRADE_ACTION_REMOVE, "order": o.ticket})
+                    
+                    # Simpan log ke Supabase
+                    try:
+                        supabase = get_supabase()
+                        supabase.table('itr_session_history').insert({
+                            'symbol': symbol,
+                            'session_start_time': session_start_time.astimezone(datetime.timezone.utc).isoformat(),
+                            'total_profit_usd': total_pnl,
+                            'status': status,
+                            'cooldown_minutes': itr_cfg.opsi2_cooldown_minutes
+                        }).execute()
+                        print(f"✅ Riwayat Opsi 2 berhasil disimpan ke Supabase.")
+                        
+                        if itr_cfg.group_sar:
+                            session_end_time = datetime.datetime.now()
+                            session_end_str = session_end_time.strftime('%Y-%m-%d_%H-%M-%S')
+                            resume_time = session_end_time + datetime.timedelta(minutes=itr_cfg.opsi2_cooldown_minutes)
+                            resume_str = resume_time.strftime('%H:%M:%S')
+                            
+                            msg_text = (
+                                f"🛑 [OPSI 2] SESSION LIMIT TERCAPAI!\n\n"
+                                f"Trading session_{session_end_str} sudah berakhir karena telah mencapai batas target/loss sesi harian.\n\n"
+                                f"📊 *PnL Sesi:* ${total_pnl:.2f}\n"
+                                f"🔖 *Status:* {status}\n\n"
+                                f"⏳ Mesin ITR akan istirahat dan mendinginkan suhu selama {itr_cfg.opsi2_cooldown_minutes} menit.\n"
+                                f"Sistem akan otomatis melanjutkan pertempuran kembali pada pukul *{resume_str}*."
+                            )
+                            
+                            supabase.table('wa_outbox').insert({
+                                'source_table': 'itr_system',
+                                'event_type': 'ITR_OPSI2',
+                                'group_jid': itr_cfg.group_sar,
+                                'message_type': 'TEXT',
+                                'message': msg_text,
+                                'dedupe_key': f'itr_opsi2_{int(time.time())}_{uuid.uuid4().hex[:8]}'
+                            }).execute()
+                    except Exception as e:
+                        print(f"⚠️ Gagal menyimpan riwayat/kirim WA: {e}")
+
+                    # Trigger Cooldown
+                    cooldown_until = datetime.datetime.now() + datetime.timedelta(minutes=itr_cfg.opsi2_cooldown_minutes)
+                    print(f"⏳ Bot akan istirahat selama {itr_cfg.opsi2_cooldown_minutes} menit. Aktif kembali pada {cooldown_until.strftime('%H:%M:%S')}")
+                    continue
+
+            # =======================================================
+            # GLOBAL CHECK: OPSI 1 (Cycle Target)
+            # =======================================================
+            if itr_cfg.opsi1_enabled and len(my_pos) > 0:
+                floating_pnl = sum([p.profit for p in my_pos])
+                if floating_pnl >= itr_cfg.opsi1_target_usd:
+                    print("=======================================")
+                    print(f"🎯 OPSI 1: Cycle Target ${itr_cfg.opsi1_target_usd} TERCAPAI! Profit saat ini: ${floating_pnl}")
+                    
+                    best_pos = max(my_pos, key=lambda p: p.profit)
+                    current_direction = "BUY" if best_pos.type == mt5.ORDER_TYPE_BUY else "SELL"
+                    
+                    # Close semuanya
+                    for p in my_pos:
+                        close_position(symbol, p, itr_cfg.magic_number)
+                    for o in my_ord:
+                        mt5.order_send({"action": mt5.TRADE_ACTION_REMOVE, "order": o.ticket})
+                    
+                    print(f"➡️ Melanjutkan tren: Arah OP berikutnya diset menjadi {current_direction}")
+                    
+                    if itr_cfg.group_sar:
+                        try:
+                            supabase.table('wa_outbox').insert({
+                                'source_table': 'itr_system',
+                                'event_type': 'ITR_OPSI1',
+                                'group_jid': itr_cfg.group_sar,
+                                'message_type': 'TEXT',
+                                'message': f'🎯 [OPSI 1] Cycle Target ${itr_cfg.opsi1_target_usd} TERCAPAI!\nProfit diamankan: ${floating_pnl:.2f}\n➡️ Lanjut arah tren berikutnya: {current_direction}',
+                                'dedupe_key': f'itr_opsi1_{int(time.time())}_{uuid.uuid4().hex[:8]}'
+                            }).execute()
+                        except:
+                            pass
+
+                    time.sleep(1.0)
+                    continue
+
+            # KASUS Kritis: Lebih dari 2 posisi aktif (Bug MT5 / Manual intervensi)
+            if len(my_pos) > 2:
+                print("⚠️ KONDISI KRITIS: Terdeteksi lebih dari 2 posisi aktif! Menutup semua posisi untuk reset cycle...")
+                for p in my_pos:
+                    close_position(symbol, p, itr_cfg.magic_number)
+                for o in my_ord:
+                    mt5.order_send({"action": mt5.TRADE_ACTION_REMOVE, "order": o.ticket})
+                time.sleep(1.0)
+                continue
+
             # KASUS 1: Kosong (Awal mula atau kena SL / TP manual)
             if len(my_pos) == 0 and len(my_ord) == 0:
                 print("=======================================")
@@ -258,115 +368,31 @@ def run_itr_bot():
                 time.sleep(1.0) # BUG FIX: Sinkronisasi server
                 continue
 
-            # ==========================================
-            # EVALUASI OPSI 1 & 2 (Jika sedang running 1 OP1 aktif)
-            # ==========================================
-            if len(my_pos) == 1:
-                pos = my_pos[0]
-                
-                # OPSI 1: Cycle Target (Berdasarkan Profit OP1 berjalan)
-                if itr_cfg.opsi1_enabled and pos.profit >= itr_cfg.opsi1_target_usd:
-                    print("=======================================")
-                    print(f"🎯 OPSI 1: Cycle Target ${itr_cfg.opsi1_target_usd} TERCAPAI! Profit saat ini: ${pos.profit}")
-                    close_position(symbol, pos, itr_cfg.magic_number)
-                    for o in my_ord:
-                        mt5.order_send({"action": mt5.TRADE_ACTION_REMOVE, "order": o.ticket})
-                    
-                    # Set arah OP baru mengikuti posisi yang profit ini!
-                    current_direction = "BUY" if pos.type == mt5.ORDER_TYPE_BUY else "SELL"
-                    print(f"➡️ Melanjutkan tren: Arah OP berikutnya diset menjadi {current_direction}")
-                    
-                    if itr_cfg.group_sar:
-                        try:
-                            supabase.table('wa_outbox').insert({
-                                'source_table': 'itr_system',
-                                'event_type': 'ITR_OPSI1',
-                                'group_jid': itr_cfg.group_sar,
-                                'message_type': 'TEXT',
-                                'message': f'🎯 [OPSI 1] Cycle Target ${itr_cfg.opsi1_target_usd} TERCAPAI!\nProfit diamankan: ${pos.profit:.2f}\n➡️ Lanjut arah tren berikutnya: {current_direction}',
-                                'dedupe_key': f'itr_opsi1_{int(time.time())}_{uuid.uuid4().hex[:8]}'
-                            }).execute()
-                        except:
-                            pass
-
-                    time.sleep(1.0)
-                    continue
-                
-                # OPSI 2: Session Target (Berdasarkan PnL Tertutup sejak awal Sesi)
-                if itr_cfg.opsi2_enabled:
-                    # Ambil data deals (transaksi yang sudah diclose)
-                    from_time = session_start_time
-                    to_time = datetime.datetime.now()
-                    deals = mt5.history_deals_get(from_time, to_time)
-                    
-                    session_pnl = 0.0
-                    if deals:
-                        session_pnl = sum([d.profit for d in deals if d.magic == itr_cfg.magic_number])
-                    
-                    # Tambahkan dengan floating saat ini juga?
-                    # Tidak, "perhitungan profit dan loss yang terjadi akan dikalkulasikan". 
-                    # Kita asumsikan total session_pnl = tertutup + floating.
-                    total_pnl = session_pnl + pos.profit
-
-                    if total_pnl >= itr_cfg.opsi2_profit_target_usd or total_pnl <= itr_cfg.opsi2_loss_target_usd:
-                        status = 'PROFIT_TARGET_HIT' if total_pnl >= itr_cfg.opsi2_profit_target_usd else 'LOSS_TARGET_HIT'
-                        print("=======================================")
-                        print(f"🛑 OPSI 2: Session Limit Tercapai! PnL Sesi: ${total_pnl:.2f} | Status: {status}")
-                        
-                        # Close semuanya
-                        close_position(symbol, pos, itr_cfg.magic_number)
-                        for o in my_ord:
-                            mt5.order_send({"action": mt5.TRADE_ACTION_REMOVE, "order": o.ticket})
-                        
-                        # Simpan log ke Supabase
-                        try:
-                            supabase = get_supabase()
-                            supabase.table('itr_session_history').insert({
-                                'symbol': symbol,
-                                'session_start_time': session_start_time.astimezone(datetime.timezone.utc).isoformat(),
-                                'total_profit_usd': total_pnl,
-                                'status': status,
-                                'cooldown_minutes': itr_cfg.opsi2_cooldown_minutes
-                            }).execute()
-                            print(f"✅ Riwayat Opsi 2 berhasil disimpan ke Supabase.")
-                            
-                            if itr_cfg.group_sar:
-                                session_end_time = datetime.datetime.now()
-                                session_end_str = session_end_time.strftime('%Y-%m-%d_%H-%M-%S')
-                                resume_time = session_end_time + datetime.timedelta(minutes=itr_cfg.opsi2_cooldown_minutes)
-                                resume_str = resume_time.strftime('%H:%M:%S')
-                                
-                                msg_text = (
-                                    f"🛑 [OPSI 2] SESSION LIMIT TERCAPAI!\n\n"
-                                    f"Trading session_{session_end_str} sudah berakhir karena telah mencapai batas target/loss sesi harian.\n\n"
-                                    f"📊 *PnL Sesi:* ${total_pnl:.2f}\n"
-                                    f"🔖 *Status:* {status}\n\n"
-                                    f"⏳ Mesin ITR akan istirahat dan mendinginkan suhu selama {itr_cfg.opsi2_cooldown_minutes} menit.\n"
-                                    f"Sistem akan otomatis melanjutkan pertempuran kembali pada pukul *{resume_str}*."
-                                )
-                                
-                                supabase.table('wa_outbox').insert({
-                                    'source_table': 'itr_system',
-                                    'event_type': 'ITR_OPSI2',
-                                    'group_jid': itr_cfg.group_sar,
-                                    'message_type': 'TEXT',
-                                    'message': msg_text,
-                                    'dedupe_key': f'itr_opsi2_{int(time.time())}_{uuid.uuid4().hex[:8]}'
-                                }).execute()
-                        except Exception as e:
-                            print(f"⚠️ Gagal menyimpan riwayat/kirim WA: {e}")
-
-                        # Trigger Cooldown
-                        cooldown_until = datetime.datetime.now() + datetime.timedelta(minutes=itr_cfg.opsi2_cooldown_minutes)
-                        print(f"⏳ Bot akan istirahat selama {itr_cfg.opsi2_cooldown_minutes} menit. Aktif kembali pada {cooldown_until.strftime('%H:%M:%S')}")
-                        time.sleep(1.0)
-                        continue
-
             # Tidur sebentar agar tidak makan CPU (100ms)
             time.sleep(0.1)
 
     except KeyboardInterrupt:
         print("\n⏹️ ITR Bot dimatikan oleh user (Ctrl+C).")
+        try:
+            if 'supabase' in locals() and itr_cfg.group_sar:
+                print("🔄 Mengembalikan status ke PAUSED dan mengirim notifikasi WA...")
+                supabase.table('itr_command_state').update({'status': 'PAUSED'}).eq('id', 'main_itr').execute()
+                
+                msg_text = (
+                    "🚨 *SISTEM SHUTDOWN* 🚨\n\n"
+                    "Mesin pusat ITR baru saja *DINONAKTIFKAN PAKSA* secara manual (Ctrl+C) dari terminal server.\n\n"
+                    "Status sistem kini dikembalikan ke: *PAUSED* ⏸️."
+                )
+                supabase.table('wa_outbox').insert({
+                    'source_table': 'itr_system',
+                    'event_type': 'ITR_SHUTDOWN',
+                    'group_jid': itr_cfg.group_sar,
+                    'message_type': 'TEXT',
+                    'message': msg_text,
+                    'dedupe_key': f'itr_shutdown_{int(time.time())}'
+                }).execute()
+        except Exception as e:
+            print(f"⚠️ Gagal mengupdate status saat shutdown: {e}")
     except Exception as e:
         print(f"\n❌ Error di ITR Bot: {e}")
         import traceback
