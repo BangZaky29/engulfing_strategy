@@ -88,9 +88,43 @@ def run_itr_bot():
             if now_ts - last_state_check_time > 3.0:
                 last_state_check_time = now_ts
                 try:
-                    res = supabase.table('itr_command_state').select('status').eq('id', 'main_itr').execute()
+                    res = supabase.table('itr_command_state').select('status, updated_by').eq('id', 'main_itr').execute()
                     if res.data and len(res.data) > 0:
                         cached_command_state = res.data[0]['status']
+                        req_action = res.data[0].get('updated_by')
+                        
+                        # Handle request dari WA
+                        if req_action == 'REQUEST_PROFIT_INFO':
+                            supabase.table('itr_command_state').update({'updated_by': 'OK'}).eq('id', 'main_itr').execute()
+                            
+                            # Hitung profit
+                            deals = mt5.history_deals_get(session_start_time, datetime.datetime.now())
+                            session_pnl = sum([d.profit for d in deals if d.magic == itr_cfg.magic_number]) if deals else 0.0
+                            
+                            # Cek posisi floating
+                            my_pos = mt5.positions_get(symbol=symbol) or []
+                            floating_pnl = sum([p.profit for p in my_pos if p.magic == itr_cfg.magic_number])
+                            net_pnl = session_pnl + floating_pnl
+                            
+                            if itr_cfg.group_sar:
+                                report_msg = (
+                                    f"📊 *LAPORAN PROFIT ITR SEMENTARA*\n\n"
+                                    f"Status Mesin: *{cached_command_state}*\n"
+                                    f"Closed PnL Sesi: ${session_pnl:.2f}\n"
+                                    f"Floating Saat Ini: ${floating_pnl:.2f}\n"
+                                    f"-----------------------------------\n"
+                                    f"💰 *TOTAL NET PNL: ${net_pnl:.2f}*\n"
+                                    f"-----------------------------------\n"
+                                    f"Target TP: ${itr_cfg.opsi2_profit_target_usd} | SL: ${itr_cfg.opsi2_loss_target_usd}"
+                                )
+                                supabase.table('wa_outbox').insert({
+                                    'source_table': 'itr_system',
+                                    'event_type': 'ITR_REPORT',
+                                    'group_jid': itr_cfg.group_sar,
+                                    'message_type': 'TEXT',
+                                    'message': report_msg,
+                                    'dedupe_key': f'itr_report_{int(time.time())}_{uuid.uuid4().hex[:8]}'
+                                }).execute()
                 except Exception as e:
                     pass
             
