@@ -119,6 +119,35 @@ def apply_filter_c(signal: dict, symbol: str, candle_data: dict, pattern_type: s
                         
                 notes_obj["skip_reason"] = signal.get("skip_reason")
                 notes_obj["skip_reasons"] = signal.get("skip_reasons", [])
+
+                # =========================================================
+                # EVALUASI M5 PULLBACK TERHADAP H1 WICK
+                # =========================================================
+                from .skip_reasons_def import skip_m5_pullback_too_deep
+                bias_dir = tfm_result.get("bias_column", "")
+                
+                wick_pts = 0.0
+                pullback_pts = 0.0
+                if bias_dir == "BUY":
+                    wick_pts = (h1_close - h1_low) / point
+                    pullback_pts = (h1_close - op) / point
+                elif bias_dir == "SELL":
+                    wick_pts = (h1_high - h1_close) / point
+                    pullback_pts = (op - h1_close) / point
+                
+                # Hanya cek jika harga sedang pullback (melawan arah).
+                # Jika pullback negatif, berarti harga berjalan searah dengan tren (dibiarkan lolos).
+                if pullback_pts > 0:
+                    pullback_pct = (pullback_pts / wick_pts * 100.0) if wick_pts > 0 else float('inf')
+                    max_pct = cfg.m5_max_pullback_pct
+                    if pullback_pct > max_pct:
+                        skip_msg = skip_m5_pullback_too_deep(pullback_pct, max_pct)
+                        signal.setdefault("skip_reasons", []).append(skip_msg)
+                        signal["skip_reason"] = skip_msg
+                        signal["is_confirmed"] = False
+                        notes_obj["skip_reason"] = skip_msg
+                        notes_obj["skip_reasons"] = signal.get("skip_reasons", [])
+
                 if signal.get("m15_trigger_source"):
                     notes_obj["m15_trigger_source"] = signal["m15_trigger_source"]
                 if signal.get("m5_trigger_source"):

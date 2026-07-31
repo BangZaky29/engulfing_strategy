@@ -19,6 +19,9 @@ def skip_pattern_size_invalid(pts: int) -> str:
 def skip_grade_below_min(grade: str, min_grade: str) -> str:
     return f"Grade {grade} di bawah batas {min_grade}"
 
+def skip_m5_pullback_too_deep(pullback_pct: float, max_pct: float) -> str:
+    return f"Tarikan OP M5 terlalu dalam melawan C1 H1 ({pullback_pct:.1f}% > {max_pct:.1f}%)"
+
 def skip_ema_distance_too_close_m5(dist: int, min_pts: int) -> str:
     return f"EMA Distance terlalu dekat, H1 candle c1 trigger ({dist} pts < {min_pts} min) [INVALID]"
 

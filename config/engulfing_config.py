@@ -43,6 +43,9 @@ class EngulfingConfig:
     h1_direct_execute_enabled: bool = field(
         default_factory=lambda: os.getenv("H1_DIRECT_EXECUTE_ENABLED", "false").lower() == "true"
     )
+    m5_max_pullback_pct: float = field(
+        default_factory=lambda: float(os.getenv("M5_MAX_PULLBACK_PCT", "50.0"))
+    )
     
     score_weight_body: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_BODY", "40")))
     score_weight_range: float = field(default_factory=lambda: float(os.getenv("SCORE_WEIGHT_RANGE", "30")))
