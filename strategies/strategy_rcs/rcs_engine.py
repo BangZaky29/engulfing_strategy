@@ -179,7 +179,7 @@ def run_rcs_bot():
                             cancel_pending_order_rcs(state.op3_ticket)
                         
                         real_profit = calculate_cycle_profit(state)
-                        notify_result(symbol, "Siklus Selesai (Posisi/Order Hilang)", real_profit, 0.0, rcs_cfg)
+                        notify_result(symbol, "Siklus Selesai (Posisi/Order Hilang)", real_profit, 0.0, rcs_cfg, state=state)
                         state.reset()
                         continue
                         
@@ -213,7 +213,7 @@ def run_rcs_bot():
                 if check_unfreeze(symbol, state, rcs_cfg):
                     profit, recovery = calculate_recovery(symbol, state, rcs_cfg)
                     print(cprint(f"☀️ UNFREEZE! Posisi manual telah ditutup. Recovery: ${recovery:.2f}", Colors.GREEN))
-                    notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg)
+                    notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg, state=state)
                     state.reset()
                 
             time.sleep(0.5) # Fast loop tapi jangan spam CPU

@@ -172,6 +172,15 @@ class RCSConfig:
     group_jid: str = field(
         default_factory=lambda: os.getenv("RCS_GROUP_JID", "")
     )
+    private_jid: str = field(
+        default_factory=lambda: os.getenv("PRIVATE_JID", "")
+    )
+    profit_signal_jid: str = field(
+        default_factory=lambda: os.getenv("PROFIT_SIGNAL", "")
+    )
+    loss_signal_jid: str = field(
+        default_factory=lambda: os.getenv("LOSS_SIGNAL", "")
+    )
 
     # Logging CSV
     use_csv_log: bool = field(
