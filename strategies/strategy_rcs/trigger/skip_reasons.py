@@ -28,4 +28,5 @@ def skip_ema_wrong_side(direction: str) -> str:
     return f"Open candle berada di sisi EMA yang salah untuk setup {direction}"
 
 def skip_ema_not_crossed(direction: str) -> str:
-    return f"Close candle gagal menembus EMA ke arah setup {direction}"
+    pos_str = "atas" if direction == "BUY" else "bawah"
+    return f"Close candle tidak berada di {pos_str} EMA (berlawanan dengan arah {direction})"

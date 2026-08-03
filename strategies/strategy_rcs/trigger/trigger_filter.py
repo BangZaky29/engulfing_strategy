@@ -55,16 +55,10 @@ def apply_all_filters(candle_data: dict, config: RCSConfig, direction: str) -> t
             return False, sr.skip_ema_distance_too_far(dist_open_ema, config.max_ema_distance_pts)
             
         if direction == "BUY":
-            # Bullish pullback: Open harus di sisi salah (bawah EMA) ATAU di atas tapi dekat
-            # Kalau setup pullback EMA ketat: Open di bawah EMA, Close nembus di atas EMA
-            if c_open > ema and dist_open_ema > (config.max_ema_distance_pts / 2):
-                return False, sr.skip_ema_wrong_side(direction)
             if c_close < ema:
                 return False, sr.skip_ema_not_crossed(direction)
         else:
             # Bearish pullback
-            if c_open < ema and dist_open_ema > (config.max_ema_distance_pts / 2):
-                return False, sr.skip_ema_wrong_side(direction)
             if c_close > ema:
                 return False, sr.skip_ema_not_crossed(direction)
                 
