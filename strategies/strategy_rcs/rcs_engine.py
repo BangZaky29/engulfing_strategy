@@ -108,7 +108,7 @@ def run_rcs_bot():
                             is_valid, skip_reason = apply_all_filters(candle_data, rcs_cfg, direction)
                             if not is_valid:
                                 if rcs_cfg.notif_skip:
-                                    print(cprint(f"⏭️ SKIP Trigger {symbol} {pattern_name} {direction}: {skip_reason}", Colors.YELLOW))
+                                    print(cprint(f"⏭️ SKIP Trigger {symbol} [{current_time}] {pattern_name} {direction}: {skip_reason}", Colors.YELLOW))
                                     notify_skip(symbol, pattern_name, direction, skip_reason, rcs_cfg)
                                 continue
                                 
