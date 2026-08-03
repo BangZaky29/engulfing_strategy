@@ -6,7 +6,7 @@
 def detect_engulfing(candle_data: dict, point: float) -> str | None:
     """
     Cek apakah candle_data merupakan pola Engulfing valid.
-    Menggunakan definisi: Curr (Engulfing) menelan Prev (Engulfed) secara full body dan ekor.
+    Definisi: C1 (Engulfing) menelan C2 (Engulfed) pada body dan penembusan High/Low sesuai arah.
     
     Returns direction ("BUY" atau "SELL") jika valid, atau None jika tidak.
     """
@@ -16,6 +16,8 @@ def detect_engulfing(candle_data: dict, point: float) -> str | None:
     c_low = candle_data["low_"]
     c_is_bullish = candle_data["is_bullish"]
     
+    p_open = candle_data["prev_open"]
+    p_close = candle_data["prev_close"]
     p_high = candle_data["prev_high"]
     p_low = candle_data["prev_low"]
     p_is_bullish = candle_data["prev_is_bullish"]
@@ -24,12 +26,16 @@ def detect_engulfing(candle_data: dict, point: float) -> str | None:
     if c_is_bullish == p_is_bullish:
         return None
     
-    # 1. Pastikan curr menelan full range prev (high dan low prev ada di dalam high dan low curr)
-    if not (c_high > p_high and c_low < p_low):
-        return None
-        
-    # 2. Return arah dari Engulfing
+    # 1. Bullish Engulfing (C2 Merah, C1 Hijau)
     if c_is_bullish:
-        return "BUY"
+        # C1 Close menembus Open C2 ke atas & C1 High menembus High C2
+        if c_close >= p_open and c_high >= p_high:
+            return "BUY"
+            
+    # 2. Bearish Engulfing (C2 Hijau, C1 Merah)
     else:
-        return "SELL"
+        # C1 Close menembus Open C2 ke bawah & C1 Low menembus Low C2
+        if c_close <= p_open and c_low <= p_low:
+            return "SELL"
+            
+    return None

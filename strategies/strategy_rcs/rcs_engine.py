@@ -12,6 +12,7 @@ from config.rcs_config import RCSConfig
 from mt5_client import init_mt5, shutdown_mt5, get_closed_candles
 from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
 from strategies.strategy_rcs.trigger import detect_engulfing, detect_ict, apply_all_filters, calculate_levels
+from strategies.strategy_rcs.trigger import skip_reasons as sr
 from strategies.strategy_rcs.engine import place_op1_order, place_op2_order, place_op3_order
 from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs
 from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text
@@ -112,7 +113,8 @@ def run_rcs_bot():
                                         pattern_name = "ICT"
                                         
                             if direction is None:
-                                # Jika config log ON, bisa print(skip_not_engulfing_or_ict)
+                                reason = sr.skip_not_engulfing_or_ict()
+                                print(cprint(f"⏭️ SKIP Trigger {symbol} [{display_time}]: {reason}", Colors.GRAY))
                                 continue
                                 
                             # 2. Terapkan Filter
