@@ -38,29 +38,6 @@ def get_closed_candles(symbol: str,
 
     df = pd.DataFrame(rates)
     df["time"] = pd.to_datetime(df["time"], unit="s")
-    
-    # Convert broker time to UTC (most brokers use EET/EEST)
-    def get_broker_timezone_offset(dt: datetime) -> int:
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        dt_utc = dt.astimezone(timezone.utc)
-        year = dt_utc.year
-        # Last Sunday of March (EEST starts)
-        w_march31 = datetime(year, 3, 31, tzinfo=timezone.utc).weekday()
-        last_sun_march = datetime(year, 3, 31 - (w_march31 + 1) % 7, 1, 0, tzinfo=timezone.utc)
-        # Last Sunday of October (EEST ends)
-        w_oct31 = datetime(year, 10, 31, tzinfo=timezone.utc).weekday()
-        last_sun_oct = datetime(year, 10, 31 - (w_oct31 + 1) % 7, 1, 0, tzinfo=timezone.utc)
-        if last_sun_march <= dt_utc < last_sun_oct:
-            return 3 # EEST (UTC+3)
-        return 2 # EET (UTC+2)
-
-    def to_utc(t_naive):
-        dt = t_naive.to_pydatetime() if hasattr(t_naive, "to_pydatetime") else t_naive
-        offset = get_broker_timezone_offset(dt)
-        return dt.replace(tzinfo=timezone.utc) - timedelta(hours=offset)
-
-    df["time"] = df["time"].apply(to_utc)
 
     # C1 = candle sebelumnya, C2 = candle terakhir yg sudah close
     c1 = df.iloc[-3]

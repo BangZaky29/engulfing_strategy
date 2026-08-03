@@ -67,6 +67,12 @@ def run_rcs_bot():
             candle_data = get_closed_candles(symbol, mt5_cfg, EMAConfig(), tf_label=rcs_cfg.signal_timeframe, verbose=False)
             if candle_data:
                 current_time = candle_data["timestamp"]
+                # Format to remove seconds if it's a datetime object
+                if hasattr(current_time, 'strftime'):
+                    display_time = current_time.strftime("%Y.%m.%d %H:%M")
+                else:
+                    # if it's a string, just slice it if possible
+                    display_time = str(current_time)[:16].replace('-', '.')
                 if last_candle_time is None or current_time != last_candle_time:
                     # New candle detected!
                     last_candle_time = current_time
@@ -109,7 +115,7 @@ def run_rcs_bot():
                             is_valid, skip_reason = apply_all_filters(candle_data, rcs_cfg, direction)
                             if not is_valid:
                                 if rcs_cfg.notif_skip:
-                                    print(cprint(f"⏭️ SKIP Trigger {symbol} [{current_time}] {pattern_name} {direction}: {skip_reason}", Colors.YELLOW))
+                                    print(cprint(f"⏭️ SKIP Trigger {symbol} [{display_time}] {pattern_name} {direction}: {skip_reason}", Colors.YELLOW))
                                     notify_skip(symbol, pattern_name, direction, skip_reason, rcs_cfg)
                                 continue
                                 
