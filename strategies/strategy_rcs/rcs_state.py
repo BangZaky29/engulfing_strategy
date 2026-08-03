@@ -41,6 +41,7 @@ class RCSState:
     freeze_start_floating_usd: float = 0.0
     freeze_start_time: Optional[datetime.datetime] = None
     freeze_is_hedge: bool = False
+    op2_notified: bool = False
     
     def reset(self):
         """Kembalikan ke state IDLE."""
@@ -48,6 +49,7 @@ class RCSState:
         self.trigger_direction = None
         self.trigger_risk_range = 0.0
         self.trigger_age = 0
+        self.op2_notified = False
         
         self.op1_level = 0.0
         self.op2_level = 0.0

@@ -59,6 +59,9 @@ class RCSConfig:
     ema_period: int = field(
         default_factory=lambda: int(os.getenv("RCS_EMA_PERIOD", "20"))
     )
+    min_ema_distance_pts: int = field(
+        default_factory=lambda: int(os.getenv("RCS_MIN_EMA_DISTANCE_PTS", "0"))
+    )
     max_ema_distance_pts: int = field(
         default_factory=lambda: int(os.getenv("RCS_MAX_EMA_DISTANCE_PTS", "200"))
     )

@@ -10,21 +10,20 @@ from utils.colors import cprint, Colors
 import MetaTrader5 as mt5
 
 def calculate_tp2_price(op1_price: float, op2_price: float, state: RCSState, config: RCSConfig) -> float:
-    """Hitung letak TP2 khusus mode HEDGE_REENTRY."""
+    """Hitung letak TP2 khusus mode HEDGE_REENTRY berdasarkan % dari Jarak OP1 ke OP2."""
     direction = state.trigger_direction
-    risk_range = state.trigger_risk_range
     
-    if config.tp2_mode == "PERCENT":
-        # Target TP2 berbasis persentase dari Total Risk Range
-        tp_dist = risk_range * (config.tp2_percent / 100.0)
-    else:
-        # USD Mode
-        tp_dist = risk_range * 1.0
+    # Hitung Jarak OP1 ke OP2
+    dist_op1_op2 = abs(op2_price - op1_price) if op2_price and op1_price else 0.0
+    if dist_op1_op2 == 0.0:
+        dist_op1_op2 = state.trigger_risk_range * (config.op2_percent / 100.0)
         
-    # Karena ini re-entry searah (contoh: BUY lalu turun OP2 BUY lagi)
-    # TP2 diletakkan di atas harga OP2. (Bisa dirata-rata, tapi blueprint 
-    # menyebut TP2 diukur dari jarak OP1-OP2).
-    # Untuk sementara kita gunakan jarak murni ke atas dari OP2.
+    if config.tp2_mode == "PERCENT":
+        # Target TP2 % dari jarak OP1 ke OP2 (misal 100%)
+        tp_dist = dist_op1_op2 * (config.tp2_percent / 100.0)
+    else:
+        tp_dist = dist_op1_op2 * 1.0
+        
     if direction == "BUY":
         return op2_price + tp_dist
     else:

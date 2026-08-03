@@ -51,6 +51,9 @@ def apply_all_filters(candle_data: dict, config: RCSConfig, direction: str) -> t
         ema = candle_data["ema_now"]
         dist_open_ema = int(round(abs(c_open - ema) / point))
         
+        if dist_open_ema < config.min_ema_distance_pts:
+            return False, sr.skip_ema_distance_too_close(dist_open_ema, config.min_ema_distance_pts)
+            
         if dist_open_ema > config.max_ema_distance_pts:
             return False, sr.skip_ema_distance_too_far(dist_open_ema, config.max_ema_distance_pts)
             

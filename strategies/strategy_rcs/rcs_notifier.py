@@ -42,7 +42,7 @@ def send_rcs_wa_notif(config: RCSConfig, message: str, event_type: str, target_j
     }
     
     if media_url:
-        payload['media_url'] = media_url
+        payload['image_url'] = media_url
         
     try:
         supabase.table('wa_outbox').insert(payload).execute()

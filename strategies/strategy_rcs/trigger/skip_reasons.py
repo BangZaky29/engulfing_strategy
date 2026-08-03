@@ -21,6 +21,9 @@ def skip_body_too_large(pct: float, max_pct: float) -> str:
 def skip_spread_too_high(spread: int, max_spread: int) -> str:
     return f"Spread saat ini ({spread} pts) terlalu tinggi (> {max_spread} pts)"
 
+def skip_ema_distance_too_close(dist: int, min_dist: int) -> str:
+    return f"Jarak Open ke EMA ({dist} pts) terlalu dekat (< {min_dist} pts)"
+
 def skip_ema_distance_too_far(dist: int, max_dist: int) -> str:
     return f"Jarak Open ke EMA ({dist} pts) terlalu jauh (> {max_dist} pts)"
 

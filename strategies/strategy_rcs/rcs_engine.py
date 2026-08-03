@@ -48,7 +48,7 @@ def run_rcs_bot():
     print(f"🔹 OP1 Setup    : {op1_info} | Lot: {rcs_cfg.lot_size_op1} | TP: {rcs_cfg.tp_mode} ({rcs_cfg.tp_percent}%) | Mgc: {rcs_cfg.magic_op1}")
     print(f"🔹 OP2 Setup    : {rcs_cfg.op2_mode} ({rcs_cfg.op2_percent}%) | Lot: {rcs_cfg.lot_size_op2} | TP: {rcs_cfg.tp2_mode} ({rcs_cfg.tp2_percent}%) | Mgc: {rcs_cfg.magic_op2}")
     print(f"🔹 OP3 Setup    : {rcs_cfg.op3_mode} ({rcs_cfg.op3_percent}%) | Lot: OP1+OP2 | Mgc: {rcs_cfg.magic_op3}")
-    print(f"🔹 Filters      : Range({rcs_cfg.min_trigger_range}-{rcs_cfg.max_trigger_range}) | Body({rcs_cfg.min_body_percent}-{rcs_cfg.max_body_percent}%) | EMA({rcs_cfg.max_ema_distance_pts})")
+    print(f"🔹 Filters      : Range({rcs_cfg.min_trigger_range}-{rcs_cfg.max_trigger_range}) | Body({rcs_cfg.min_body_percent}-{rcs_cfg.max_body_percent}%) | EMA_Dist({rcs_cfg.min_ema_distance_pts}-{rcs_cfg.max_ema_distance_pts} pts)")
     print(f"⏰ Schedule     : {get_rcs_trading_status_text(rcs_cfg)}")
     print("==================================================")
     
@@ -192,18 +192,24 @@ def run_rcs_bot():
                         continue
                         
                     # 1. Cek transisi OP2 dari Order menjadi Position
-                    if state.op2_ticket:
+                    if state.op2_ticket and not state.op2_notified:
                         pos2 = mt5.positions_get(ticket=state.op2_ticket)
                         ord2 = mt5.orders_get(ticket=state.op2_ticket)
                         
                         if pos2 and not ord2:
+                            state.op2_notified = True
+                            op2_open_price = pos2[0].price_open
+                            
                             # OP2 baru saja tertrigger menjadi posisi!
                             if rcs_cfg.op2_mode == "HEDGE":
-                                print(cprint(f"❄️ HEDGE (OP2) Terbuka. Beralih ke PHASE_FREEZE.", Colors.CYAN))
+                                print(cprint(f"❄️ HEDGE (OP2) Terbuka di {op2_open_price:.5f}. Beralih ke PHASE_FREEZE.", Colors.CYAN))
                                 state.phase = RCSPhase.FREEZE
                                 state.freeze_is_hedge = True
                                 enter_freeze(state, rcs_cfg)
                                 notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
+                            else:
+                                print(cprint(f"🎯 OP2 (Hedge Reentry Limit) tersentuh di {op2_open_price:.5f}! Posisi aktif. Target TP2: {state.tp2_price:.5f}", Colors.GREEN))
+                                notify_open(symbol, "OP2 (Hedge Reentry)", state.op2_ticket, op2_open_price, state.tp2_price, rcs_cfg)
                                 
                     # 2. Cek transisi OP3 dari Order menjadi Position
                     if state.op3_ticket and state.phase != RCSPhase.FREEZE:
