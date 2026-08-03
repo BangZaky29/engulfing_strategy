@@ -10,6 +10,7 @@ from config.engulfing_config import EngulfingConfig
 from config.execution_config import ExecutionConfig
 from config.filter_c_config import FilterCConfig
 from config.trading_schedule import is_trading_active, get_trading_status_text
+from config.daily_guard import check_daily_target, get_daily_guard_status_text
 
 from mt5_client import shutdown_mt5, get_closed_candles
 from mt5_client.trade_monitor import check_closed_trades
@@ -41,7 +42,8 @@ def run_bot():
     total_signals = 0
 
     print(f"\n🔄 Memulai scan realtime (interval: {POLL_INTERVAL}s)...")
-    print(f"⏰ Trading Schedule: {get_trading_status_text()}\n")
+    print(f"⏰ Trading Schedule: {get_trading_status_text()}")
+    print(f"🛡️ Daily Guard     : {get_daily_guard_status_text()}\n")
 
     try:
         while True:
@@ -53,8 +55,9 @@ def run_bot():
                 for symbol in mt5_cfg.symbols:
                     log_tfm_snapshot(symbol, fc_cfg, last_tfm_snapshot)
 
-            # C. Cek Trading Schedule — skip execution jika di luar jam aktif
-            trading_active = is_trading_active()
+            # C. Cek Trading Schedule & Daily Target Guard
+            daily_allowed, daily_reason = check_daily_target()
+            trading_active = is_trading_active() and daily_allowed
 
             # D. Scan Tiap Mata Uang dan Timeframe
             for symbol in mt5_cfg.symbols:

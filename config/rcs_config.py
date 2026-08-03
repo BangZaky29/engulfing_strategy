@@ -196,6 +196,17 @@ class RCSConfig:
         default_factory=lambda: os.getenv("RCS_TRADING_ACTIVE_END", "15:00")
     )
 
+    # Daily Money Management Guard
+    rcs_daily_target_enabled: bool = field(
+        default_factory=lambda: os.getenv("RCS_DAILY_TARGET_ENABLED", "false").lower() == "true"
+    )
+    rcs_daily_profit_target_usd: float = field(
+        default_factory=lambda: float(os.getenv("RCS_DAILY_PROFIT_TARGET_USD", "5.0"))
+    )
+    rcs_daily_loss_target_usd: float = field(
+        default_factory=lambda: float(os.getenv("RCS_DAILY_LOSS_TARGET_USD", "5.0"))
+    )
+
     # Logging CSV
     use_csv_log: bool = field(
         default_factory=lambda: os.getenv("RCS_USE_CSV_LOG", "false").lower() == "true"

@@ -15,6 +15,7 @@ from strategies.strategy_rcs.trigger import detect_engulfing, detect_ict, apply_
 from strategies.strategy_rcs.engine import place_op1_order, place_op2_order, place_op3_order
 from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs
 from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text
+from strategies.strategy_rcs.rcs_daily_guard import check_rcs_daily_target, get_rcs_daily_guard_status_text
 from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery, calculate_cycle_profit
 from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, notify_open, notify_freeze, notify_result
 from utils.colors import cprint, Colors
@@ -50,6 +51,7 @@ def run_rcs_bot():
     print(f"🔹 OP3 Setup    : {rcs_cfg.op3_mode} ({rcs_cfg.op3_percent}%) | Lot: OP1+OP2 | Mgc: {rcs_cfg.magic_op3}")
     print(f"🔹 Filters      : Range({rcs_cfg.min_trigger_range}-{rcs_cfg.max_trigger_range}) | Body({rcs_cfg.min_body_percent}-{rcs_cfg.max_body_percent}%) | EMA_Dist({rcs_cfg.min_ema_distance_pts}-{rcs_cfg.max_ema_distance_pts} pts)")
     print(f"⏰ Schedule     : {get_rcs_trading_status_text(rcs_cfg)}")
+    print(f"🛡️ Daily Guard  : {get_rcs_daily_guard_status_text(rcs_cfg)}")
     print("==================================================")
     
     state = RCSState()
@@ -145,6 +147,13 @@ def run_rcs_bot():
                             # Cek Jam Aktif Trading RCS (Scheduler)
                             if not is_rcs_trading_active(rcs_cfg):
                                 print(cprint(f"⏸️ SKIP Execution: Di luar jam aktif trading RCS ({rcs_cfg.rcs_trading_active_start} - {rcs_cfg.rcs_trading_active_end} WIB)", Colors.YELLOW))
+                                state.reset()
+                                continue
+                                
+                            # Cek Daily Money Management Guard (Target Profit / Loss Harian)
+                            daily_allowed, daily_reason = check_rcs_daily_target(rcs_cfg)
+                            if not daily_allowed:
+                                print(cprint(f"⏸️ SKIP Execution: {daily_reason}", Colors.YELLOW))
                                 state.reset()
                                 continue
                                 
