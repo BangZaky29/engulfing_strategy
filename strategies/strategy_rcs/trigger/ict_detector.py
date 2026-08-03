@@ -21,16 +21,26 @@ def detect_ict(symbol: str, tf_label: str, mt5_cfg: MT5Config, lookback_bars: in
     if rates is None or len(rates) < lookback_bars + 1:
         return None
         
-    # rates terakhir adalah curr candle yg baru close
-    curr = rates[-1]
+    curr = rates[-1]  # C1 (Candle yang baru saja close)
+    prev = rates[-2]  # C2 (Candle sebelum C1)
     
     c_open = curr['open']
     c_close = curr['close']
     c_high = curr['high']
     c_low = curr['low']
     c_is_bullish = c_close > c_open
+
+    p_open = prev['open']
+    p_close = prev['close']
+    p_is_bullish = p_close > p_open
     
-    # Lookback candles (tidak termasuk curr)
+    # 0. Syarat beda warna (Reversal): C1 dan C2 HARUS berlawanan warna!
+    # Untuk SELL: C1 = MERAH (Bearish), C2 = HIJAU (Bullish)
+    # Untuk BUY:  C1 = HIJAU (Bullish), C2 = MERAH (Bearish)
+    if c_is_bullish == p_is_bullish:
+        return None
+        
+    # Lookback candles (tidak termasuk C1 / curr)
     lookback_candles = rates[-(lookback_bars + 1):-1]
     
     highest_in_lookback = max(c['high'] for c in lookback_candles)
