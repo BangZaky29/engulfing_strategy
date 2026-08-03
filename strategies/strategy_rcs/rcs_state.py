@@ -19,6 +19,7 @@ class RCSState:
     # Trigger Info
     trigger_direction: Optional[str] = None # "BUY" or "SELL"
     trigger_risk_range: float = 0.0
+    trigger_timestamp: Optional[int] = None
     trigger_age: int = 0
     cooldown_until_candle: int = 0
     
@@ -48,6 +49,7 @@ class RCSState:
         self.phase = RCSPhase.IDLE
         self.trigger_direction = None
         self.trigger_risk_range = 0.0
+        self.trigger_timestamp = None
         self.trigger_age = 0
         self.op2_notified = False
         

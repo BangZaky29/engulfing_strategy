@@ -76,6 +76,7 @@ def generate_and_upload_rcs_screenshot(state, config: RCSConfig) -> str:
             tp_price=tp_price,
             ema_cfg=EMAConfig(),
             mode=mode,
+            entry_time=state.trigger_timestamp or int(time.time()),
             tf_label=tf_label,
             output_dir="temp_screenshots",
             num_candles=40

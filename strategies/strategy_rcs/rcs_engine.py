@@ -152,6 +152,10 @@ def run_rcs_bot():
                             state.phase = RCSPhase.OP1
                             state.trigger_direction = direction
                             state.trigger_risk_range = risk_range
+                            if hasattr(candle_data["timestamp"], "timestamp"):
+                                state.trigger_timestamp = int(candle_data["timestamp"].timestamp())
+                            else:
+                                state.trigger_timestamp = int(time.time())
                             state.op1_level = levels["op1_level"]
                             state.op2_level = levels["op2_level"]
                             state.op3_level = levels["op3_level"]
