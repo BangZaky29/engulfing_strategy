@@ -117,3 +117,13 @@ def get_orders_by_magic(symbol: str, magic: int) -> list:
     if orders is None:
         return []
     return [o for o in orders if o.magic == magic]
+
+def close_position_by_ticket(ticket: int) -> bool:
+    """
+    Tutup posisi aktif MT5 berdasarkan tiket posisi.
+    """
+    positions = mt5.positions_get(ticket=ticket)
+    if not positions:
+        return False
+    pos = positions[0]
+    return close_position_rcs(pos.symbol, pos, pos.magic, f"Close Ticket {ticket}")

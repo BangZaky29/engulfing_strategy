@@ -98,16 +98,46 @@ def generate_and_upload_rcs_screenshot(state, config: RCSConfig) -> str:
         
     return ""
 
-def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCSConfig):
+def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCSConfig, candle_data: dict | None = None):
     if not config.notif_trigger: return
+    
+    metrics_str = ""
+    if candle_data:
+        point = candle_data.get("point", 0.00001)
+        c_open = candle_data.get("open_", 0.0)
+        c_close = candle_data.get("close_", 0.0)
+        c_high = candle_data.get("high_", 0.0)
+        c_low = candle_data.get("low_", 0.0)
+        spread = int(candle_data.get("spread", 0))
+        body_pct = candle_data.get("body_pct", 0.0)
+        ema = candle_data.get("ema_now", 0.0)
+        
+        if point > 0:
+            risk_range_pts = int(round((c_close - c_low) / point)) if direction == "BUY" else int(round((c_high - c_close) / point))
+            dist_open_ema = int(round(abs(c_open - ema) / point))
+        else:
+            risk_range_pts = 0
+            dist_open_ema = 0
+            
+        metrics_str = (
+            f"📊 *ALASAN SIGNAL VALID:*\n"
+            f"• Jarak Open C1 - EMA 20: {dist_open_ema} pts (Syarat: {config.min_ema_distance_pts}-{config.max_ema_distance_pts} pts)\n"
+            f"• Risk Range C1: {risk_range_pts} pts (Syarat: {config.min_trigger_range}-{config.max_trigger_range} pts)\n"
+            f"• Body Candle C1: {body_pct:.1f}% (Syarat: {config.min_body_percent}-{config.max_body_percent}%)\n"
+            f"• Spread Market: {spread} pts (Syarat: <= {config.max_spread_points} pts)\n\n"
+        )
+
     msg = (
+        f"🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
         f"🎯 *RCS TRIGGER VALID*\n\n"
         f"Symbol: {symbol}\n"
         f"Pattern: {pattern}\n"
         f"Arah: *{direction}*\n\n"
-        f"Level OP1: {state.op1_level:.5f} | TP1: {state.tp1_price:.5f}\n"
-        f"Level OP2: {state.op2_level:.5f} | TP2: {state.tp2_price:.5f}\n"
-        f"Level OP3: {state.op3_level:.5f} | Mode: {config.op3_mode}"
+        f"{metrics_str}"
+        f"📍 *LEVEL EKSEKUSI & TARGET:*\n"
+        f"• OP1 Market : {state.op1_level:.5f} | TP1: {state.tp1_price:.5f}\n"
+        f"• OP2 Limit  : {state.op2_level:.5f} | TP2: {state.tp2_price:.5f}\n"
+        f"• OP3 SL/Hdg : {state.op3_level:.5f} | Mode: {config.op3_mode}"
     )
     # Target: PRIVATE_JID
     send_rcs_wa_notif(config, msg, 'RCS_TRIGGER', target_jid=config.private_jid)

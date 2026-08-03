@@ -14,7 +14,7 @@ from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
 from strategies.strategy_rcs.trigger import detect_engulfing, detect_ict, apply_all_filters, calculate_levels
 from strategies.strategy_rcs.trigger import skip_reasons as sr
 from strategies.strategy_rcs.engine import place_op1_order, place_op2_order, place_op3_order
-from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs
+from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs, close_position_by_ticket
 from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text
 from strategies.strategy_rcs.rcs_daily_guard import check_rcs_daily_target, get_rcs_daily_guard_status_text
 from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery, calculate_cycle_profit
@@ -126,17 +126,28 @@ def run_rcs_bot():
                                 continue
                                 
                             # 3. Valid! Hitung Level
-                            print(cprint(f"🎯 VALID Trigger {symbol} {pattern_name} {direction}!", Colors.GREEN))
-                            
                             # Risk range
                             c_close = candle_data["close_"]
                             c_high = candle_data["high_"]
                             c_low = candle_data["low_"]
+                            c_open = candle_data["open_"]
+                            spread = int(candle_data["spread"])
+                            body_pct = candle_data["body_pct"]
+                            ema = candle_data["ema_now"]
                             
                             risk_range = (c_close - c_low) if direction == "BUY" else (c_high - c_close)
-                            
                             levels = calculate_levels(c_close, risk_range, direction, rcs_cfg)
                             
+                            dist_open_ema = int(round(abs(c_open - ema) / info.point)) if info.point > 0 else 0
+                            risk_range_pts = int(round(risk_range / info.point)) if info.point > 0 else 0
+
+                            print(cprint(f"🎯 VALID Trigger {symbol} {pattern_name} {direction}!", Colors.GREEN))
+                            print(cprint(f"   ├── Jarak Open C1 - EMA 20 : {dist_open_ema} pts ({dist_open_ema/10:.1f} pips) [Syarat: {rcs_cfg.min_ema_distance_pts}-{rcs_cfg.max_ema_distance_pts} pts]", Colors.CYAN))
+                            print(cprint(f"   ├── Risk Range C1           : {risk_range_pts} pts [Syarat: {rcs_cfg.min_trigger_range}-{rcs_cfg.max_trigger_range} pts]", Colors.CYAN))
+                            print(cprint(f"   ├── Ketebalan Body C1       : {body_pct:.1f}% [Syarat: {rcs_cfg.min_body_percent}-{rcs_cfg.max_body_percent}%]", Colors.CYAN))
+                            print(cprint(f"   ├── Spread Market           : {spread} pts [Syarat: <= {rcs_cfg.max_spread_points} pts]", Colors.CYAN))
+                            print(cprint(f"   └── Konfirmasi Trend        : Close C1 ({c_close:.2f}) {'<' if direction == 'SELL' else '>'} EMA 20 ({ema:.2f})", Colors.CYAN))
+
                             # Set State ke OP1
                             state.phase = RCSPhase.OP1
                             state.trigger_direction = direction
@@ -171,7 +182,7 @@ def run_rcs_bot():
                                 print(f"   => OP3 Target: {state.op3_level:.5f} | Mode: {rcs_cfg.op3_mode}")
                                 
                                 if rcs_cfg.notif_trigger:
-                                    notify_trigger(symbol, pattern_name, direction, state, rcs_cfg)
+                                    notify_trigger(symbol, pattern_name, direction, state, rcs_cfg, candle_data=candle_data)
                                     
                                 notify_open(symbol, "OP1", state.op1_ticket, state.op1_open_price, state.tp1_price, rcs_cfg)
                             else:
@@ -222,6 +233,30 @@ def run_rcs_bot():
                                 print(cprint(f"🎯 OP2 (Hedge Reentry Limit) tersentuh di {op2_open_price:.5f}! Posisi aktif. Target TP2: {state.tp2_price:.5f}", Colors.GREEN))
                                 notify_open(symbol, "OP2 (Hedge Reentry)", state.op2_ticket, op2_open_price, state.tp2_price, rcs_cfg)
                                 
+                    # 1b. Cek jika OP2 pernah aktif (op2_notified == True) lalu OP2 menyentuh TP2 & ditutup oleh broker!
+                    if state.op2_ticket and state.op2_notified and state.phase != RCSPhase.FREEZE:
+                        pos2 = mt5.positions_get(ticket=state.op2_ticket)
+                        if not pos2:
+                            # OP2 posisi sudah hilang (tersentuh TP2)!
+                            print(cprint(f"🎯 OP2 (Hedge Reentry) menyentuh TP2! Menutup sisa posisi OP1 (Tkt:{state.op1_ticket})...", Colors.GREEN))
+                            
+                            # Tutup OP1 aktif jika masih ada
+                            if state.op1_ticket:
+                                pos1_check = mt5.positions_get(ticket=state.op1_ticket)
+                                if pos1_check:
+                                    close_position_by_ticket(state.op1_ticket)
+                                    print(cprint(f"✅ Posisi OP1 (Tkt:{state.op1_ticket}) berhasil ditutup otomatis.", Colors.GREEN))
+                                    
+                            # Batalkan sisa pending order (OP3 / SL)
+                            print(cprint(f"🧹 Membersihkan sisa pending order OP3...", Colors.YELLOW))
+                            if state.op3_ticket:
+                                cancel_pending_order_rcs(state.op3_ticket)
+                                
+                            real_profit = calculate_cycle_profit(state)
+                            notify_result(symbol, "Siklus Selesai (OP2 Menyentuh TP2)", real_profit, 0.0, rcs_cfg, state=state)
+                            state.reset()
+                            continue
+
                     # 2. Cek transisi OP3 dari Order menjadi Position
                     if state.op3_ticket and state.phase != RCSPhase.FREEZE:
                         pos3 = mt5.positions_get(ticket=state.op3_ticket)

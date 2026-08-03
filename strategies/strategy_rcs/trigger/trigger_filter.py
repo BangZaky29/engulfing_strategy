@@ -47,22 +47,29 @@ def apply_all_filters(candle_data: dict, config: RCSConfig, direction: str) -> t
         
     # 4. Filter EMA Pullback
     if config.use_ema_pullback:
-        # Kita menggunakan EMA 20 dari candle_data (ema_now)
         ema = candle_data["ema_now"]
         dist_open_ema = int(round(abs(c_open - ema) / point))
         
+        # 4a. Cek Sisi Open C1 (Sisi Benar): 
+        # Untuk BUY: Open C1 HARUS di atas/sama dengan EMA 20 (c_open >= ema)
+        # Untuk SELL: Open C1 HARUS di bawah/sama dengan EMA 20 (c_open <= ema)
+        if direction == "BUY":
+            if c_open < ema:
+                return False, sr.skip_ema_wrong_side(direction)
+            if c_close <= ema:
+                return False, sr.skip_ema_not_crossed(direction)
+        else:
+            # SELL
+            if c_open > ema:
+                return False, sr.skip_ema_wrong_side(direction)
+            if c_close >= ema:
+                return False, sr.skip_ema_not_crossed(direction)
+                
+        # 4b. Cek Rentang Jarak Open ke EMA (0 - 200 pts)
         if dist_open_ema < config.min_ema_distance_pts:
             return False, sr.skip_ema_distance_too_close(dist_open_ema, config.min_ema_distance_pts)
             
         if dist_open_ema > config.max_ema_distance_pts:
             return False, sr.skip_ema_distance_too_far(dist_open_ema, config.max_ema_distance_pts)
             
-        if direction == "BUY":
-            if c_close < ema:
-                return False, sr.skip_ema_not_crossed(direction)
-        else:
-            # Bearish pullback
-            if c_close > ema:
-                return False, sr.skip_ema_not_crossed(direction)
-                
     return True, ""
