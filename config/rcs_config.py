@@ -182,6 +182,17 @@ class RCSConfig:
         default_factory=lambda: os.getenv("LOSS_SIGNAL", "")
     )
 
+    # Trading Schedule Execution Time
+    rcs_trading_active_enabled: bool = field(
+        default_factory=lambda: os.getenv("RCS_TRADING_ACTIVE_ENABLED", "false").lower() == "true"
+    )
+    rcs_trading_active_start: str = field(
+        default_factory=lambda: os.getenv("RCS_TRADING_ACTIVE_START", "05:00")
+    )
+    rcs_trading_active_end: str = field(
+        default_factory=lambda: os.getenv("RCS_TRADING_ACTIVE_END", "15:00")
+    )
+
     # Logging CSV
     use_csv_log: bool = field(
         default_factory=lambda: os.getenv("RCS_USE_CSV_LOG", "false").lower() == "true"

@@ -14,6 +14,7 @@ from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
 from strategies.strategy_rcs.trigger import detect_engulfing, detect_ict, apply_all_filters, calculate_levels
 from strategies.strategy_rcs.engine import place_op1_order, place_op2_order, place_op3_order
 from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs
+from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text
 from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery, calculate_cycle_profit
 from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, notify_open, notify_freeze, notify_result
 from utils.colors import cprint, Colors
@@ -48,6 +49,7 @@ def run_rcs_bot():
     print(f"🔹 OP2 Setup    : {rcs_cfg.op2_mode} ({rcs_cfg.op2_percent}%) | Lot: {rcs_cfg.lot_size_op2} | TP: {rcs_cfg.tp2_mode} ({rcs_cfg.tp2_percent}%) | Mgc: {rcs_cfg.magic_op2}")
     print(f"🔹 OP3 Setup    : {rcs_cfg.op3_mode} ({rcs_cfg.op3_percent}%) | Lot: OP1+OP2 | Mgc: {rcs_cfg.magic_op3}")
     print(f"🔹 Filters      : Range({rcs_cfg.min_trigger_range}-{rcs_cfg.max_trigger_range}) | Body({rcs_cfg.min_body_percent}-{rcs_cfg.max_body_percent}%) | EMA({rcs_cfg.max_ema_distance_pts})")
+    print(f"⏰ Schedule     : {get_rcs_trading_status_text(rcs_cfg)}")
     print("==================================================")
     
     state = RCSState()
@@ -140,6 +142,12 @@ def run_rcs_bot():
                             state.op3_level = levels["op3_level"]
                             state.trigger_age = 0
                             
+                            # Cek Jam Aktif Trading RCS (Scheduler)
+                            if not is_rcs_trading_active(rcs_cfg):
+                                print(cprint(f"⏸️ SKIP Execution: Di luar jam aktif trading RCS ({rcs_cfg.rcs_trading_active_start} - {rcs_cfg.rcs_trading_active_end} WIB)", Colors.YELLOW))
+                                state.reset()
+                                continue
+                                
                             # Langsung tembak 3 Pending Order / Market Order!
                             current_price = tick.ask if direction == "BUY" else tick.bid
                             if place_op1_order(symbol, current_price, state, rcs_cfg):

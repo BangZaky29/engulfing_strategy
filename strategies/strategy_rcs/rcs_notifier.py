@@ -16,7 +16,7 @@ from config.mt5_config import MT5Config, EMAConfig
 from config.rcs_config import RCSConfig
 from utils.colors import cprint, Colors
 
-HEADER_TEXT = "🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (RCS)]*\n\n"
+HEADER_TEXT = "🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
 
 def send_rcs_wa_notif(config: RCSConfig, message: str, event_type: str, target_jid: str | None = None, media_url: str | None = None):
     """Fungsi helper untuk kirim pesan ke Supabase WA Outbox dengan routing JID"""
