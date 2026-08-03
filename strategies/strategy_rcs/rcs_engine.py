@@ -34,12 +34,19 @@ def run_rcs_bot():
         shutdown_mt5()
         return
         
-    print(f"\n🚀 Memulai REVERSAL CANDLE SYSTEM (RCS) Bot...")
+    print(f"🚀 Memulai REVERSAL CANDLE SYSTEM (RCS) Bot...")
     print(f"🔹 Symbol       : {symbol}")
     print(f"🔹 Signal TF    : {rcs_cfg.signal_timeframe}")
-    print(f"🔹 Magic OP1    : {rcs_cfg.magic_op1}")
-    print(f"🔹 OP1 Entry    : {rcs_cfg.op1_entry_mode} ({rcs_cfg.entry_percent}%)")
-    print(f"🔹 OP2 Mode     : {rcs_cfg.op2_mode} ({rcs_cfg.op2_percent}%)")
+    
+    # Format OP1 Info
+    op1_info = rcs_cfg.op1_entry_mode
+    if rcs_cfg.op1_entry_mode == "PERCENT":
+        op1_info += f" ({rcs_cfg.entry_percent}%)"
+        
+    print(f"🔹 OP1 Setup    : {op1_info} | Lot: {rcs_cfg.lot_size_op1} | TP: {rcs_cfg.tp_mode} ({rcs_cfg.tp_percent}%) | Mgc: {rcs_cfg.magic_op1}")
+    print(f"🔹 OP2 Setup    : {rcs_cfg.op2_mode} ({rcs_cfg.op2_percent}%) | Lot: {rcs_cfg.lot_size_op2} | TP: {rcs_cfg.tp2_mode} ({rcs_cfg.tp2_percent}%) | Mgc: {rcs_cfg.magic_op2}")
+    print(f"🔹 OP3 Setup    : {rcs_cfg.op3_mode} ({rcs_cfg.op3_percent}%) | Lot: OP1+OP2 | Mgc: {rcs_cfg.magic_op3}")
+    print(f"🔹 Filters      : Range({rcs_cfg.min_trigger_range}-{rcs_cfg.max_trigger_range}) | Body({rcs_cfg.min_body_percent}-{rcs_cfg.max_body_percent}%) | EMA({rcs_cfg.max_ema_distance_pts})")
     print("==================================================")
     
     state = RCSState()
