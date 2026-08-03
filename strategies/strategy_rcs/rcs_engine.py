@@ -14,7 +14,7 @@ from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
 from strategies.strategy_rcs.trigger import detect_engulfing, detect_ict, apply_all_filters, calculate_levels
 from strategies.strategy_rcs.engine import place_op1_order, place_op2_order, place_op3_order
 from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs
-from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery
+from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery, calculate_cycle_profit
 from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, notify_open, notify_freeze, notify_result
 from utils.colors import cprint, Colors
 
@@ -172,7 +172,8 @@ def run_rcs_bot():
                         if state.op3_ticket:
                             cancel_pending_order_rcs(state.op3_ticket)
                         
-                        notify_result(symbol, "Siklus Selesai (Posisi/Order Hilang)", 0.0, 0.0, rcs_cfg)
+                        real_profit = calculate_cycle_profit(state)
+                        notify_result(symbol, "Siklus Selesai (Posisi/Order Hilang)", real_profit, 0.0, rcs_cfg)
                         state.reset()
                         continue
                         
