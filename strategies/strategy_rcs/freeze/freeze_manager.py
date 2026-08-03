@@ -43,26 +43,4 @@ def check_unfreeze(symbol: str, state: RCSState, config: RCSConfig) -> bool:
         return True
     return False
 
-def calculate_cycle_profit(state: RCSState) -> float:
-    """Mengambil total profit/loss aktual dari histori transaksi broker untuk siklus ini."""
-    tickets = [state.op1_ticket, state.op2_ticket, state.op3_ticket]
-    total_profit = 0.0
-    
-    for ticket in tickets:
-        if ticket is None:
-            continue
-        deals = mt5.history_deals_get(position=ticket)
-        if deals:
-            for deal in deals:
-                total_profit += deal.profit
-                total_profit += deal.swap
-                total_profit += deal.commission
-                
-    return total_profit
 
-def calculate_recovery(symbol: str, state: RCSState, config: RCSConfig) -> tuple:
-    """Hitung (profit_aktual, recovery_usd) setelah unfreeze"""
-    profit = calculate_cycle_profit(state)
-    # Recovery adalah seberapa banyak balance kembali dibanding saat awal freeze
-    recovery = profit - state.freeze_start_floating_usd
-    return profit, recovery

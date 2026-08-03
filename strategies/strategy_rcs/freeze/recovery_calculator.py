@@ -8,6 +8,23 @@ import MetaTrader5 as mt5
 from config.rcs_config import RCSConfig
 from strategies.strategy_rcs.rcs_state import RCSState
 
+def calculate_cycle_profit(state: RCSState) -> float:
+    """Mengambil total profit/loss aktual dari histori transaksi broker untuk siklus ini berdasarkan tiket posisi."""
+    tickets = [state.op1_ticket, state.op2_ticket, state.op3_ticket]
+    total_profit = 0.0
+    
+    for ticket in tickets:
+        if ticket is None:
+            continue
+        deals = mt5.history_deals_get(position=ticket)
+        if deals:
+            for deal in deals:
+                total_profit += deal.profit
+                total_profit += deal.swap
+                total_profit += deal.commission
+                
+    return total_profit
+
 def calculate_recovery(symbol: str, state: RCSState, config: RCSConfig) -> tuple[float, float]:
     """
     Hitung profit tertutup (Closed PnL) sejak masuk freeze.
@@ -15,20 +32,10 @@ def calculate_recovery(symbol: str, state: RCSState, config: RCSConfig) -> tuple
     
     Returns: (total_profit, hasil_recovery)
     """
-    if state.freeze_start_time is None:
-        return 0.0, 0.0
-        
-    start_time = state.freeze_start_time
-    end_time = datetime.datetime.now()
+    total_profit = calculate_cycle_profit(state)
     
-    deals = mt5.history_deals_get(start_time, end_time)
-    if not deals:
-        return 0.0, 0.0
-        
-    total_profit = 0.0
-    for d in deals:
-        if d.symbol == symbol and d.magic in (config.magic_op1, config.magic_op2, config.magic_op3):
-            total_profit += d.profit
+    if state.freeze_start_time is None:
+        return total_profit, 0.0
             
     hasil_recovery = total_profit - state.freeze_start_floating_usd
     return total_profit, hasil_recovery
