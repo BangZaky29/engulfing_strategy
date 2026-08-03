@@ -20,6 +20,7 @@ from utils.colors import Colors, cprint, candle_color
 from .initializer import startup_checks
 from .tfm_logger import log_tfm_snapshot
 from .signal_processor import process_candle_signal
+from .engulfing_notifier import notify_engulfing_system_status
 
 
 def run_bot():
@@ -44,6 +45,9 @@ def run_bot():
     print(f"\n🔄 Memulai scan realtime (interval: {POLL_INTERVAL}s)...")
     print(f"⏰ Trading Schedule: {get_trading_status_text()}")
     print(f"🛡️ Daily Guard     : {get_daily_guard_status_text()}\n")
+
+    # Kirim Notifikasi Sistem Aktif ke WA Outbox
+    notify_engulfing_system_status('START')
 
     try:
         while True:
@@ -121,4 +125,6 @@ def run_bot():
         traceback.print_exc()
 
     finally:
+        # Kirim Notifikasi Sistem Dimatikan ke WA Outbox
+        notify_engulfing_system_status('STOP')
         shutdown_mt5()

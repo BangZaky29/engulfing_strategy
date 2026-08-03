@@ -200,3 +200,35 @@ def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, 
     target_group = config.profit_signal_jid if profit > 0 else config.loss_signal_jid
     
     send_rcs_wa_notif(config, msg, 'RCS_RESULT', target_jid=target_group, media_url=media_url if media_url else None)
+
+def notify_system_status(status: str, config: RCSConfig, extra_info: str = ""):
+    """
+    Kirim notifikasi status sistem (AKTIF / DIMATIKAN) ke RCS_GROUP_JID (Group Status/Skipped).
+    status: 'START' atau 'STOP'
+    """
+    from strategies.strategy_rcs.rcs_schedule import get_rcs_trading_status_text
+    from strategies.strategy_rcs.rcs_daily_guard import get_rcs_daily_guard_status_text
+
+    if status == 'START':
+        msg = (
+            f"🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
+            f"🟢 *SISTEM AKTIF* 🟢\n\n"
+            f"Bot trading RCS telah berhasil dinyalakan dan siap memantau pasar.\n\n"
+            f"• Symbol: {config.symbol}\n"
+            f"• Timeframe: {config.signal_timeframe}\n"
+            f"• Schedule: {get_rcs_trading_status_text(config)}\n"
+            f"• Daily Guard: {get_rcs_daily_guard_status_text(config)}"
+        )
+    else:
+        msg = (
+            f"🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
+            f"🛑 *SISTEM telah di matikan* 🛑\n\n"
+            f"Bot trading RCS telah dihentikan / dimatikan.\n\n"
+            f"• Symbol: {config.symbol}\n"
+            f"• Timeframe: {config.signal_timeframe}"
+        )
+        if extra_info:
+            msg += f"\n• Catatan: {extra_info}"
+
+    # Target: RCS_GROUP_JID
+    send_rcs_wa_notif(config, msg, 'RCS_SYSTEM', target_jid=config.group_jid)

@@ -18,7 +18,7 @@ from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs, 
 from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text
 from strategies.strategy_rcs.rcs_daily_guard import check_rcs_daily_target, get_rcs_daily_guard_status_text
 from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery, calculate_cycle_profit
-from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, notify_open, notify_freeze, notify_result
+from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, notify_open, notify_freeze, notify_result, notify_system_status
 from utils.colors import cprint, Colors
 
 def run_rcs_bot():
@@ -54,6 +54,9 @@ def run_rcs_bot():
     print(f"⏰ Schedule     : {get_rcs_trading_status_text(rcs_cfg)}")
     print(f"🛡️ Daily Guard  : {get_rcs_daily_guard_status_text(rcs_cfg)}")
     print("==================================================")
+    
+    # Kirim Notifikasi Sistem Aktif ke RCS_GROUP_JID
+    notify_system_status('START', rcs_cfg)
     
     state = RCSState()
     last_candle_time = None
@@ -192,7 +195,7 @@ def run_rcs_bot():
                             else:
                                 print(cprint("❌ Gagal memasang OP1. Reset state.", Colors.RED))
                                 state.reset()
-                            
+                             
                     elif state.phase == RCSPhase.OP1:
                         # Manage trigger age kalau pakai trigger lama
                         pass
@@ -289,4 +292,6 @@ def run_rcs_bot():
         import traceback
         traceback.print_exc()
     finally:
+        # Kirim Notifikasi Sistem Dimatikan ke RCS_GROUP_JID
+        notify_system_status('STOP', rcs_cfg)
         shutdown_mt5()
