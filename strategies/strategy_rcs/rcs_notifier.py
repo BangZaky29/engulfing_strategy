@@ -203,32 +203,79 @@ def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, 
 
 def notify_system_status(status: str, config: RCSConfig, extra_info: str = ""):
     """
-    Kirim notifikasi status sistem (AKTIF / DIMATIKAN) ke RCS_GROUP_JID (Group Status/Skipped).
+    Broadcast notifikasi status sistem (AKTIF / DIMATIKAN) untuk Strategi RCS.
+    Di-broadcast ke seluruh group (OP SIGNAL, PROFIT SIGNAL, LOSS SIGNAL, INFO SIGNAL, & GROUP-COPET-SKIPPED).
     status: 'START' atau 'STOP'
     """
     from strategies.strategy_rcs.rcs_schedule import get_rcs_trading_status_text
     from strategies.strategy_rcs.rcs_daily_guard import get_rcs_daily_guard_status_text
 
+    rcs_skip_jid = config.group_jid or os.getenv("RCS_GROUP_JID") or "120363409493021715@g.us"
+    private_jid = config.private_jid or os.getenv("PRIVATE_JID")
+    profit_jid = config.profit_signal_jid or os.getenv("PROFIT_SIGNAL")
+    loss_jid = config.loss_signal_jid or os.getenv("LOSS_SIGNAL")
+    info_jid = os.getenv("GROUP_JID")
+
+    standard_jids = set()
+    for jid in [private_jid, profit_jid, loss_jid, info_jid]:
+        if jid and jid != rcs_skip_jid:
+            standard_jids.add(jid)
+
     if status == 'START':
-        msg = (
-            f"🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
-            f"🟢 *SISTEM AKTIF* 🟢\n\n"
-            f"Bot trading RCS telah berhasil dinyalakan dan siap memantau pasar.\n\n"
+        std_msg = (
+            f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
+            f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]"
+        )
+        op1_info = config.op1_entry_mode
+        if config.op1_entry_mode == "PERCENT":
+            op1_info += f" ({config.entry_percent}%)"
+
+        skipped_msg = (
+            f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
+            f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]\n\n"
+            f"⚙️ INFO CONFIG LENGKAP RCS:\n"
             f"• Symbol: {config.symbol}\n"
-            f"• Timeframe: {config.signal_timeframe}\n"
+            f"• Signal TF: {config.signal_timeframe}\n"
             f"• Schedule: {get_rcs_trading_status_text(config)}\n"
-            f"• Daily Guard: {get_rcs_daily_guard_status_text(config)}"
+            f"• Daily Guard: {get_rcs_daily_guard_status_text(config)}\n"
+            f"• OP1 Setup: {op1_info} ({config.lot_size_op1} Lot | TP: {config.tp_percent}%)\n"
+            f"• OP2 Setup: {config.op2_mode} {config.op2_percent}% ({config.lot_size_op2} Lot | TP: {config.tp2_percent}%)\n"
+            f"• OP3 Setup: {config.op3_mode} {config.op3_percent}% (OP1+OP2 Lot)\n"
+            f"• Filters: Range({config.min_trigger_range}-{config.max_trigger_range}) | Body({config.min_body_percent}-{config.max_body_percent}%) | EMA_Dist({config.min_ema_distance_pts}-{config.max_ema_distance_pts} pts)"
         )
     else:
-        msg = (
-            f"🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
-            f"🛑 *SISTEM telah di matikan* 🛑\n\n"
-            f"Bot trading RCS telah dihentikan / dimatikan.\n\n"
-            f"• Symbol: {config.symbol}\n"
-            f"• Timeframe: {config.signal_timeframe}"
+        std_msg = (
+            f"🛑 SISTEM DIMATIKAN 🛑\n\n"
+            f"🛑 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]"
         )
-        if extra_info:
-            msg += f"\n• Catatan: {extra_info}"
+        skipped_msg = std_msg
 
-    # Target: RCS_GROUP_JID
-    send_rcs_wa_notif(config, msg, 'RCS_SYSTEM', target_jid=config.group_jid)
+    try:
+        sb = get_supabase()
+        outbox_rows = []
+
+        for jid in standard_jids:
+            outbox_rows.append({
+                'source_table': 'rcs_system',
+                'event_type': 'RCS_SYSTEM',
+                'group_jid': jid,
+                'message_type': 'TEXT',
+                'message': std_msg,
+                'dedupe_key': f'rcs_std_{status.lower()}_{jid[:10]}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
+            })
+
+        if rcs_skip_jid:
+            outbox_rows.append({
+                'source_table': 'rcs_system',
+                'event_type': 'RCS_SYSTEM',
+                'group_jid': rcs_skip_jid,
+                'message_type': 'TEXT',
+                'message': skipped_msg,
+                'dedupe_key': f'rcs_skip_{status.lower()}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
+            })
+
+        if outbox_rows:
+            sb.table('wa_outbox').insert(outbox_rows).execute()
+            print(cprint(f"📲 Broadcast Notifikasi RCS System ({status}) ke {len(outbox_rows)} group WA", Colors.GREEN))
+    except Exception as e:
+        print(cprint(f"⚠️ Gagal broadcast WA notif RCS System ({status}): {e}", Colors.RED))
