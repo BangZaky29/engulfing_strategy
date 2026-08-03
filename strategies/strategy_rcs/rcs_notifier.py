@@ -37,9 +37,9 @@ def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCS
         f"Symbol: {symbol}\n"
         f"Pattern: {pattern}\n"
         f"Arah: *{direction}*\n\n"
-        f"Level OP1: {state.op1_level:.5f}\n"
-        f"Level OP2: {state.op2_level:.5f}\n"
-        f"Level OP3: {state.op3_level:.5f}"
+        f"Level OP1: {state.op1_level:.5f} | TP1: {state.tp1_price:.5f}\n"
+        f"Level OP2: {state.op2_level:.5f} | TP2: {state.tp2_price:.5f}\n"
+        f"Level OP3: {state.op3_level:.5f} | Mode: {config.op3_mode}"
     )
     send_rcs_wa_notif(config, msg, 'RCS_TRIGGER')
 

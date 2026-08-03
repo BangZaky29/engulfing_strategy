@@ -3,8 +3,8 @@
 # Exports modul engine 
 # =====================================================
 
-from .op1_executor import try_execute_op1
+from .op1_executor import place_op1_order
+from .op2_handler import place_op2_order
+from .op3_handler import place_op3_order
 from .tp_checker import check_tp
-from .op2_handler import check_op2
-from .op3_handler import check_op3
 from .sl_checker import check_sl

@@ -18,6 +18,11 @@ def detect_engulfing(candle_data: dict, point: float) -> str | None:
     
     p_high = candle_data["prev_high"]
     p_low = candle_data["prev_low"]
+    p_is_bullish = candle_data["prev_is_bullish"]
+    
+    # 0. Syarat beda warna (Reversal)
+    if c_is_bullish == p_is_bullish:
+        return None
     
     # 1. Pastikan curr menelan full range prev (high dan low prev ada di dalam high dan low curr)
     if not (c_high > p_high and c_low < p_low):

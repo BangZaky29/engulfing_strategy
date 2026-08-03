@@ -12,7 +12,8 @@ from config.rcs_config import RCSConfig
 from mt5_client import init_mt5, shutdown_mt5, get_closed_candles
 from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
 from strategies.strategy_rcs.trigger import detect_engulfing, detect_ict, apply_all_filters, calculate_levels
-from strategies.strategy_rcs.engine import try_execute_op1, check_tp, check_op2, check_op3, check_sl
+from strategies.strategy_rcs.engine import place_op1_order, place_op2_order, place_op3_order
+from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs
 from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery
 from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, notify_open, notify_freeze, notify_result
 from utils.colors import cprint, Colors
@@ -133,63 +134,73 @@ def run_rcs_bot():
                             state.op3_level = levels["op3_level"]
                             state.trigger_age = 0
                             
-                            print(f"   => OP1 Target: {state.op1_level:.5f}")
-                            print(f"   => OP2 Target: {state.op2_level:.5f}")
-                            print(f"   => OP3 Target: {state.op3_level:.5f}")
-                            
-                            if rcs_cfg.notif_trigger:
-                                notify_trigger(symbol, pattern_name, direction, state, rcs_cfg)
+                            # Langsung tembak 3 Pending Order / Market Order!
+                            current_price = tick.ask if direction == "BUY" else tick.bid
+                            if place_op1_order(symbol, current_price, state, rcs_cfg):
+                                place_op2_order(symbol, state, rcs_cfg)
+                                place_op3_order(symbol, state, rcs_cfg)
+                                
+                                # Info ditaruh setelah place order agar TP dan SL sudah terhitung di state
+                                print(f"   => OP1 Target: {state.op1_level:.5f} | TP: {state.tp1_price:.5f}")
+                                print(f"   => OP2 Target: {state.op2_level:.5f} | TP: {state.tp2_price:.5f}")
+                                print(f"   => OP3 Target: {state.op3_level:.5f} | Mode: {rcs_cfg.op3_mode}")
+                                
+                                if rcs_cfg.notif_trigger:
+                                    notify_trigger(symbol, pattern_name, direction, state, rcs_cfg)
+                                    
+                                notify_open(symbol, "OP1", state.op1_ticket, state.op1_open_price, state.tp1_price, rcs_cfg)
+                            else:
+                                print(cprint("❌ Gagal memasang OP1. Reset state.", Colors.RED))
+                                state.reset()
                             
                     elif state.phase == RCSPhase.OP1:
                         # Manage trigger age kalau pakai trigger lama
                         pass
                         
-            # 3. Fast Tick Polling untuk Eksekusi dan Monitoring
+            # 3. Fast Tick Polling untuk Monitoring Pending Order & Posisi
             if state.phase == RCSPhase.OP1:
-                # Jika belum ada OP1, coba eksekusi OP1
-                if state.op1_ticket is None:
-                    if try_execute_op1(symbol, tick, info, state, rcs_cfg):
-                        notify_open(symbol, "OP1", state.op1_ticket, state.op1_open_price, state.tp1_price, rcs_cfg)
-                
-                # Jika OP1 sudah ada, pantau TP, SL, dan OP2/OP3
                 if state.op1_ticket is not None:
-                    # 0. Cek perubahan phase karena intervensi luar (Vanished position)
+                    # 0. Cek apakah OP1 lenyap dari peredaran (Posisi kosong DAN Order kosong)
                     pos1 = mt5.positions_get(ticket=state.op1_ticket)
-                    if not pos1:
-                        print(cprint(f"👻 Posisi OP1 hilang dari market. Reset state.", Colors.YELLOW))
-                        notify_result(symbol, "Posisi tertutup (SL/Manual)", 0.0, 0.0, rcs_cfg)
+                    ord1 = mt5.orders_get(ticket=state.op1_ticket)
+                    
+                    if not pos1 and not ord1:
+                        print(cprint(f"👻 OP1 (Tkt:{state.op1_ticket}) hilang dari market (TP/SL Hit atau Cancel).", Colors.YELLOW))
+                        print(cprint(f"🧹 Membersihkan sisa pending order OP2 dan OP3...", Colors.YELLOW))
+                        if state.op2_ticket:
+                            cancel_pending_order_rcs(state.op2_ticket)
+                        if state.op3_ticket:
+                            cancel_pending_order_rcs(state.op3_ticket)
+                        
+                        notify_result(symbol, "Siklus Selesai (Posisi/Order Hilang)", 0.0, 0.0, rcs_cfg)
                         state.reset()
                         continue
-
-                    # 1. Cek Stop Loss terlebih dahulu
-                    if check_sl(symbol, tick, state, rcs_cfg):
-                        continue
                         
-                    # 2. Cek Take Profit
-                    if check_tp(symbol, tick, state, rcs_cfg):
-                        notify_result(symbol, "Take Profit Hit", 0.0, 0.0, rcs_cfg)
-                        state.reset()
-                        continue
+                    # 1. Cek transisi OP2 dari Order menjadi Position
+                    if state.op2_ticket:
+                        pos2 = mt5.positions_get(ticket=state.op2_ticket)
+                        ord2 = mt5.orders_get(ticket=state.op2_ticket)
                         
-                    # 3. Cek OP2
-                    was_frozen_by_op2 = False
-                    if check_op2(symbol, tick, info, state, rcs_cfg):
-                        if state.phase == RCSPhase.FREEZE:
-                            enter_freeze(state, rcs_cfg)
-                            notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
-                            was_frozen_by_op2 = True
-                        else:
-                            notify_open(symbol, "OP2 (Hedge Reentry)", state.op2_ticket, state.tp2_price, state.tp2_price, rcs_cfg)
-                        
-                    if was_frozen_by_op2:
-                        continue
-                        
-                    # 4. Cek OP3 (hanya jika OP2 sudah ada dan kita belum freeze)
-                    if state.op2_ticket is not None and state.phase != RCSPhase.FREEZE:
-                        if check_op3(symbol, tick, info, state, rcs_cfg):
-                            if state.phase == RCSPhase.FREEZE:
+                        if pos2 and not ord2:
+                            # OP2 baru saja tertrigger menjadi posisi!
+                            if rcs_cfg.op2_mode == "HEDGE":
+                                print(cprint(f"❄️ HEDGE (OP2) Terbuka. Beralih ke PHASE_FREEZE.", Colors.CYAN))
+                                state.phase = RCSPhase.FREEZE
+                                state.freeze_is_hedge = True
                                 enter_freeze(state, rcs_cfg)
                                 notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
+                                
+                    # 2. Cek transisi OP3 dari Order menjadi Position
+                    if state.op3_ticket and state.phase != RCSPhase.FREEZE:
+                        pos3 = mt5.positions_get(ticket=state.op3_ticket)
+                        ord3 = mt5.orders_get(ticket=state.op3_ticket)
+                        if pos3 and not ord3:
+                            print(cprint(f"❄️ HEDGE (OP3) Terbuka. Beralih ke PHASE_FREEZE.", Colors.CYAN))
+                            state.phase = RCSPhase.FREEZE
+                            state.freeze_is_hedge = True
+                            enter_freeze(state, rcs_cfg)
+                            notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
+                                # OP3 doesn't need else logic here since it's just a freeze trigger if it hits
                 
             elif state.phase == RCSPhase.FREEZE:
                 if check_unfreeze(symbol, state, rcs_cfg):

@@ -5,62 +5,43 @@
 
 from config.rcs_config import RCSConfig
 from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
-from strategies.strategy_rcs.rcs_order_manager import send_market_order_rcs
+from strategies.strategy_rcs.rcs_order_manager import send_pending_order_rcs
 from utils.colors import cprint, Colors
+import MetaTrader5 as mt5
 
-def check_op3(symbol: str, tick, info, state: RCSState, config: RCSConfig) -> bool:
+def place_op3_order(symbol: str, state: RCSState, config: RCSConfig) -> bool:
     """
-    Cek apakah harga menyentuh level OP3 khusus untuk HEDGE.
-    (Hanya dipanggil jika OP2_MODE == HEDGE_REENTRY)
+    Pasang pending order OP3 (HEDGE) langsung ke MT5 (Stop Order).
+    (Hanya dieksekusi jika OP3 mode != SL)
     """
-    # Jika OP2 belum ada atau OP3 sudah ada, lewati
-    if state.op2_ticket is None or state.op3_ticket is not None:
+    if state.op3_ticket is not None:
         return False
         
-    # Jika OP3 mode-nya SL, di-handle sl_checker
     if config.op3_mode == "SL":
-        return False
+        return False # SL di-handle langsung di SL parameter OP1 & OP2
         
-    target_price = state.op3_level
-    current_price = tick.bid if state.trigger_direction == "BUY" else tick.ask
+    action_str = "SELL" if state.trigger_direction == "BUY" else "BUY"
+    # Harga makin memburuk (menyentuh OP3), kita mau cut loss virtual via HEDGE, jadi Stop Order
+    order_type = mt5.ORDER_TYPE_SELL_STOP if state.trigger_direction == "BUY" else mt5.ORDER_TYPE_BUY_STOP
     
-    op3_hit = False
-    if state.trigger_direction == "BUY":
-        if current_price <= target_price:
-            op3_hit = True
-    else:
-        if current_price >= target_price:
-            op3_hit = True
-            
-    if op3_hit:
-        # HEDGE
-        action_str = "SELL" if state.trigger_direction == "BUY" else "BUY"
-        execute_price = tick.ask if action_str == "BUY" else tick.bid
+    lot_size = round(config.lot_size_op1 + config.lot_size_op2, 2)
+    
+    print(cprint(f"⚡ Memasang Pending Order OP3 {action_str} (HEDGE)...", Colors.CYAN))
+    
+    res = send_pending_order_rcs(
+        symbol=symbol,
+        order_type=order_type,
+        price=state.op3_level,
+        lot_size=lot_size,
+        magic_number=config.magic_op3,
+        comment="RCS_OP3",
+        sl=0.0,
+        tp=0.0
+    )
+    
+    if res:
+        state.op3_ticket = res.order
+        print(cprint(f"✅ OP3 Berhasil Terpasang! Tkt: {res.order}, Prc: {state.op3_level:.5f}", Colors.GREEN))
+        return True
         
-        # OP3 Lot = OP1 + OP2
-        lot_size = config.lot_size_op1 + config.lot_size_op2
-        
-        print(cprint(f"⚡ Harga menyentuh OP3 ({target_price:.5f}). Eksekusi OP3 {action_str} HEDGE...", Colors.CYAN))
-        
-        res = send_market_order_rcs(
-            symbol=symbol,
-            action_str=action_str,
-            price=execute_price,
-            lot_size=lot_size,
-            magic_number=config.magic_op3,
-            comment="RCS_OP3"
-        )
-        
-        if res:
-            state.op3_ticket = res.order
-            print(cprint(f"❄️ HEDGE (OP3) Terbuka. Beralih ke PHASE_FREEZE.", Colors.CYAN))
-            state.phase = RCSPhase.FREEZE
-            state.freeze_is_hedge = True
-            
-            if config.notif_open:
-                # TODO: WA Notification open posisi OP3
-                pass
-                
-            return True
-            
     return False

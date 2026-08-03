@@ -5,8 +5,9 @@
 
 from config.rcs_config import RCSConfig
 from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
-from strategies.strategy_rcs.rcs_order_manager import send_market_order_rcs
+from strategies.strategy_rcs.rcs_order_manager import send_pending_order_rcs
 from utils.colors import cprint, Colors
+import MetaTrader5 as mt5
 
 def calculate_tp2_price(op1_price: float, op2_price: float, state: RCSState, config: RCSConfig) -> float:
     """Hitung letak TP2 khusus mode HEDGE_REENTRY."""
@@ -14,9 +15,8 @@ def calculate_tp2_price(op1_price: float, op2_price: float, state: RCSState, con
     risk_range = state.trigger_risk_range
     
     if config.tp2_mode == "PERCENT":
-        # Target TP2 berbasis persentase jarak OP1 ke OP2 (range risiko)
-        dist = abs(state.op1_level - state.op2_level)
-        tp_dist = dist * (config.tp2_percent / 100.0)
+        # Target TP2 berbasis persentase dari Total Risk Range
+        tp_dist = risk_range * (config.tp2_percent / 100.0)
     else:
         # USD Mode
         tp_dist = risk_range * 1.0
@@ -31,68 +31,47 @@ def calculate_tp2_price(op1_price: float, op2_price: float, state: RCSState, con
         return op2_price - tp_dist
 
 
-def check_op2(symbol: str, tick, info, state: RCSState, config: RCSConfig) -> bool:
+def place_op2_order(symbol: str, state: RCSState, config: RCSConfig) -> bool:
     """
-    Cek apakah harga menyentuh level OP2 dan lakukan eksekusi jika perlu.
+    Pasang pending order OP2 langsung ke MT5 (Limit atau Stop Order).
     """
-    if state.op1_ticket is None or state.op2_ticket is not None:
+    if state.op2_ticket is not None:
         return False
         
     if config.op2_mode == "SL":
-        return False # SL di-handle oleh sl_checker
+        return False # SL di-handle langsung di SL parameter OP1
         
-    target_price = state.op2_level
-    current_price = tick.bid if state.trigger_direction == "BUY" else tick.ask
+    tp = 0.0
+    sl = state.op3_level if config.op3_mode == "SL" else 0.0
     
-    op2_hit = False
-    if state.trigger_direction == "BUY":
-        if current_price <= target_price:
-            op2_hit = True
-    else:
-        if current_price >= target_price:
-            op2_hit = True
-            
-    if op2_hit:
-        action_str = ""
-        is_hedge = False
+    if config.op2_mode == "HEDGE":
+        action_str = "SELL" if state.trigger_direction == "BUY" else "BUY"
+        # Harga memburuk (OP2), mau HEDGE (potong berlawanan), jadi Stop Order
+        order_type = mt5.ORDER_TYPE_SELL_STOP if state.trigger_direction == "BUY" else mt5.ORDER_TYPE_BUY_STOP
+    else: # HEDGE_REENTRY
+        action_str = state.trigger_direction
+        # Harga memburuk, Averaging searah, jadi Limit Order
+        order_type = mt5.ORDER_TYPE_BUY_LIMIT if state.trigger_direction == "BUY" else mt5.ORDER_TYPE_SELL_LIMIT
         
-        if config.op2_mode == "HEDGE":
-            action_str = "SELL" if state.trigger_direction == "BUY" else "BUY"
-            is_hedge = True
-        elif config.op2_mode == "HEDGE_REENTRY":
-            action_str = state.trigger_direction
-            is_hedge = False
-            
-        print(cprint(f"⚡ Harga menyentuh level OP2 ({target_price:.5f}). Mengeksekusi OP2 {action_str}...", Colors.CYAN))
+        tp = calculate_tp2_price(state.op1_level, state.op2_level, state, config)
+        state.tp2_price = tp
+
+    print(cprint(f"⚡ Memasang Pending Order OP2 {action_str} ({config.op2_mode})...", Colors.CYAN))
+    
+    res = send_pending_order_rcs(
+        symbol=symbol,
+        order_type=order_type,
+        price=state.op2_level,
+        lot_size=config.lot_size_op2,
+        magic_number=config.magic_op2,
+        comment="RCS_OP2",
+        sl=sl,
+        tp=tp
+    )
+    
+    if res:
+        state.op2_ticket = res.order
+        print(cprint(f"✅ OP2 Berhasil Terpasang! Tkt: {res.order}, Prc: {state.op2_level:.5f}, TP: {tp:.5f}, SL: {sl:.5f}", Colors.GREEN))
+        return True
         
-        # Eksekusi Market
-        execute_price = tick.ask if action_str == "BUY" else tick.bid
-        res = send_market_order_rcs(
-            symbol=symbol,
-            action_str=action_str,
-            price=execute_price,
-            lot_size=config.lot_size_op2,
-            magic_number=config.magic_op2,
-            comment="RCS_OP2"
-        )
-        
-        if res:
-            state.op2_ticket = res.order
-            
-            if is_hedge:
-                print(cprint(f"❄️ HEDGE (OP2) Terbuka. Beralih ke PHASE_FREEZE.", Colors.CYAN))
-                state.phase = RCSPhase.FREEZE
-                state.freeze_is_hedge = True
-                # Nanti set floating_usd di phase freeze manager (Phase 5)
-            else:
-                # HEDGE_REENTRY
-                state.tp2_price = calculate_tp2_price(state.op1_open_price, res.price, state, config)
-                print(cprint(f"✅ HEDGE_REENTRY (OP2) Terbuka. Target baru TP2: {state.tp2_price:.5f}", Colors.GREEN))
-                
-            if config.notif_open:
-                # TODO: WA Notification open posisi OP2
-                pass
-                
-            return True
-            
     return False

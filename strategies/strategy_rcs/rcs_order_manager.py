@@ -5,7 +5,7 @@
 
 import MetaTrader5 as mt5
 
-def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: float, magic_number: int, comment: str):
+def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: float, magic_number: int, comment: str, sl: float = 0.0, tp: float = 0.0):
     """
     Kirim market order (Instant Execution).
     action_str: "BUY" atau "SELL"
@@ -18,6 +18,8 @@ def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: 
         "volume": float(lot_size),
         "type": order_type,
         "price": price,
+        "sl": float(sl) if sl > 0 else 0.0,
+        "tp": float(tp) if tp > 0 else 0.0,
         "deviation": 20,
         "magic": magic_number,
         "comment": comment,
@@ -69,3 +71,49 @@ def get_positions_by_magic(symbol: str, magic: int) -> list:
     if pos is None:
         return []
     return [p for p in pos if p.magic == magic]
+
+def send_pending_order_rcs(symbol: str, order_type: int, price: float, lot_size: float, magic_number: int, comment: str, sl: float = 0.0, tp: float = 0.0):
+    """
+    Kirim pending order (BUY_LIMIT, SELL_LIMIT, BUY_STOP, SELL_STOP).
+    """
+    req = {
+        "action": mt5.TRADE_ACTION_PENDING,
+        "symbol": symbol,
+        "volume": float(lot_size),
+        "type": order_type,
+        "price": price,
+        "sl": float(sl) if sl > 0 else 0.0,
+        "tp": float(tp) if tp > 0 else 0.0,
+        "deviation": 20,
+        "magic": magic_number,
+        "comment": comment,
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_RETURN, # RETURN for pending orders
+    }
+    
+    res = mt5.order_send(req)
+    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+        return res
+    else:
+        print(f"❌ Pending Order Gagal: {res.comment if res else 'Unknown'} (retcode: {res.retcode if res else 'None'})")
+        return None
+
+def cancel_pending_order_rcs(ticket: int) -> bool:
+    """
+    Batalkan pending order yang belum tereksekusi.
+    """
+    req = {
+        "action": mt5.TRADE_ACTION_REMOVE,
+        "order": ticket
+    }
+    res = mt5.order_send(req)
+    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+        return True
+    return False
+
+def get_orders_by_magic(symbol: str, magic: int) -> list:
+    """Ambil semua pending order aktif berdasar magic number"""
+    orders = mt5.orders_get(symbol=symbol)
+    if orders is None:
+        return []
+    return [o for o in orders if o.magic == magic]

@@ -14,8 +14,11 @@ def calculate_levels(c_close: float, risk_range: float, direction: str, config: 
         # OP2 ada di bawahnya lagi, dst (pullback entry).
         # Jika INSTANT_ZERO, op1_level tetap dihitung (untuk acuan TP dll), 
         # meski aktualnya dieksekusi market.
-        
-        op1_dist = risk_range * (config.entry_percent / 100.0)
+        if config.op1_entry_mode == "INSTANT_ZERO":
+            op1_dist = 0.0
+        else:
+            op1_dist = risk_range * (config.entry_percent / 100.0)
+            
         op2_dist = risk_range * (config.op2_percent / 100.0)
         op3_dist = risk_range * (config.op3_percent / 100.0)
         
@@ -24,8 +27,11 @@ def calculate_levels(c_close: float, risk_range: float, direction: str, config: 
         op3_level = c_close - op3_dist
         
     else:
-        # Untuk SELL, target entry (OP1) ada di atas close
-        op1_dist = risk_range * (config.entry_percent / 100.0)
+        if config.op1_entry_mode == "INSTANT_ZERO":
+            op1_dist = 0.0
+        else:
+            op1_dist = risk_range * (config.entry_percent / 100.0)
+            
         op2_dist = risk_range * (config.op2_percent / 100.0)
         op3_dist = risk_range * (config.op3_percent / 100.0)
         
