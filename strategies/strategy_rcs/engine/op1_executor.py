@@ -38,7 +38,8 @@ def place_op1_order(symbol: str, current_price: float, state: RCSState, config: 
         return False
         
     sl = state.op3_level if config.op3_mode == "SL" else 0.0
-    tp = calculate_tp1_price(state.op1_level, state, config)
+    actual_entry_price = current_price if config.op1_entry_mode == "INSTANT_ZERO" else state.op1_level
+    tp = calculate_tp1_price(actual_entry_price, state, config)
     state.tp1_price = tp
     
     print(cprint(f"⚡ Memasang OP1 {state.trigger_direction}...", Colors.CYAN))
