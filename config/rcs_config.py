@@ -11,8 +11,8 @@ class RCSConfig:
     enabled: bool = field(
         default_factory=lambda: os.getenv("RCS_ENABLED", "false").lower() == "true"
     )
-    symbol: str = field(
-        default_factory=lambda: os.getenv("RCS_SYMBOL", "XAUUSD")
+    symbols: list = field(
+        default_factory=lambda: [x.strip() for x in os.getenv("RCS_SYMBOL", "XAUUSD").split(",") if x.strip()]
     )
     signal_timeframe: str = field(
         default_factory=lambda: os.getenv("RCS_SIGNAL_TIMEFRAME", "M5")
