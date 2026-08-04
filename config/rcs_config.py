@@ -216,7 +216,7 @@ class RCSConfig:
     )
 
     @classmethod
-    def from_env(cls, symbol: str = None) -> "RCSConfig":
+    def from_env(cls, symbol: str | None = None) -> "RCSConfig":
         import dataclasses
         config = cls()
         if not symbol:
@@ -240,7 +240,7 @@ class RCSConfig:
                 if f.type == bool:
                     setattr(config, f.name, val.lower() == "true")
                 elif f.type == int:
-                    setattr(config, f.name, int(val))
+                    setattr(config, f.name, int(float(val)))
                 elif f.type == float:
                     setattr(config, f.name, float(val))
                 else:
