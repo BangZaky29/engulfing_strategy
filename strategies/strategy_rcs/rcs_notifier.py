@@ -50,10 +50,9 @@ def send_rcs_wa_notif(config: RCSConfig, message: str, event_type: str, target_j
     except Exception as e:
         print(cprint(f"⚠️ Gagal kirim WA notif ({event_type}): {e}", Colors.RED))
 
-def generate_and_upload_rcs_screenshot(state, config: RCSConfig) -> str:
+def generate_and_upload_rcs_screenshot(symbol: str, state, config: RCSConfig) -> str:
     """Generates screenshot menggunakan Timeframe dinamis RCS_SIGNAL_TIMEFRAME dan mengunggah ke Supabase Storage."""
     try:
-        symbol = config.symbol
         tf_label = config.signal_timeframe
         mt5_cfg = MT5Config()
         tf_const = mt5_cfg.get_mt5_timeframe(tf_label)
@@ -186,7 +185,7 @@ def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, 
     # 1. Generate & Upload Screenshot if state is provided
     media_url = ""
     if state is not None:
-        media_url = generate_and_upload_rcs_screenshot(state, config)
+        media_url = generate_and_upload_rcs_screenshot(symbol, state, config)
         
     msg = (
         f"📊 *RCS RESULT*\n\n"
@@ -235,7 +234,7 @@ def notify_system_status(status: str, config: RCSConfig, extra_info: str = ""):
             f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
             f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]\n\n"
             f"⚙️ INFO CONFIG LENGKAP RCS:\n"
-            f"• Symbol: {config.symbol}\n"
+            f"• Symbols: {', '.join(config.symbols)}\n"
             f"• Signal TF: {config.signal_timeframe}\n"
             f"• Schedule: {get_rcs_trading_status_text(config)}\n"
             f"• Daily Guard: {get_rcs_daily_guard_status_text(config)}\n"

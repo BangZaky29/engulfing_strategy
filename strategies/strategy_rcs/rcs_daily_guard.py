@@ -20,7 +20,7 @@ def get_rcs_today_closed_pnl(config: RCSConfig) -> float:
     target_magics = (config.magic_op1, config.magic_op2, config.magic_op3)
     
     for deal in deals:
-        if deal.symbol == config.symbol and deal.magic in target_magics:
+        if deal.symbol in config.symbols and deal.magic in target_magics:
             total_pnl += deal.profit
             total_pnl += deal.swap
             total_pnl += deal.commission
