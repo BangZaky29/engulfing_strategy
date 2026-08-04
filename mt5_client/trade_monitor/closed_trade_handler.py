@@ -296,6 +296,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                     ema_cfg=ema_cfg,
                     mode=info['mode'],
                     entry_time=entry_time,
+                    trigger_time=entry_time - tf_seconds if entry_time else None,
                     entry_price=entry_price,
                     exit_time=exit_time,
                     exit_price=exit_price,

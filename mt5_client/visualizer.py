@@ -20,6 +20,7 @@ def generate_screenshot(rates,
                         entry_price: float | None = None,
                         exit_time: int | None = None,
                         exit_price: float | None = None,
+                        trigger_time: int | None = None,
                         tf_label: str = "M1",
                         output_dir: str = "temp_screenshots",
                         num_candles: int = 30) -> str | None:
@@ -66,32 +67,36 @@ def generate_screenshot(rates,
             mpf.make_addplot(df_cropped['ema_slow'], color='yellow', width=1.0)
         ]
 
-        # Konfigurasi Tanda Panah (Arrow) HANYA untuk C2
-        if entry_time:
-            # Cari waktu open candle C3 (saat eksekusi)
+        # Konfigurasi Tanda Panah (Arrow) HANYA untuk C1 trigger candle
+        # Jika trigger_time diberikan (RCS mengirim trigger_timestamp, Engulfing mengirim C0 - tf_seconds)
+        target_trigger_time = trigger_time
+        if not target_trigger_time and entry_time:
+            # Fallback untuk backward compatibility
             tf_seconds = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600}.get(tf_label, 60)
-            c3_candle_time = pd.to_datetime(entry_time - (entry_time % tf_seconds), unit='s')
+            target_trigger_time = entry_time - tf_seconds
+
+        if target_trigger_time:
+            tf_seconds = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600}.get(tf_label, 60)
+            # Alignment ke awal waktu candle (C1)
+            c1_candle_time = pd.to_datetime(target_trigger_time - (target_trigger_time % tf_seconds), unit='s')
             
-            # C2 adalah candle persis sebelum C3
-            c2_candle_time = c3_candle_time - pd.Timedelta(seconds=tf_seconds)
+            c1_markers = [float('nan')] * len(df_cropped)
             
-            c2_markers = [float('nan')] * len(df_cropped)
-            
-            # Cari index posisi C2
+            # Cari index posisi C1
             for i, idx_time in enumerate(df_cropped.index):
-                if idx_time == c2_candle_time:
+                if idx_time == c1_candle_time:
                     if mode == "BUY":
-                        # C2 Hijau (Bullish Engulfing). Panah putih ke ATAS di bawah candle C2.
+                        # C1 Hijau (Bullish Engulfing). Panah putih ke ATAS di bawah candle C1.
                         y_pos = df_cropped.loc[idx_time, 'low']
                         margin = (df_cropped.loc[idx_time, 'high'] - df_cropped.loc[idx_time, 'low']) * 0.1
-                        c2_markers[i] = y_pos - (margin if margin > 0 else 0.5)
-                        ap.append(mpf.make_addplot(c2_markers, type='scatter', markersize=150, marker='^', color='white'))
+                        c1_markers[i] = y_pos - (margin if margin > 0 else 0.5)
+                        ap.append(mpf.make_addplot(c1_markers, type='scatter', markersize=150, marker='^', color='white'))
                     else:
-                        # C2 Merah (Bearish Engulfing). Panah putih ke BAWAH di atas candle C2.
+                        # C1 Merah (Bearish Engulfing). Panah putih ke BAWAH di atas candle C1.
                         y_pos = df_cropped.loc[idx_time, 'high']
                         margin = (df_cropped.loc[idx_time, 'high'] - df_cropped.loc[idx_time, 'low']) * 0.1
-                        c2_markers[i] = y_pos + (margin if margin > 0 else 0.5)
-                        ap.append(mpf.make_addplot(c2_markers, type='scatter', markersize=150, marker='v', color='white'))
+                        c1_markers[i] = y_pos + (margin if margin > 0 else 0.5)
+                        ap.append(mpf.make_addplot(c1_markers, type='scatter', markersize=150, marker='v', color='white'))
         
         alines_conf = None
         if entry_time and exit_time and entry_price and exit_price:

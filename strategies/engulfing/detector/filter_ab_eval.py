@@ -20,7 +20,8 @@ from .skip_reasons_def import (
     skip_pattern_size_invalid,
     skip_grade_below_min,
     skip_ema_distance_too_close_m5,
-    skip_ema_distance_too_far_m5
+    skip_ema_distance_too_far_m5,
+    skip_body_too_small
 )
 
 def evaluate_filters_ab(
@@ -70,6 +71,13 @@ def evaluate_filters_ab(
     elif c2_is_doji:
         if cfg.active_filter_strategy != 'B':
             skip_reason = skip_c2_doji_invalid()
+
+    # H1 C1 BODY PERCENT CHECK (Maling strategy specific filter)
+    if not skip_reason and candle_data.get("timeframe") == "H1":
+        min_body_pct = cfg.get_min_body_percent(symbol)
+        body_pct = candle_data.get("body_pct", 0.0)
+        if body_pct < min_body_pct:
+            skip_reason = skip_body_too_small(body_pct, min_body_pct)
 
     if skip_reason:
         if verbose:

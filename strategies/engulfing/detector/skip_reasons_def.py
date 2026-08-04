@@ -16,6 +16,9 @@ def skip_pattern_size_invalid_b(pts: int) -> str:
 def skip_pattern_size_invalid(pts: int) -> str:
     return f"Pattern size invalid ({pts} pts)"
 
+def skip_body_too_small(body_pct: float, min_pct: float) -> str:
+    return f"Ketebalan Body C1 terlalu kecil ({body_pct:.1f}% < {min_pct:.1f}%)"
+
 def skip_grade_below_min(grade: str, min_grade: str) -> str:
     return f"Grade {grade} di bawah batas {min_grade}"
 

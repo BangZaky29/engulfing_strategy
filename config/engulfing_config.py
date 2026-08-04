@@ -97,4 +97,13 @@ class EngulfingConfig:
         max_val = int(os.getenv(max_key, str(default_max)))
         return min_val, max_val
 
+    def get_min_body_percent(self, symbol: str) -> float:
+        """Fetch symbol-specific minimum body percentage for H1 trigger."""
+        sym_clean = symbol.upper().replace("-", "_").replace(" ", "_")
+        default_min = float(os.getenv("MIN_BODY_PERCENT", "30.0"))
+        
+        # Look up env variables
+        min_key = f"MIN_BODY_PERCENT_{sym_clean}"
+        return float(os.getenv(min_key, str(default_min)))
+
 
