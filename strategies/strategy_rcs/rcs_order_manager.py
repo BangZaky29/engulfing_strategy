@@ -10,9 +10,11 @@ def get_filling_mode(symbol: str) -> int:
     if not info:
         return mt5.ORDER_FILLING_IOC
     # Beberapa broker HANYA mendukung FOK, beberapa IOC.
-    if (info.filling_mode & mt5.SYMBOL_FILLING_FOK) == mt5.SYMBOL_FILLING_FOK:
+    # Di Python MT5, SYMBOL_FILLING_FOK dan IOC tidak diexpose secara konstan.
+    # Nilai bitmask aslinya: FOK = 1, IOC = 2
+    if (info.filling_mode & 1) == 1:
         return mt5.ORDER_FILLING_FOK
-    elif (info.filling_mode & mt5.SYMBOL_FILLING_IOC) == mt5.SYMBOL_FILLING_IOC:
+    elif (info.filling_mode & 2) == 2:
         return mt5.ORDER_FILLING_IOC
     else:
         return mt5.ORDER_FILLING_RETURN
