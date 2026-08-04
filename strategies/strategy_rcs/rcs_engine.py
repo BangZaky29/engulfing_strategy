@@ -308,5 +308,6 @@ def run_rcs_bot():
         traceback.print_exc()
     finally:
         # Kirim Notifikasi Sistem Dimatikan ke RCS_GROUP_JID
-        notify_system_status('STOP', rcs_cfg)
+        if 'rcs_configs' in locals():
+            notify_system_status('STOP', rcs_configs)
         shutdown_mt5()

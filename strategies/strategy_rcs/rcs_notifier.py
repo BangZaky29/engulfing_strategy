@@ -223,57 +223,62 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
         sb = get_supabase()
         outbox_rows = []
 
-        for symbol, config in configs.items():
-            if status == 'START':
-                std_msg = (
-                    f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
-                    f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]"
-                )
+        if status == 'START':
+            std_msg = (
+                f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
+                f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]"
+            )
+            
+            skipped_msg_lines = [
+                f"🟢 SISTEM DIAKTIFKAN 🟢\n\n",
+                f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]\n\n"
+            ]
+            
+            for symbol, config in configs.items():
                 op1_info = config.op1_entry_mode
                 if config.op1_entry_mode == "PERCENT":
                     op1_info += f" ({config.entry_percent}%)"
+                    
+                skipped_msg_lines.append(f"⚙️ INFO CONFIG RCS [{symbol}]:")
+                skipped_msg_lines.append(f"• Signal TF: {config.signal_timeframe}")
+                skipped_msg_lines.append(f"• Schedule: {get_rcs_trading_status_text(config)}")
+                skipped_msg_lines.append(f"• Daily Guard: {get_rcs_daily_guard_status_text(config)}")
+                skipped_msg_lines.append(f"• OP1 Setup: {op1_info} ({config.lot_size_op1} Lot | TP: {config.tp_percent}%)")
+                skipped_msg_lines.append(f"• OP2 Setup: {config.op2_mode} {config.op2_percent}% ({config.lot_size_op2} Lot | TP: {config.tp2_percent}%)")
+                skipped_msg_lines.append(f"• OP3 Setup: {config.op3_mode} {config.op3_percent}% (OP1+OP2 Lot)")
+                skipped_msg_lines.append(f"• Filters: Range({config.min_trigger_range}-{config.max_trigger_range}) | Body({config.min_body_percent}-{config.max_body_percent}%) | EMA_Dist({config.min_ema_distance_pts}-{config.max_ema_distance_pts} pts)\n")
+                
+            skipped_msg = "\n".join(skipped_msg_lines).strip()
+            
+        else:
+            std_msg = (
+                f"🛑 SISTEM DIMATIKAN 🛑\n\n"
+                f"🛑 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]"
+            )
+            skipped_msg = std_msg
 
-                skipped_msg = (
-                    f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
-                    f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]\n\n"
-                    f"⚙️ INFO CONFIG RCS [{symbol}]:\n"
-                    f"• Signal TF: {config.signal_timeframe}\n"
-                    f"• Schedule: {get_rcs_trading_status_text(config)}\n"
-                    f"• Daily Guard: {get_rcs_daily_guard_status_text(config)}\n"
-                    f"• OP1 Setup: {op1_info} ({config.lot_size_op1} Lot | TP: {config.tp_percent}%)\n"
-                    f"• OP2 Setup: {config.op2_mode} {config.op2_percent}% ({config.lot_size_op2} Lot | TP: {config.tp2_percent}%)\n"
-                    f"• OP3 Setup: {config.op3_mode} {config.op3_percent}% (OP1+OP2 Lot)\n"
-                    f"• Filters: Range({config.min_trigger_range}-{config.max_trigger_range}) | Body({config.min_body_percent}-{config.max_body_percent}%) | EMA_Dist({config.min_ema_distance_pts}-{config.max_ema_distance_pts} pts)"
-                )
-            else:
-                std_msg = (
-                    f"🛑 SISTEM DIMATIKAN 🛑\n\n"
-                    f"🛑 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)] - {symbol}"
-                )
-                skipped_msg = std_msg
+        for jid in standard_jids:
+            outbox_rows.append({
+                'source_table': 'rcs_system',
+                'event_type': 'RCS_SYSTEM',
+                'group_jid': jid,
+                'message_type': 'TEXT',
+                'message': std_msg,
+                'dedupe_key': f'rcs_std_{status.lower()}_{jid[:10]}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
+            })
 
-            for jid in standard_jids:
-                outbox_rows.append({
-                    'source_table': 'rcs_system',
-                    'event_type': 'RCS_SYSTEM',
-                    'group_jid': jid,
-                    'message_type': 'TEXT',
-                    'message': std_msg,
-                    'dedupe_key': f'rcs_std_{symbol}_{status.lower()}_{jid[:10]}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
-                })
-
-            if rcs_skip_jid:
-                outbox_rows.append({
-                    'source_table': 'rcs_system',
-                    'event_type': 'RCS_SYSTEM',
-                    'group_jid': rcs_skip_jid,
-                    'message_type': 'TEXT',
-                    'message': skipped_msg,
-                    'dedupe_key': f'rcs_skip_{symbol}_{status.lower()}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
-                })
+        if rcs_skip_jid:
+            outbox_rows.append({
+                'source_table': 'rcs_system',
+                'event_type': 'RCS_SYSTEM',
+                'group_jid': rcs_skip_jid,
+                'message_type': 'TEXT',
+                'message': skipped_msg,
+                'dedupe_key': f'rcs_skip_{status.lower()}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
+            })
 
         if outbox_rows:
             sb.table('wa_outbox').insert(outbox_rows).execute()
-            print(cprint(f"📲 Broadcast Notifikasi RCS System ({status}) ke {len(outbox_rows)} WA (x {len(configs)} symbol)", Colors.GREEN))
+            print(cprint(f"📲 Broadcast Notifikasi RCS System ({status}) ke {len(outbox_rows)} WA (Gabungan {len(configs)} symbol)", Colors.GREEN))
     except Exception as e:
         print(cprint(f"⚠️ Gagal broadcast WA notif RCS System ({status}): {e}", Colors.RED))
