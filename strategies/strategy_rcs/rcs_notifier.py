@@ -121,24 +121,24 @@ def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCS
             dist_open_ema = 0
             
         metrics_str = (
-            f"📊 *ALASAN SIGNAL VALID:*\n"
-            f"• Jarak Open C1 - EMA 20: {dist_open_ema} pts (Syarat: {config.min_ema_distance_pts}-{config.max_ema_distance_pts} pts)\n"
-            f"• Risk Range C1: {risk_range_pts} pts (Syarat: {config.min_trigger_range}-{config.max_trigger_range} pts)\n"
-            f"• Body Candle C1: {body_pct:.1f}% (Syarat: {config.min_body_percent}-{config.max_body_percent}%)\n"
-            f"• Spread Market: {spread} pts (Syarat: <= {config.max_spread_points} pts)\n\n"
+            f"📊 ALASAN SIGNAL VALID:\n"
+            f"* Jarak Open C1 - EMA 20: {dist_open_ema} pts (Syarat: {config.min_ema_distance_pts}-{config.max_ema_distance_pts} pts)\n"
+            f"* Risk Range C1: {risk_range_pts} pts (Syarat: {config.min_trigger_range}-{config.max_trigger_range} pts)\n"
+            f"* Body Candle C1: {body_pct:.1f}% (Syarat: {config.min_body_percent}-{config.max_body_percent}%)\n"
+            f"* Spread Market: {spread} pts (Syarat: <= {config.max_spread_points} pts)\n\n"
         )
 
     msg = (
-        f"🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
-        f"🎯 *RCS TRIGGER VALID*\n\n"
+        f"🌟 SIGNAL RCS [{direction}] 🌟\n"
+        f"🎯 RCS TRIGGER VALID\n\n"
         f"Symbol: {symbol}\n"
         f"Pattern: {pattern}\n"
-        f"Arah: *{direction}*\n\n"
+        f"Arah: {direction}\n\n"
         f"{metrics_str}"
-        f"📍 *LEVEL EKSEKUSI & TARGET:*\n"
-        f"• OP1 Market : {state.op1_level:.5f} | TP1: {state.tp1_price:.5f}\n"
-        f"• OP2 Limit  : {state.op2_level:.5f} | TP2: {state.tp2_price:.5f}\n"
-        f"• OP3 SL/Hdg : {state.op3_level:.5f} | Mode: {config.op3_mode}"
+        f"📍 LEVEL EKSEKUSI & TARGET:\n"
+        f"* OP1 Market : {state.op1_level:.5f} | TP1: {state.tp1_price:.5f}\n"
+        f"* OP2 Limit  : {state.op2_level:.5f} | TP2: {state.tp2_price:.5f}\n"
+        f"* OP3 SL/Hdg : {state.op3_level:.5f} | Mode: {config.op3_mode}"
     )
     # Target: PRIVATE_JID
     send_rcs_wa_notif(config, msg, 'RCS_TRIGGER', target_jid=config.private_jid)
