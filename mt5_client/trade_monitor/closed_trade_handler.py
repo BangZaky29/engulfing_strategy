@@ -284,6 +284,9 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
         
         try:
             tf_const = mt5_cfg.get_mt5_timeframe(ss_tf_label)
+            tf_map = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400, "D1": 86400}
+            tf_seconds = tf_map.get(info['tf'].upper(), 3600)
+            
             # Ambil candle lebih banyak agar kelihatan dari OP sampai Close
             rates = mt5.copy_rates_from_pos(info['symbol'], tf_const, 0, mt5_cfg.candle_count)  # type: ignore
             if rates is not None and len(rates) > 0:

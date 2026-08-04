@@ -214,3 +214,36 @@ class RCSConfig:
     csv_prefix: str = field(
         default_factory=lambda: os.getenv("RCS_CSV_PREFIX", "RCS")
     )
+
+    @classmethod
+    def from_env(cls, symbol: str = None) -> "RCSConfig":
+        import dataclasses
+        config = cls()
+        if not symbol:
+            return config
+            
+        for f in dataclasses.fields(cls):
+            if f.name in ["enabled", "symbols"]:
+                continue
+                
+            base_key = f.name.upper()
+            if not base_key.startswith("RCS_"):
+                base_key = f"RCS_{base_key}"
+                
+            if f.name == "private_jid": base_key = "PRIVATE_JID"
+            elif f.name == "profit_signal_jid": base_key = "PROFIT_SIGNAL"
+            elif f.name == "loss_signal_jid": base_key = "LOSS_SIGNAL"
+            
+            sym_key = f"{symbol}_{base_key}"
+            val = os.getenv(sym_key)
+            if val is not None:
+                if f.type == bool:
+                    setattr(config, f.name, val.lower() == "true")
+                elif f.type == int:
+                    setattr(config, f.name, int(val))
+                elif f.type == float:
+                    setattr(config, f.name, float(val))
+                else:
+                    setattr(config, f.name, val)
+                    
+        return config

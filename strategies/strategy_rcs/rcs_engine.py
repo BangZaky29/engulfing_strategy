@@ -22,9 +22,10 @@ from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, no
 from utils.colors import cprint, Colors
 
 def run_rcs_bot():
-    rcs_cfg = RCSConfig()
+    # Instantiate global for global properties like enabled and symbols
+    rcs_global_cfg = RCSConfig()
     
-    if not rcs_cfg.enabled:
+    if not rcs_global_cfg.enabled:
         print("❌ Reversal Candle System (RCS) dinonaktifkan di .env (RCS_ENABLED=false)")
         return
         
@@ -32,11 +33,14 @@ def run_rcs_bot():
     if not init_mt5(mt5_cfg):
         return
         
-    symbols = rcs_cfg.symbols
+    symbols = rcs_global_cfg.symbols
     if not symbols:
         print("❌ RCS_SYMBOL kosong di .env")
         shutdown_mt5()
         return
+
+    # Load symbol specific configs
+    rcs_configs = {sym: RCSConfig.from_env(sym) for sym in symbols}
 
     for sym in symbols:
         if not mt5.symbol_select(sym, True):
@@ -44,23 +48,26 @@ def run_rcs_bot():
         
     print(f"🚀 Memulai REVERSAL CANDLE SYSTEM (RCS) Bot...")
     print(f"🔹 Symbols      : {', '.join(symbols)}")
-    print(f"🔹 Signal TF    : {rcs_cfg.signal_timeframe}")
-    
-    # Format OP1 Info
-    op1_info = rcs_cfg.op1_entry_mode
-    if rcs_cfg.op1_entry_mode == "PERCENT":
-        op1_info += f" ({rcs_cfg.entry_percent}%)"
-        
-    print(f"🔹 OP1 Setup    : {op1_info} | Lot: {rcs_cfg.lot_size_op1} | TP: {rcs_cfg.tp_mode} ({rcs_cfg.tp_percent}%) | Mgc: {rcs_cfg.magic_op1}")
-    print(f"🔹 OP2 Setup    : {rcs_cfg.op2_mode} ({rcs_cfg.op2_percent}%) | Lot: {rcs_cfg.lot_size_op2} | TP: {rcs_cfg.tp2_mode} ({rcs_cfg.tp2_percent}%) | Mgc: {rcs_cfg.magic_op2}")
-    print(f"🔹 OP3 Setup    : {rcs_cfg.op3_mode} ({rcs_cfg.op3_percent}%) | Lot: OP1+OP2 | Mgc: {rcs_cfg.magic_op3}")
-    print(f"🔹 Filters      : Range({rcs_cfg.min_trigger_range}-{rcs_cfg.max_trigger_range}) | Body({rcs_cfg.min_body_percent}-{rcs_cfg.max_body_percent}%) | EMA_Dist({rcs_cfg.min_ema_distance_pts}-{rcs_cfg.max_ema_distance_pts} pts)")
-    print(f"⏰ Schedule     : {get_rcs_trading_status_text(rcs_cfg)}")
-    print(f"🛡️ Daily Guard  : {get_rcs_daily_guard_status_text(rcs_cfg)}")
     print("==================================================")
     
+    for sym in symbols:
+        c = rcs_configs[sym]
+        op1_info = c.op1_entry_mode
+        if c.op1_entry_mode == "PERCENT":
+            op1_info += f" ({c.entry_percent}%)"
+            
+        print(f"[{sym}] Configuration:")
+        print(f"🔹 Signal TF    : {c.signal_timeframe}")
+        print(f"🔹 OP1 Setup    : {op1_info} | Lot: {c.lot_size_op1} | TP: {c.tp_mode} ({c.tp_percent}%) | Mgc: {c.magic_op1}")
+        print(f"🔹 OP2 Setup    : {c.op2_mode} ({c.op2_percent}%) | Lot: {c.lot_size_op2} | TP: {c.tp2_mode} ({c.tp2_percent}%) | Mgc: {c.magic_op2}")
+        print(f"🔹 OP3 Setup    : {c.op3_mode} ({c.op3_percent}%) | Lot: OP1+OP2 | Mgc: {c.magic_op3}")
+        print(f"🔹 Filters      : Range({c.min_trigger_range}-{c.max_trigger_range}) | Body({c.min_body_percent}-{c.max_body_percent}%) | EMA_Dist({c.min_ema_distance_pts}-{c.max_ema_distance_pts} pts)")
+        print(f"⏰ Schedule     : {get_rcs_trading_status_text(c)}")
+        print(f"🛡️ Daily Guard  : {get_rcs_daily_guard_status_text(c)}")
+        print("--------------------------------------------------")
+    
     # Kirim Notifikasi Sistem Aktif ke RCS_GROUP_JID
-    notify_system_status('START', rcs_cfg)
+    notify_system_status('START', rcs_configs)
     
     states = {sym: RCSState() for sym in symbols}
     last_candle_times = {sym: None for sym in symbols}
@@ -69,6 +76,7 @@ def run_rcs_bot():
         while True:
             for symbol in symbols:
                 state = states[symbol]
+                rcs_cfg = rcs_configs[symbol]
                 
                 # 1. Info dari MT5
                 info = mt5.symbol_info(symbol)
