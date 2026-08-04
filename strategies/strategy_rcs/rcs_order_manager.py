@@ -5,6 +5,18 @@
 
 import MetaTrader5 as mt5
 
+def get_filling_mode(symbol: str) -> int:
+    info = mt5.symbol_info(symbol)
+    if not info:
+        return mt5.ORDER_FILLING_IOC
+    # Beberapa broker HANYA mendukung FOK, beberapa IOC.
+    if (info.filling_mode & mt5.SYMBOL_FILLING_FOK) == mt5.SYMBOL_FILLING_FOK:
+        return mt5.ORDER_FILLING_FOK
+    elif (info.filling_mode & mt5.SYMBOL_FILLING_IOC) == mt5.SYMBOL_FILLING_IOC:
+        return mt5.ORDER_FILLING_IOC
+    else:
+        return mt5.ORDER_FILLING_RETURN
+
 def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: float, magic_number: int, comment: str, sl: float = 0.0, tp: float = 0.0):
     """
     Kirim market order (Instant Execution).
@@ -24,7 +36,7 @@ def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: 
         "magic": magic_number,
         "comment": comment,
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
+        "type_filling": get_filling_mode(symbol),
     }
     
     res = mt5.order_send(req)
@@ -57,7 +69,7 @@ def close_position_rcs(symbol: str, pos, magic_number: int, comment: str) -> boo
         "magic": magic_number,
         "comment": comment,
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
+        "type_filling": get_filling_mode(symbol),
     }
     
     res = mt5.order_send(req)
