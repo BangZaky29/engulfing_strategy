@@ -210,6 +210,12 @@ def run_rcs_bot():
                                 state.op2_level = levels["op2_level"]
                                 state.op3_level = levels["op3_level"]
                                 state.trigger_age = 0
+
+                                # Simpan metrics trigger ke state (dipakai oleh notify_result nanti)
+                                state.trigger_dist_ema_pts   = dist_open_ema
+                                state.trigger_risk_range_pts = risk_range_pts
+                                state.trigger_body_pct       = body_pct
+                                state.trigger_spread_pts     = spread
                                 
                                 # Cek Jam Aktif Trading RCS (Scheduler)
                                 if not is_rcs_trading_active(rcs_cfg):

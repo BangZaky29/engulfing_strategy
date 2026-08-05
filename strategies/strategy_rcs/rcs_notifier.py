@@ -229,9 +229,35 @@ def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, 
     media_url = ""
     if state is not None:
         media_url = generate_and_upload_rcs_screenshot(symbol, state, config)
-        
+
+    # 2. Header dinamis berdasarkan profit/loss
+    if profit > 0:
+        header = "🎉 [PROFIT (TUYUL COPET | RCS)]"
+    elif profit < 0:
+        header = "☠️ [LOSS (TUYUL COPET | RCS)]"
+    else:
+        header = "📊 [RESULT (TUYUL COPET | RCS)]"
+
+    # 3. Blok trigger metrics dari state (jika tersedia)
+    metrics_str = ""
+    if state is not None and hasattr(state, 'trigger_risk_range_pts'):
+        metrics_str = (
+            f"Info :\n"
+            f"* Jarak Open C1 - EMA 20: {state.trigger_dist_ema_pts} pts "
+            f"(Syarat: 0-{config.max_ema_distance_pts} pts)\n"
+            f"* Risk Range C1: {state.trigger_risk_range_pts} pts "
+            f"(Syarat: {config.min_trigger_range}-{config.max_trigger_range} pts)\n"
+            f"* Body Candle C1: {state.trigger_body_pct:.1f}% "
+            f"(Syarat: {config.min_body_percent}-{config.max_body_percent}%)\n"
+            f"* Spread Market: {state.trigger_spread_pts} pts "
+            f"(Syarat: <= {config.max_spread_points} pts)\n\n"
+        )
+
+    # 4. Body pesan
     msg = (
-        f"📊 *RCS RESULT*\n\n"
+        f"{header}\n"
+        f"📊 RCS RESULT\n"
+        f"{metrics_str}"
         f"Symbol: {symbol}\n"
         f"Info: {event_desc}\n"
         f"Closed PnL: *${profit:.2f}*\n"
@@ -239,10 +265,15 @@ def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, 
     if recovery != 0.0:
         msg += f"Hasil Recovery: *${recovery:.2f}*"
         
-    # Determine target group based on Profit or Loss
+    # 5. Kirim ke grup profit atau loss — tanpa HEADER_TEXT karena sudah ada di body
     target_group = config.profit_signal_jid if profit > 0 else config.loss_signal_jid
     
-    send_rcs_wa_notif(config, msg, 'RCS_RESULT', target_jid=target_group, media_url=media_url if media_url else None)
+    send_rcs_wa_notif(
+        config, msg, 'RCS_RESULT',
+        target_jid=target_group,
+        media_url=media_url if media_url else None,
+        include_header=False,
+    )
 
 def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info: str = ""):
     from strategies.strategy_rcs.rcs_schedule import get_rcs_trading_status_text

@@ -22,6 +22,12 @@ class RCSState:
     trigger_timestamp: Optional[int] = None
     trigger_age: int = 0
     cooldown_until_candle: int = 0
+
+    # Trigger Candle Metrics (disimpan saat trigger valid, dipakai saat notify_result)
+    trigger_dist_ema_pts: int = 0         # Jarak Open C1 ke EMA 20 (pts)
+    trigger_risk_range_pts: int = 0       # Risk Range C1 dalam pts
+    trigger_body_pct: float = 0.0         # Body candle C1 dalam %
+    trigger_spread_pts: int = 0           # Spread market saat trigger (pts)
     
     # Target Levels
     op1_level: float = 0.0
@@ -52,6 +58,12 @@ class RCSState:
         self.trigger_timestamp = None
         self.trigger_age = 0
         self.op2_notified = False
+
+        # Reset trigger metrics
+        self.trigger_dist_ema_pts = 0
+        self.trigger_risk_range_pts = 0
+        self.trigger_body_pct = 0.0
+        self.trigger_spread_pts = 0
         
         self.op1_level = 0.0
         self.op2_level = 0.0
