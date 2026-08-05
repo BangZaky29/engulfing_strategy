@@ -89,3 +89,53 @@ def notify_engulfing_system_status(status: str, extra_info: str = ""):
             print(cprint(f"📲 Broadcast Notifikasi Engulfing System ({status}) ke {len(outbox_rows)} group WA", Colors.GREEN))
     except Exception as e:
         print(cprint(f"⚠️ Gagal broadcast WA notif Engulfing System ({status}): {e}", Colors.RED))
+
+
+def notify_company_target_reached(reason: str):
+    """
+    Broadcast notifikasi ke SEMUA grup WA bahwa Company Daily Target sudah tercapai.
+    Dipanggil hanya SEKALI per hari (dijaga oleh should_send_company_notif() di company_daily_guard.py).
+
+    Target group: PRIVATE_JID, PROFIT_SIGNAL, LOSS_SIGNAL, GROUP_JID,
+                  RCS_GROUP_JID, SKIP_SIGNAL (Maling)
+    """
+    from datetime import datetime
+
+    private_jid   = os.getenv("PRIVATE_JID")
+    profit_jid    = os.getenv("PROFIT_SIGNAL")
+    loss_jid      = os.getenv("LOSS_SIGNAL")
+    info_jid      = os.getenv("GROUP_JID")
+    rcs_group_jid = os.getenv("RCS_GROUP_JID")
+    skip_jid      = os.getenv("SKIP_SIGNAL")
+
+    all_jids = {j for j in [private_jid, profit_jid, loss_jid, info_jid, rcs_group_jid, skip_jid] if j}
+    if not all_jids:
+        return
+
+    now_str = datetime.now().strftime("%H:%M WIB")
+    message = (
+        f"🏁 *COMPANY DAILY TARGET TERCAPAI!*\n\n"
+        f"Semua operasi *EXECUTE ORDER* dihentikan untuk hari ini.\n"
+        f"Bot tetap berjalan untuk scan & analisa candle.\n\n"
+        f"📊 {reason}\n\n"
+        f"⏰ Waktu: {now_str}\n"
+        f"🔄 Mulai kembali: 00:00 WIB (besok)"
+    )
+
+    try:
+        sb = get_supabase()
+        rows = []
+        for jid in all_jids:
+            rows.append({
+                'source_table': 'company_guard',
+                'event_type': 'COMPANY_TARGET_HIT',
+                'group_jid': jid,
+                'message_type': 'TEXT',
+                'message': message,
+                'dedupe_key': f'company_target_{jid[:10]}_{int(__import__("time").time())}_{__import__("uuid").uuid4().hex[:4]}'
+            })
+        if rows:
+            sb.table('wa_outbox').insert(rows).execute()
+            print(cprint(f"📲 Broadcast COMPANY TARGET ke {len(rows)} grup WA", Colors.GREEN))
+    except Exception as e:
+        print(cprint(f"⚠️ Gagal broadcast COMPANY TARGET notif: {e}", Colors.RED))

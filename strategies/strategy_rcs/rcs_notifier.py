@@ -18,20 +18,31 @@ from utils.colors import cprint, Colors
 
 HEADER_TEXT = "🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
 
-def send_rcs_wa_notif(config: RCSConfig, message: str, event_type: str, target_jid: str | None = None, media_url: str | None = None):
-    """Fungsi helper untuk kirim pesan ke Supabase WA Outbox dengan routing JID"""
-    # Gunakan target_jid yang spesifik, fallback ke group_jid jika tidak ditentukan
+def send_rcs_wa_notif(
+    config: RCSConfig,
+    message: str,
+    event_type: str,
+    target_jid: str | None = None,
+    media_url: str | None = None,
+    include_header: bool = True,
+):
+    """
+    Fungsi helper untuk kirim pesan ke Supabase WA Outbox dengan routing JID.
+
+    include_header=True  → prepend HEADER_TEXT (untuk grup skip/result)
+    include_header=False → tanpa header (untuk PRIVATE_JID / grup OP Signal)
+    """
     dest_jid = target_jid if target_jid else config.group_jid
     if not dest_jid:
         return
-        
+
     supabase = get_supabase()
     if supabase is None:
         return
-        
-    full_message = HEADER_TEXT + message
+
+    full_message = (HEADER_TEXT + message) if include_header else message
     message_type = 'IMAGE' if media_url else 'TEXT'
-    
+
     payload = {
         'source_table': 'rcs_system',
         'event_type': event_type,
@@ -40,10 +51,10 @@ def send_rcs_wa_notif(config: RCSConfig, message: str, event_type: str, target_j
         'message': full_message,
         'dedupe_key': f'rcs_{event_type}_{int(time.time())}_{uuid.uuid4().hex[:8]}'
     }
-    
+
     if media_url:
         payload['image_url'] = media_url
-        
+
     try:
         supabase.table('wa_outbox').insert(payload).execute()
         print(cprint(f"📲 Notifikasi WA {event_type} terkirim ke {dest_jid}", Colors.GREEN))
@@ -101,7 +112,7 @@ def generate_and_upload_rcs_screenshot(symbol: str, state, config: RCSConfig) ->
 
 def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCSConfig, candle_data: dict | None = None):
     if not config.notif_trigger: return
-    
+
     metrics_str = ""
     if candle_data:
         point = candle_data.get("point", 0.00001)
@@ -112,14 +123,14 @@ def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCS
         spread = int(candle_data.get("spread", 0))
         body_pct = candle_data.get("body_pct", 0.0)
         ema = candle_data.get("ema_now", 0.0)
-        
+
         if point > 0:
             risk_range_pts = int(round((c_close - c_low) / point)) if direction == "BUY" else int(round((c_high - c_close) / point))
             dist_open_ema = int(round(abs(c_open - ema) / point))
         else:
             risk_range_pts = 0
             dist_open_ema = 0
-            
+
         metrics_str = (
             f"📊 ALASAN SIGNAL VALID:\n"
             f"* Jarak Open C1 - EMA 20: {dist_open_ema} pts (Syarat: {config.min_ema_distance_pts}-{config.max_ema_distance_pts} pts)\n"
@@ -127,6 +138,9 @@ def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCS
             f"* Body Candle C1: {body_pct:.1f}% (Syarat: {config.min_body_percent}-{config.max_body_percent}%)\n"
             f"* Spread Market: {spread} pts (Syarat: <= {config.max_spread_points} pts)\n\n"
         )
+
+    # Label OP1 sesuai mode entry
+    op1_mode_label = "Market" if config.op1_entry_mode == "INSTANT_ZERO" else f"Limit ({config.op1_entry_mode})"
 
     msg = (
         f"🌟 SIGNAL RCS [{direction}] 🌟\n"
@@ -136,12 +150,12 @@ def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCS
         f"Arah: {direction}\n\n"
         f"{metrics_str}"
         f"📍 LEVEL EKSEKUSI & TARGET:\n"
-        f"* OP1 Market : {state.op1_level:.5f} | TP1: {state.tp1_price:.5f}\n"
+        f"* OP1 {op1_mode_label} : {state.op1_level:.5f} | TP1: {state.tp1_price:.5f}\n"
         f"* OP2 Limit  : {state.op2_level:.5f} | TP2: {state.tp2_price:.5f}\n"
         f"* OP3 SL/Hdg : {state.op3_level:.5f} | Mode: {config.op3_mode}"
     )
-    # Target: PRIVATE_JID
-    send_rcs_wa_notif(config, msg, 'RCS_TRIGGER', target_jid=config.private_jid)
+    # Target: PRIVATE_JID — tanpa header (format bersih)
+    send_rcs_wa_notif(config, msg, 'RCS_TRIGGER', target_jid=config.private_jid, include_header=False)
 
 def notify_skip(symbol: str, pattern: str, direction: str, reason: str, config: RCSConfig):
     if not config.notif_skip: return
@@ -155,17 +169,46 @@ def notify_skip(symbol: str, pattern: str, direction: str, reason: str, config: 
     # Target: RCS_GROUP_JID
     send_rcs_wa_notif(config, msg, 'RCS_SKIP', target_jid=config.group_jid)
 
-def notify_open(symbol: str, phase_name: str, ticket: int, price: float, target: float, config: RCSConfig):
-    if not config.notif_open: return
-    msg = (
-        f"✅ *RCS {phase_name} TERBUKA*\n\n"
-        f"Symbol: {symbol}\n"
-        f"Ticket: {ticket}\n"
-        f"Harga: {price:.5f}\n"
-        f"Target TP: {target:.5f}"
-    )
-    # Target: PRIVATE_JID
-    send_rcs_wa_notif(config, msg, 'RCS_OPEN', target_jid=config.private_jid)
+def notify_open(
+    symbol: str,
+    phase_name: str,
+    ticket: int,
+    price: float,
+    target: float,
+    config: RCSConfig,
+    direction: str = "",
+    is_op1: bool = False,
+):
+    """
+    Kirim notifikasi order terbuka ke PRIVATE_JID.
+
+    is_op1=True  → format premium (🌟) tanpa header, hanya untuk OP1 mode Limit/Percent
+    is_op1=False → format standar (✅) tanpa header, untuk OP2 / OP3
+    """
+    if not config.notif_open:
+        return
+
+    if is_op1 and direction:
+        # Format khusus OP1 Limit — bersih, tidak ada header
+        msg = (
+            f"🌟  RCS OP1 TERBUKA [{direction}] 🌟\n\n"
+            f"Symbol: {symbol}\n"
+            f"Ticket: {ticket}\n"
+            f"Harga: {price:.5f}\n"
+            f"Target TP: {target:.5f}"
+        )
+    else:
+        # Format standar OP2 / OP3
+        msg = (
+            f"✅ *RCS {phase_name} TERBUKA*\n\n"
+            f"Symbol: {symbol}\n"
+            f"Ticket: {ticket}\n"
+            f"Harga: {price:.5f}\n"
+            f"Target TP: {target:.5f}"
+        )
+
+    # Target: PRIVATE_JID — selalu tanpa header
+    send_rcs_wa_notif(config, msg, 'RCS_OPEN', target_jid=config.private_jid, include_header=False)
 
 def notify_freeze(symbol: str, floating_usd: float, config: RCSConfig):
     if not config.notif_freeze: return
@@ -176,8 +219,8 @@ def notify_freeze(symbol: str, floating_usd: float, config: RCSConfig):
         f"Snapshot Floating: *${floating_usd:.2f}*\n\n"
         f"Menunggu posisi ditutup manual oleh trader..."
     )
-    # Target: PRIVATE_JID
-    send_rcs_wa_notif(config, msg, 'RCS_FREEZE', target_jid=config.private_jid)
+    # Target: PRIVATE_JID — tanpa header
+    send_rcs_wa_notif(config, msg, 'RCS_FREEZE', target_jid=config.private_jid, include_header=False)
 
 def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
     if not config.notif_result: return
@@ -282,3 +325,15 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
             print(cprint(f"📲 Broadcast Notifikasi RCS System ({status}) ke {len(outbox_rows)} WA (Gabungan {len(configs)} symbol)", Colors.GREEN))
     except Exception as e:
         print(cprint(f"⚠️ Gagal broadcast WA notif RCS System ({status}): {e}", Colors.RED))
+
+
+def notify_company_target_reached_rcs(reason: str):
+    """
+    Broadcast notifikasi Company Daily Target dari sisi RCS (TUYUL COPET).
+    Dipanggil hanya SEKALI per hari — dijaga oleh should_send_company_notif().
+
+    Fungsi ini me-reuse logic yang sama dengan engulfing_notifier.notify_company_target_reached,
+    namun dipanggil dari rcs_engine.py tanpa cross-import ke app/.
+    """
+    from app.engulfing_notifier import notify_company_target_reached
+    notify_company_target_reached(reason)

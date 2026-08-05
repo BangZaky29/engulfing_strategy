@@ -11,6 +11,11 @@ from config.execution_config import ExecutionConfig
 from config.filter_c_config import FilterCConfig
 from config.trading_schedule import is_trading_active, get_trading_status_text
 from config.daily_guard import check_daily_target, get_daily_guard_status_text
+from config.company_daily_guard import (
+    check_company_daily_target,
+    get_company_guard_status_text,
+    should_send_company_notif,
+)
 
 from mt5_client import shutdown_mt5, get_closed_candles
 from mt5_client.trade_monitor import check_closed_trades
@@ -20,7 +25,7 @@ from utils.colors import Colors, cprint, candle_color
 from .initializer import startup_checks
 from .tfm_logger import log_tfm_snapshot
 from .signal_processor import process_candle_signal
-from .engulfing_notifier import notify_engulfing_system_status
+from .engulfing_notifier import notify_engulfing_system_status, notify_company_target_reached
 
 
 def run_bot():
@@ -43,8 +48,9 @@ def run_bot():
     total_signals = 0
 
     print(f"\n🔄 Memulai scan realtime (interval: {POLL_INTERVAL}s)...")
-    print(f"⏰ Trading Schedule: {get_trading_status_text()}")
-    print(f"🛡️ Daily Guard     : {get_daily_guard_status_text()}\n")
+    print(f"⏰ Trading Schedule  : {get_trading_status_text()}")
+    print(f"🛡️ Daily Guard       : {get_daily_guard_status_text()}")
+    print(f"🏂 Company Guard     : {get_company_guard_status_text()}\n")
 
     # Kirim Notifikasi Sistem Aktif ke WA Outbox
     notify_engulfing_system_status('START')
@@ -60,8 +66,24 @@ def run_bot():
                     log_tfm_snapshot(symbol, fc_cfg, last_tfm_snapshot)
 
             # C. Cek Trading Schedule & Daily Target Guard
+            # 1. Cek schedule jam kerja (individu per Tuyul)
+            schedule_active = is_trading_active()
+
+            # 2. Cek Company Daily Target (gabungan semua Tuyul)
+            company_allowed, company_reason = check_company_daily_target()
+            if not company_allowed and company_reason:
+                # Kirim notif WA hanya sekali per hari
+                if should_send_company_notif():
+                    print(cprint(f"\n🏁 [COMPANY TARGET] {company_reason}", Colors.MAGENTA))
+                    notify_company_target_reached(company_reason)
+
+            # 3. Cek Individual Daily Guard (opsional, fallback)
             daily_allowed, daily_reason = check_daily_target()
-            trading_active = is_trading_active() and daily_allowed
+            if not daily_allowed and daily_reason:
+                print(cprint(f"   🛡️ [MALING Guard] {daily_reason}", Colors.YELLOW))
+
+            # Bot boleh execute jika: jam kerja aktif DAN company target belum hit DAN individual guard belum hit
+            trading_active = schedule_active and company_allowed and daily_allowed
 
             # D. Scan Tiap Mata Uang dan Timeframe
             for symbol in mt5_cfg.symbols:

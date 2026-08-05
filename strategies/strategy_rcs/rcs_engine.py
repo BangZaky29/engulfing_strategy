@@ -18,7 +18,12 @@ from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs, 
 from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text
 from strategies.strategy_rcs.rcs_daily_guard import check_rcs_daily_target, get_rcs_daily_guard_status_text
 from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery, calculate_cycle_profit
-from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, notify_open, notify_freeze, notify_result, notify_system_status
+from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, notify_open, notify_freeze, notify_result, notify_system_status, notify_company_target_reached_rcs
+from config.company_daily_guard import (
+    check_company_daily_target,
+    get_company_guard_status_text,
+    should_send_company_notif,
+)
 from utils.colors import cprint, Colors
 
 def run_rcs_bot():
@@ -64,6 +69,7 @@ def run_rcs_bot():
         print(f"🔹 Filters      : Range({c.min_trigger_range}-{c.max_trigger_range}) | Body({c.min_body_percent}-{c.max_body_percent}%) | EMA_Dist({c.min_ema_distance_pts}-{c.max_ema_distance_pts} pts)")
         print(f"⏰ Schedule     : {get_rcs_trading_status_text(c)}")
         print(f"🛡️ Daily Guard  : {get_rcs_daily_guard_status_text(c)}")
+        print(f"🏂 Company Guard: {get_company_guard_status_text()}")
         print("--------------------------------------------------")
     
     # Kirim Notifikasi Sistem Aktif ke RCS_GROUP_JID
@@ -109,6 +115,32 @@ def run_rcs_bot():
                                     print(cprint(f"✅ [{symbol}] Cooldown selesai. Mencari trigger baru...", Colors.GREEN))
                             
                             if state.cooldown_until_candle == 0:
+                                # =====================================================
+                                # Cek Guard: Schedule + Company Target + Individual Guard
+                                # =====================================================
+                                # 1. Cek jam kerja RCS (individu Copet: 05:00-14:00)
+                                rcs_schedule_ok = is_rcs_trading_active(rcs_cfg)
+
+                                # 2. Cek Company Daily Target (gabungan semua Tuyul)
+                                company_allowed, company_reason = check_company_daily_target()
+                                if not company_allowed and company_reason:
+                                    if should_send_company_notif():
+                                        print(cprint(f"\n🏁 [COMPANY TARGET] {company_reason}", Colors.MAGENTA))
+                                        notify_company_target_reached_rcs(company_reason)
+
+                                # 3. Cek Individual RCS Daily Guard
+                                rcs_allowed, rcs_reason = check_rcs_daily_target(rcs_cfg)
+                                if not rcs_allowed and rcs_reason:
+                                    print(cprint(f"   🛡️ [COPET Guard] {rcs_reason}", Colors.YELLOW))
+
+                                # Boleh execute hanya jika semua guard lolos
+                                execute_allowed = rcs_schedule_ok and company_allowed and rcs_allowed
+
+                                if not execute_allowed:
+                                    if not rcs_schedule_ok:
+                                        print(cprint(f"⏸️ [{symbol}] Di luar jam kerja Copet ({rcs_cfg.rcs_trading_active_start}→{rcs_cfg.rcs_trading_active_end})", Colors.GRAY), end='\r', flush=True)
+                                    continue
+
                                 # 1. Cek Pattern (Engulfing / ICT)
                                 direction = None
                                 pattern_name = ""
@@ -205,8 +237,20 @@ def run_rcs_bot():
                                     
                                     if rcs_cfg.notif_trigger:
                                         notify_trigger(symbol, pattern_name, direction, state, rcs_cfg, candle_data=candle_data)
-                                        
-                                    notify_open(symbol, "OP1", state.op1_ticket, state.op1_open_price, state.tp1_price, rcs_cfg)
+
+                                    # Kirim notif OP1 TERBUKA hanya jika mode Limit/Percent
+                                    # Mode INSTANT_ZERO: tidak perlu notif terpisah karena
+                                    # notify_trigger sudah menginformasikan bahwa OP1 market terbuka
+                                    if rcs_cfg.op1_entry_mode != "INSTANT_ZERO":
+                                        notify_open(
+                                            symbol, "OP1",
+                                            state.op1_ticket,
+                                            state.op1_open_price,
+                                            state.tp1_price,
+                                            rcs_cfg,
+                                            direction=direction,
+                                            is_op1=True,
+                                        )
                                 else:
                                     print(cprint(f"❌ Gagal memasang OP1 pada {symbol}. Reset state.", Colors.RED))
                                     state.reset()
