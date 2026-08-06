@@ -14,7 +14,7 @@ from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
 from strategies.strategy_rcs.trigger import detect_engulfing, detect_ict, apply_all_filters, calculate_levels
 from strategies.strategy_rcs.trigger import skip_reasons as sr
 from strategies.strategy_rcs.engine import place_op1_order, place_op2_order, place_op3_order
-from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs, close_position_by_ticket
+from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs, close_position_by_ticket, remove_tp_from_position
 from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text
 from strategies.strategy_rcs.rcs_daily_guard import check_rcs_daily_target, get_rcs_daily_guard_status_text
 from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery, calculate_cycle_profit
@@ -296,6 +296,10 @@ def run_rcs_bot():
                                 
                                 # OP2 baru saja tertrigger menjadi posisi!
                                 if rcs_cfg.op2_mode == "HEDGE":
+                                    # Hapus TP1 dari OP1 agar broker tidak auto-close saat freeze
+                                    if state.op1_ticket:
+                                        if remove_tp_from_position(state.op1_ticket):
+                                            print(cprint(f"   🔓 TP1 dihapus dari OP1 (Tkt:{state.op1_ticket}) — posisi dikunci hedge.", Colors.CYAN))
                                     print(cprint(f"❄️ HEDGE (OP2) Terbuka di {op2_open_price:.5f} ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
                                     state.phase = RCSPhase.FREEZE
                                     state.freeze_is_hedge = True
@@ -334,6 +338,13 @@ def run_rcs_bot():
                             pos3 = mt5.positions_get(ticket=state.op3_ticket)
                             ord3 = mt5.orders_get(ticket=state.op3_ticket)
                             if pos3 and not ord3:
+                                # OP3 hedge terbuka → hapus TP1 dan TP2 agar broker tidak auto-close
+                                if state.op1_ticket:
+                                    if remove_tp_from_position(state.op1_ticket):
+                                        print(cprint(f"   🔓 TP1 dihapus dari OP1 (Tkt:{state.op1_ticket}) — posisi dikunci hedge OP3.", Colors.CYAN))
+                                if state.op2_ticket:
+                                    if remove_tp_from_position(state.op2_ticket):
+                                        print(cprint(f"   🔓 TP2 dihapus dari OP2 (Tkt:{state.op2_ticket}) — posisi dikunci hedge OP3.", Colors.CYAN))
                                 print(cprint(f"❄️ HEDGE (OP3) Terbuka ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
                                 state.phase = RCSPhase.FREEZE
                                 state.freeze_is_hedge = True

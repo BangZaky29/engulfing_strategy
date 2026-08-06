@@ -141,3 +141,30 @@ def close_position_by_ticket(ticket: int) -> bool:
         return False
     pos = positions[0]
     return close_position_rcs(pos.symbol, pos, pos.magic, f"Close Ticket {ticket}")
+
+def remove_tp_from_position(ticket: int) -> bool:
+    """
+    Hapus Take Profit dari posisi aktif (set TP = 0.0).
+    SL tetap dipertahankan apa adanya.
+
+    Dipakai saat masuk PHASE_FREEZE (hedge) agar broker tidak
+    auto-close posisi yang sedang di-hedge oleh OP3.
+    """
+    positions = mt5.positions_get(ticket=ticket)
+    if not positions:
+        return False
+    pos = positions[0]
+
+    req = {
+        "action": mt5.TRADE_ACTION_SLTP,
+        "position": ticket,
+        "symbol": pos.symbol,
+        "sl": pos.sl,       # Pertahankan SL yang ada
+        "tp": 0.0,          # Hapus TP
+    }
+    res = mt5.order_send(req)
+    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+        return True
+    else:
+        print(f"⚠️ Gagal hapus TP posisi Tkt:{ticket}: {res.comment if res else 'Unknown'} (retcode: {res.retcode if res else 'None'})")
+        return False
