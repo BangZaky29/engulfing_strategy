@@ -228,7 +228,7 @@ def notify_startup_hanging_positions(symbol: str, snapshot, config: RCSConfig):
     Target: RCS_GROUP_JID (GRUP COPET SKIPPED)
     """
     rcs_skip_jid = config.group_jid or os.getenv("RCS_GROUP_JID") or "120363409493021715@g.us"
-    private_jid = config.private_jid or os.getenv("PRIVATE_JID")
+    # private_jid = config.private_jid or os.getenv("PRIVATE_JID")
 
     all_positions = snapshot.system_positions + snapshot.manual_positions
     pos_lines = []
@@ -254,6 +254,26 @@ def notify_startup_hanging_positions(symbol: str, snapshot, config: RCSConfig):
     # Send ONLY to RCS_GROUP_JID (GROUP SKIPPED RCS), NOT to PRIVATE_JID (GROUP OP SIGNAL)
     if rcs_skip_jid:
         send_rcs_wa_notif(config, msg, 'RCS_STARTUP_HANGING', target_jid=rcs_skip_jid, include_header=True)
+
+def notify_startup_clean_positions(symbols: list[str], config: RCSConfig):
+    """
+    Kirim notifikasi saat bot startup jika audit posisi menunjukkan 0 posisi menggantung.
+    Target: RCS_GROUP_JID (GRUP COPET SKIPPED)
+    """
+    rcs_skip_jid = config.group_jid or os.getenv("RCS_GROUP_JID") or "120363409493021715@g.us"
+    sym_str = ", ".join(symbols)
+
+    msg = (
+        f"✅ *AUDIT STARTUP POSISI: CLEAN* [{sym_str}]\n\n"
+        f"Sistem telah selesai melakukan pemindaian broker MT5:\n"
+        f"• Status: *TIDAK ADA POSISI TERTINGGAL*\n"
+        f"• OP Manual: 0 posisi\n"
+        f"• OP Sistem: 0 posisi\n\n"
+        f"🚀 *STATUS SIKLUS:* Siklus trading pada [{sym_str}] siap dijalankan secara *NORMAL*."
+    )
+
+    if rcs_skip_jid:
+        send_rcs_wa_notif(config, msg, 'RCS_STARTUP_CLEAN', target_jid=rcs_skip_jid, include_header=True)
 
 def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
     if not config.notif_result: return

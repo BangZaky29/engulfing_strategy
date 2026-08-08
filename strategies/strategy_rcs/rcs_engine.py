@@ -38,6 +38,7 @@ from strategies.strategy_rcs.rcs_notifier import (
     notify_system_status,
     notify_company_target_reached_rcs,
     notify_startup_hanging_positions,
+    notify_startup_clean_positions,
 )
 from config.company_daily_guard import (
     check_company_daily_target,
@@ -50,14 +51,19 @@ def perform_startup_position_audit(symbols: list, rcs_configs: dict, states: dic
     """
     Melakukan audit posisi awal saat bot pertama kali di-running.
     Mendeteksi apakah ada OP Manual atau OP Sistem tertinggal dari sesi sebelumnya.
-    Jika ada, infokan ke RCS_GROUP_JID (GRUP COPET SKIPPED) dan pause pair tersebut.
+    Jika ada: Infokan ke RCS_GROUP_JID (GRUP COPET SKIPPED) dan pause pair tersebut.
+    Jika bersih (0 OP): Infokan ke terminal & RCS_GROUP_JID bahwa siklus berjalan NORMAL.
     """
+    clean_symbols = []
+
     for symbol in symbols:
         rcs_cfg = rcs_configs[symbol]
         state = states[symbol]
 
         snapshot = tracker.poll_positions(symbol)
         if snapshot.total_count == 0:
+            clean_symbols.append(symbol)
+            print(cprint(f"✅ [{symbol}] AUDIT STARTUP: Tidak ada OP manual atau sistem tertinggal. Siklus trading dijalankan NORMAL.", Colors.GREEN))
             continue
 
         # Ada posisi tertinggal!
@@ -91,6 +97,14 @@ def perform_startup_position_audit(symbols: list, rcs_configs: dict, states: dic
             notify_startup_hanging_positions(symbol, snapshot, rcs_cfg)
         except Exception as e:
             print(f"⚠️ Gagal kirim notifikasi startup hanging positions ({symbol}): {e}")
+
+    # Kirim notifikasi audit clean ke RCS_GROUP_JID jika ada symbol yang 0 posisi tertinggal
+    if clean_symbols:
+        try:
+            first_cfg = rcs_configs[clean_symbols[0]]
+            notify_startup_clean_positions(clean_symbols, first_cfg)
+        except Exception as e:
+            print(f"⚠️ Gagal kirim notifikasi startup clean positions: {e}")
 
 def run_rcs_bot():
     # Instantiate global for global properties like enabled and symbols
