@@ -86,7 +86,7 @@ def perform_startup_position_audit(symbols: list, rcs_configs: dict, states: dic
         state.manual_positions_profit = snapshot.total_manual_floating
         state.is_paused_by_manual = True
 
-        # Kirim notifikasi WA ke RCS_GROUP_JID & PRIVATE_JID
+        # Kirim notifikasi WA ke RCS_GROUP_JID (GRUP COPET SKIPPED)
         try:
             notify_startup_hanging_positions(symbol, snapshot, rcs_cfg)
         except Exception as e:

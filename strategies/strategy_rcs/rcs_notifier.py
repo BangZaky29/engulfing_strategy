@@ -225,7 +225,7 @@ def notify_freeze(symbol: str, floating_usd: float, config: RCSConfig):
 def notify_startup_hanging_positions(symbol: str, snapshot, config: RCSConfig):
     """
     Kirim notifikasi saat bot startup jika mendeteksi posisi aktif tertinggal di broker.
-    Target: RCS_GROUP_JID (GRUP COPET SKIPPED) & PRIVATE_JID
+    Target: RCS_GROUP_JID (GRUP COPET SKIPPED)
     """
     rcs_skip_jid = config.group_jid or os.getenv("RCS_GROUP_JID") or "120363409493021715@g.us"
     private_jid = config.private_jid or os.getenv("PRIVATE_JID")
@@ -251,10 +251,9 @@ def notify_startup_hanging_positions(symbol: str, snapshot, config: RCSConfig):
         f"Sistem TIDAK akan membuka siklus baru pada {symbol} sampai semua posisi di atas ditutup."
     )
 
+    # Send ONLY to RCS_GROUP_JID (GROUP SKIPPED RCS), NOT to PRIVATE_JID (GROUP OP SIGNAL)
     if rcs_skip_jid:
         send_rcs_wa_notif(config, msg, 'RCS_STARTUP_HANGING', target_jid=rcs_skip_jid, include_header=True)
-    if private_jid and private_jid != rcs_skip_jid:
-        send_rcs_wa_notif(config, msg, 'RCS_STARTUP_HANGING', target_jid=private_jid, include_header=True)
 
 def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
     if not config.notif_result: return

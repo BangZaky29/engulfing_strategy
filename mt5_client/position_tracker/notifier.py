@@ -103,7 +103,7 @@ def notify_manual_position_detected(symbol: str, positions: list[TrackedPosition
 def notify_manual_position_closed(symbol: str, positions: list[TrackedPosition], remaining: int):
     """
     Kirim notifikasi saat OP manual ditutup.
-    Target: PROFIT_SIGNAL (jika net >= 0) / LOSS_SIGNAL (jika net < 0) + PRIVATE_JID
+    Target: PROFIT_SIGNAL (jika net >= 0) / LOSS_SIGNAL (jika net < 0)
     """
     profit_jid = os.getenv("PROFIT_SIGNAL", "")
     loss_jid = os.getenv("LOSS_SIGNAL", "")
@@ -147,13 +147,9 @@ def notify_manual_position_closed(symbol: str, positions: list[TrackedPosition],
         f"📊 Sisa OP Manual aktif: {remaining}"
     )
 
-    # Kirim ke Grup Profit/Loss sesuai hasil PnL
+    # Kirim HANYA ke Grup Profit/Loss sesuai hasil PnL (TIDAK ke PRIVATE_JID)
     if target_group_jid:
         _send_wa(msg, target_group_jid, "PT_MANUAL_CLOSE")
-
-    # Juga kirim ke PRIVATE_JID
-    if private_jid and private_jid != target_group_jid:
-        _send_wa(msg, private_jid, "PT_MANUAL_CLOSE")
 
 
 def notify_all_manual_cleared(symbol: str):
