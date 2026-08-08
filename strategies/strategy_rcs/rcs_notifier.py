@@ -210,6 +210,15 @@ def notify_open(
     # Target: PRIVATE_JID — selalu tanpa header
     send_rcs_wa_notif(config, msg, 'RCS_OPEN', target_jid=config.private_jid, include_header=False)
 
+def notify_freeze(symbol: str, floating_usd: float, config: RCSConfig):
+    if not config.notif_freeze: return
+    msg = (
+        f"❄️ *RCS PHASE FREEZE*\n\n"
+        f"Symbol: {symbol}\n"
+        f"Posisi telah terkunci (Hedge).\n"
+        f"Snapshot Floating: *${floating_usd:.2f}*\n\n"
+        f"Menunggu posisi ditutup manual oleh trader..."
+    )
     # Target: PRIVATE_JID — tanpa header
     send_rcs_wa_notif(config, msg, 'RCS_FREEZE', target_jid=config.private_jid, include_header=False)
 
