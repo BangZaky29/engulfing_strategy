@@ -69,6 +69,19 @@ def process_candle_signal(
                 if ticket_id:
                     signal["ticket_id"] = ticket_id
                     try:
+                        from mt5_client.position_tracker import PositionTracker
+                        PositionTracker().register_system_ticket(
+                            symbol=symbol,
+                            ticket=ticket_id,
+                            strategy="ENGULFING",
+                            magic=exec_cfg.magic_number,
+                            direction=str(signal.get("action_str", "BUY")).upper(),
+                            volume=exec_cfg.get_lot_size(symbol),
+                            open_price=signal.get("curr_close", 0.0)
+                        )
+                    except Exception as ex:
+                        print(f"⚠️ Gagal register Engulfing ticket ke PositionTracker: {ex}")
+                    try:
                         notes_obj = json.loads(signal["notes"])
                         notes_obj["ticket_id"] = ticket_id
                         # Inject TFM data ke notes jika ada

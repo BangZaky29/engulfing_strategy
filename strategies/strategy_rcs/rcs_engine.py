@@ -1,6 +1,7 @@
 # =====================================================
 # strategies/strategy_rcs/rcs_engine.py
 # Main Engine Loop for RCS (Reversal Candle System)
+# Terintegrasi dengan PositionTracker untuk membedakan OP Sistem vs Manual
 # =====================================================
 
 import time
@@ -10,6 +11,16 @@ import MetaTrader5 as mt5
 from config.mt5_config import MT5Config, EMAConfig
 from config.rcs_config import RCSConfig
 from mt5_client import init_mt5, shutdown_mt5, get_closed_candles
+from mt5_client.position_tracker import (
+    PositionTracker,
+    log_manual_open,
+    log_manual_close,
+    log_system_paused,
+    notify_manual_position_detected,
+    notify_manual_position_closed,
+    notify_all_manual_cleared,
+    notify_system_paused_due_manual,
+)
 from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
 from strategies.strategy_rcs.trigger import detect_engulfing, detect_ict, apply_all_filters, calculate_levels
 from strategies.strategy_rcs.trigger import skip_reasons as sr
@@ -51,8 +62,33 @@ def run_rcs_bot():
         if not mt5.symbol_select(sym, True):
             print(f"❌ Gagal select symbol {sym}")
         
+    # Inisialisasi PositionTracker (Mesin Sentral Monitoring OP Manual)
+    tracker = PositionTracker()
+
+    states = {sym: RCSState() for sym in symbols}
+    last_candle_times = {sym: None for sym in symbols}
+
+    # Setup callbacks untuk PositionTracker
+    def _on_manual_open(sym: str, positions: list):
+        is_frz = (states[sym].phase == RCSPhase.FREEZE) if sym in states else False
+        notify_manual_position_detected(sym, positions, is_freeze=is_frz)
+        log_manual_open(sym, positions)
+
+    def _on_manual_close(sym: str, closed_positions: list):
+        rem = tracker.get_manual_count(sym)
+        notify_manual_position_closed(sym, closed_positions, remaining=rem)
+        log_manual_close(sym, closed_positions)
+
+    def _on_all_manual_cleared(sym: str):
+        notify_all_manual_cleared(sym)
+
+    tracker.on_manual_open(_on_manual_open)
+    tracker.on_manual_close(_on_manual_close)
+    tracker.on_all_manual_cleared(_on_all_manual_cleared)
+
     print(f"🚀 Memulai REVERSAL CANDLE SYSTEM (RCS) Bot...")
     print(f"🔹 Symbols      : {', '.join(symbols)}")
+    print(f"🔹 Known Magics : {tracker.get_known_magics_text()}")
     print("==================================================")
     
     for sym in symbols:
@@ -75,21 +111,31 @@ def run_rcs_bot():
     # Kirim Notifikasi Sistem Aktif ke RCS_GROUP_JID
     notify_system_status('START', rcs_configs)
     
-    states = {sym: RCSState() for sym in symbols}
-    last_candle_times = {sym: None for sym in symbols}
-    
     try:
         while True:
             for symbol in symbols:
                 state = states[symbol]
                 rcs_cfg = rcs_configs[symbol]
                 
+                # 0. Poll Position Tracker (Interval 0.5s via main loop)
+                snapshot = tracker.poll_positions(symbol)
+                state.manual_positions_count = snapshot.manual_count
+                state.manual_positions_profit = snapshot.total_manual_floating
+
+                has_manual = tracker.has_manual_positions(symbol)
+                state.is_paused_by_manual = has_manual
+
                 # 1. Info dari MT5
                 info = mt5.symbol_info(symbol)
                 tick = mt5.symbol_info_tick(symbol)
                 if info is None or tick is None:
                     continue
-                    
+
+                # Cek jika ada OP Manual saat IDLE: Tampilkan warning & block trigger baru
+                if has_manual and state.phase == RCSPhase.IDLE:
+                    notify_system_paused_due_manual(symbol, snapshot.manual_count, snapshot.total_manual_floating)
+                    continue
+
                 # 2. Polling Timeframe untuk trigger detection (setiap ada candle baru)
                 # Fetch TF M5 (atau timeframe RCS_SIGNAL_TIMEFRAME)
                 candle_data = get_closed_candles(symbol, mt5_cfg, EMAConfig(), tf_label=rcs_cfg.signal_timeframe, verbose=False)
@@ -114,7 +160,7 @@ def run_rcs_bot():
                                 else:
                                     print(cprint(f"✅ [{symbol}] Cooldown selesai. Mencari trigger baru...", Colors.GREEN))
                             
-                            if state.cooldown_until_candle == 0:
+                            if state.cooldown_until_candle == 0 and not has_manual:
                                 # =====================================================
                                 # Cek Guard: Schedule + Company Target + Individual Guard
                                 # =====================================================
@@ -233,8 +279,41 @@ def run_rcs_bot():
                                 # Langsung tembak 3 Pending Order / Market Order!
                                 current_price = tick.ask if direction == "BUY" else tick.bid
                                 if place_op1_order(symbol, current_price, state, rcs_cfg):
-                                    place_op2_order(symbol, state, rcs_cfg)
-                                    place_op3_order(symbol, state, rcs_cfg)
+                                    # Register OP1 ticket di PositionTracker
+                                    if state.op1_ticket:
+                                        tracker.register_system_ticket(
+                                            symbol=symbol,
+                                            ticket=state.op1_ticket,
+                                            strategy="RCS",
+                                            magic=rcs_cfg.magic_op1,
+                                            direction=direction,
+                                            volume=rcs_cfg.lot_size_op1,
+                                            open_price=state.op1_open_price,
+                                        )
+
+                                    if place_op2_order(symbol, state, rcs_cfg):
+                                        if state.op2_ticket:
+                                            tracker.register_system_ticket(
+                                                symbol=symbol,
+                                                ticket=state.op2_ticket,
+                                                strategy="RCS",
+                                                magic=rcs_cfg.magic_op2,
+                                                direction=direction,
+                                                volume=rcs_cfg.lot_size_op2,
+                                                open_price=state.op2_level,
+                                            )
+
+                                    if place_op3_order(symbol, state, rcs_cfg):
+                                        if state.op3_ticket:
+                                            tracker.register_system_ticket(
+                                                symbol=symbol,
+                                                ticket=state.op3_ticket,
+                                                strategy="RCS",
+                                                magic=rcs_cfg.magic_op3,
+                                                direction="SELL" if direction == "BUY" else "BUY",
+                                                volume=round(rcs_cfg.lot_size_op1 + rcs_cfg.lot_size_op2, 2),
+                                                open_price=state.op3_level,
+                                            )
                                     
                                     # Info ditaruh setelah place order agar TP dan SL sudah terhitung di state
                                     print(f"   => OP1 Target: {state.op1_level:.5f} | TP: {state.tp1_price:.5f}")
@@ -245,8 +324,6 @@ def run_rcs_bot():
                                         notify_trigger(symbol, pattern_name, direction, state, rcs_cfg, candle_data=candle_data)
 
                                     # Kirim notif OP1 TERBUKA hanya jika mode Limit/Percent
-                                    # Mode INSTANT_ZERO: tidak perlu notif terpisah karena
-                                    # notify_trigger sudah menginformasikan bahwa OP1 market terbuka
                                     if rcs_cfg.op1_entry_mode != "INSTANT_ZERO":
                                         notify_open(
                                             symbol, "OP1",
@@ -280,9 +357,10 @@ def run_rcs_bot():
                             if state.op3_ticket:
                                 cancel_pending_order_rcs(state.op3_ticket)
                             
-                            real_profit = calculate_cycle_profit(state)
+                            real_profit = calculate_cycle_profit(state, tracker=tracker, symbol=symbol)
                             notify_result(symbol, "Siklus Selesai (Posisi/Order Hilang)", real_profit, 0.0, rcs_cfg, state=state)
                             state.reset()
+                            tracker.clear_closed_manual(symbol)
                             continue
                             
                         # 1. Cek transisi OP2 dari Order menjadi Position
@@ -303,7 +381,7 @@ def run_rcs_bot():
                                     print(cprint(f"❄️ HEDGE (OP2) Terbuka di {op2_open_price:.5f} ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
                                     state.phase = RCSPhase.FREEZE
                                     state.freeze_is_hedge = True
-                                    enter_freeze(state, rcs_cfg)
+                                    enter_freeze(state, rcs_cfg, tracker=tracker, symbol=symbol)
                                     notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
                                 else:
                                     print(cprint(f"🎯 OP2 (Hedge Reentry Limit) tersentuh di {op2_open_price:.5f} ({symbol})! Posisi aktif. Target TP2: {state.tp2_price:.5f}", Colors.GREEN))
@@ -328,9 +406,10 @@ def run_rcs_bot():
                                 if state.op3_ticket:
                                     cancel_pending_order_rcs(state.op3_ticket)
                                     
-                                real_profit = calculate_cycle_profit(state)
+                                real_profit = calculate_cycle_profit(state, tracker=tracker, symbol=symbol)
                                 notify_result(symbol, "Siklus Selesai (OP2 Menyentuh TP2)", real_profit, 0.0, rcs_cfg, state=state)
                                 state.reset()
+                                tracker.clear_closed_manual(symbol)
                                 continue
     
                         # 2. Cek transisi OP3 dari Order menjadi Position
@@ -348,18 +427,18 @@ def run_rcs_bot():
                                 print(cprint(f"❄️ HEDGE (OP3) Terbuka ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
                                 state.phase = RCSPhase.FREEZE
                                 state.freeze_is_hedge = True
-                                enter_freeze(state, rcs_cfg)
+                                enter_freeze(state, rcs_cfg, tracker=tracker, symbol=symbol)
                                 notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
-                                    # OP3 doesn't need else logic here since it's just a freeze trigger if it hits
                     
                 elif state.phase == RCSPhase.FREEZE:
-                    if check_unfreeze(symbol, state, rcs_cfg):
-                        profit, recovery = calculate_recovery(symbol, state, rcs_cfg)
-                        print(cprint(f"☀️ UNFREEZE! Posisi manual telah ditutup ({symbol}). Recovery: ${recovery:.2f}", Colors.GREEN))
+                    if check_unfreeze(symbol, state, rcs_cfg, tracker=tracker):
+                        profit, recovery = calculate_recovery(symbol, state, rcs_cfg, tracker=tracker)
+                        print(cprint(f"☀️ UNFREEZE! Semua posisi (sistem & manual) telah ditutup ({symbol}). Recovery: ${recovery:.2f}", Colors.GREEN))
                         notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg, state=state)
                         state.reset()
+                        tracker.clear_closed_manual(symbol)
                     
-            time.sleep(0.5) # Fast loop tapi jangan spam CPU
+            time.sleep(0.5) # Fast loop 0.5s untuk monitoring
             
     except KeyboardInterrupt:
         print("\n⏹️ RCS Bot dimatikan oleh user (Ctrl+C).")

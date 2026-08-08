@@ -49,6 +49,12 @@ class RCSState:
     freeze_start_time: Optional[datetime.datetime] = None
     freeze_is_hedge: bool = False
     op2_notified: bool = False
+
+    # Manual Position Tracking (dari PositionTracker)
+    manual_positions_count: int = 0                         # Jumlah OP manual saat ini
+    manual_positions_profit: float = 0.0                    # Total floating OP manual
+    manual_detected_time: Optional[datetime.datetime] = None  # Kapan pertama kali OP manual terdeteksi
+    is_paused_by_manual: bool = False                       # Flag: siklus baru di-block karena OP manual
     
     def reset(self):
         """Kembalikan ke state IDLE."""
@@ -79,6 +85,12 @@ class RCSState:
         self.freeze_start_floating_usd = 0.0
         self.freeze_start_time = None
         self.freeze_is_hedge = False
+
+        # Reset manual tracking
+        self.manual_positions_count = 0
+        self.manual_positions_profit = 0.0
+        self.manual_detected_time = None
+        self.is_paused_by_manual = False
         
         # Note: cooldown_until_candle tidak di-reset di sini 
         # karena itu dipakai justru saat IDLE untuk menahan open posisi baru.

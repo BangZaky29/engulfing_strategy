@@ -85,8 +85,16 @@ def run_bot():
             # Bot boleh execute jika: jam kerja aktif DAN company target belum hit DAN individual guard belum hit
             trading_active = schedule_active and company_allowed and daily_allowed
 
+            from mt5_client.position_tracker import PositionTracker, notify_system_paused_due_manual
+            tracker = PositionTracker()
+
             # D. Scan Tiap Mata Uang dan Timeframe
             for symbol in mt5_cfg.symbols:
+                snapshot = tracker.poll_positions(symbol)
+                if tracker.has_manual_positions(symbol):
+                    notify_system_paused_due_manual(symbol, snapshot.manual_count, snapshot.total_manual_floating)
+                    continue
+
                 target_tf = mt5_cfg.get_symbol_timeframe(symbol)
                 
                 # Pastikan target_tf ikut di-scan

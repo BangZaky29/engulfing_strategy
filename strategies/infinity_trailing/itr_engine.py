@@ -153,6 +153,15 @@ def run_itr_bot():
                 time.sleep(1)
                 continue
 
+            from mt5_client.position_tracker import PositionTracker, notify_system_paused_due_manual
+            tracker = PositionTracker()
+            snapshot = tracker.poll_positions(symbol)
+
+            if tracker.has_manual_positions(symbol):
+                notify_system_paused_due_manual(symbol, snapshot.manual_count, snapshot.total_manual_floating)
+                time.sleep(0.5)
+                continue
+
             point = info.point
 
             # Jarak trailing dalam Points
