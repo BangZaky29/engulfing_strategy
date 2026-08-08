@@ -327,9 +327,15 @@ class PositionTracker:
             last = self._last_manual_open_notif.get(symbol, 0)
             if now - last >= self._notif_throttle_sec:
                 self._last_manual_open_notif[symbol] = now
+                total_manual_cnt = len(manual_list)
                 for cb in self._on_manual_open_callbacks:
                     try:
-                        cb(symbol, new_manual)
+                        cb(symbol, new_manual, total_manual_cnt)
+                    except TypeError:
+                        try:
+                            cb(symbol, new_manual)
+                        except Exception as e:
+                            print(f"⚠️ PositionTracker callback error (manual_open): {e}")
                     except Exception as e:
                         print(f"⚠️ PositionTracker callback error (manual_open): {e}")
 

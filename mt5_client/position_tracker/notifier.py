@@ -3,7 +3,7 @@
 # Notifikasi WA untuk event posisi manual
 # Target:
 #   - OP Manual Recovery/Freeze → RCS_GROUP_JID
-#   - OP Manual Liar            → PRIVATE_JID + Terminal
+#   - OP Manual Liar / GRUP OP SIGNAL → PRIVATE_JID + Terminal
 # =====================================================
 
 import os
@@ -36,16 +36,19 @@ def _send_wa(message: str, target_jid: str, event_type: str):
         print(cprint(f"⚠️ Gagal kirim WA notif ({event_type}): {e}", Colors.RED))
 
 
-def notify_manual_position_detected(symbol: str, positions: list[TrackedPosition], is_freeze: bool = False):
+def notify_manual_position_detected(symbol: str, positions: list[TrackedPosition], total_count: int = 0, is_freeze: bool = False):
     """
     Kirim notifikasi saat OP manual terdeteksi.
 
     Target:
-    - Selalu ke PRIVATE_JID (info OP liar/manual)
+    - Selalu ke PRIVATE_JID / GRUP OP SIGNAL
     - Jika is_freeze=True juga ke RCS_GROUP_JID (recovery manual)
     """
     group_jid = os.getenv("RCS_GROUP_JID", "")
     private_jid = os.getenv("PRIVATE_JID", "")
+
+    if total_count == 0:
+        total_count = len(positions)
 
     pos_details = []
     for p in positions:
@@ -54,9 +57,9 @@ def notify_manual_position_detected(symbol: str, positions: list[TrackedPosition
         )
     details_str = "\n".join(pos_details)
 
-    # Terminal log (selalu)
+    # Terminal log
     print(cprint(f"\n{'='*50}", Colors.YELLOW))
-    print(cprint(f"🔍 [{symbol}] OP MANUAL TERDETEKSI! ({len(positions)} posisi)", Colors.YELLOW))
+    print(cprint(f"🔍 [{symbol}] OP MANUAL TERDETEKSI! (Jumlah: {total_count} posisi)", Colors.YELLOW))
     for line in pos_details:
         print(cprint(line, Colors.YELLOW))
     if is_freeze:
@@ -65,10 +68,10 @@ def notify_manual_position_detected(symbol: str, positions: list[TrackedPosition
         print(cprint(f"   ⚠️ Status: OP Manual/Liar terdeteksi — Siklus baru DIBLOKIR", Colors.RED))
     print(cprint(f"{'='*50}\n", Colors.YELLOW))
 
-    # --- Pesan ke PRIVATE_JID (info OP liar + recovery) ---
+    # --- Pesan ke PRIVATE_JID / GRUP OP SIGNAL ---
     msg_private = (
         f"🔍 *OP MANUAL TERDETEKSI* [{symbol}]\n\n"
-        f"Jumlah: {len(positions)} posisi\n"
+        f"Jumlah: *{total_count} posisi*\n"
         f"{details_str}\n\n"
     )
     if is_freeze:
@@ -89,7 +92,7 @@ def notify_manual_position_detected(symbol: str, positions: list[TrackedPosition
         msg_group = (
             f"🤖 *[POSITION TRACKER]*\n\n"
             f"🔍 *OP MANUAL TERDETEKSI* [{symbol}]\n\n"
-            f"Jumlah: {len(positions)} posisi\n"
+            f"Jumlah: *{total_count} posisi*\n"
             f"{details_str}\n\n"
             f"❄️ Sistem mendeteksi OP recovery manual oleh Trader.\n"
             f"Kalkulasi profit/loss akan menyertakan OP ini secara otomatis."
@@ -118,16 +121,15 @@ def notify_manual_position_closed(symbol: str, positions: list[TrackedPosition],
 
     # Terminal log
     print(cprint(f"\n{'='*50}", Colors.CYAN))
-    print(cprint(f"📤 [{symbol}] OP MANUAL DITUTUP ({len(positions)} posisi) | Net: ${total_net:.2f}", Colors.CYAN))
+    print(cprint(f"📤 [{symbol}] [POSITION TRACKER] OP MANUAL DITUTUP ({len(positions)} posisi) | Net: ${total_net:.2f}", Colors.CYAN))
     for line in pos_details:
         print(cprint(line, Colors.CYAN))
     print(cprint(f"   📊 Sisa OP Manual aktif: {remaining}", Colors.CYAN))
     print(cprint(f"{'='*50}\n", Colors.CYAN))
 
     msg = (
-        f"🤖 *[POSITION TRACKER]*\n\n"
-        f"📤 *OP MANUAL DITUTUP* [{symbol}]\n\n"
-        f"Jumlah ditutup: {len(positions)}\n"
+        f"🤖 *[POSITION TRACKER] OP MANUAL DITUTUP* [{symbol}]\n\n"
+        f"Jumlah ditutup: *{len(positions)} posisi*\n"
         f"{details_str}\n\n"
         f"💰 Total Net PnL: *${total_net:.2f}*\n"
         f"📊 Sisa OP Manual aktif: {remaining}"

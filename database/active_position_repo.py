@@ -49,11 +49,13 @@ class ActivePositionRepo:
                 }
                 sb.table(ActivePositionRepo.TABLE).upsert(payload, on_conflict="ticket").execute()
 
-            # Clean up: Hapus posisi aktif di Supabase untuk symbol ini yang sudah ditutup
-            if active_tickets:
-                sb.table(ActivePositionRepo.TABLE).delete().eq("symbol", symbol).not_in("ticket", active_tickets).execute()
-            else:
-                sb.table(ActivePositionRepo.TABLE).delete().eq("symbol", symbol).execute()
+            # Clean up: Hapus posisi aktif di Supabase untuk symbol ini yang sudah ditutup di MT5
+            existing_res = sb.table(ActivePositionRepo.TABLE).select("ticket").eq("symbol", symbol).execute()
+            if existing_res and existing_res.data:
+                db_tickets = [row["ticket"] for row in existing_res.data]
+                delete_tickets = [t for t in db_tickets if t not in active_tickets]
+                if delete_tickets:
+                    sb.table(ActivePositionRepo.TABLE).delete().eq("symbol", symbol).in_("ticket", delete_tickets).execute()
 
             return True
         except Exception as e:

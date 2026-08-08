@@ -238,7 +238,20 @@ def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, 
     else:
         header = "📊 [RESULT (TUYUL COPET | RCS)]"
 
-    # 3. Blok trigger metrics dari state (jika tersedia)
+    # 3. Hitung akumulasi total OP yang ditutup dalam siklus (Sistem + Manual)
+    total_op_closed = 0
+    if state is not None:
+        if state.op1_ticket: total_op_closed += 1
+        if state.op2_ticket: total_op_closed += 1
+        if state.op3_ticket: total_op_closed += 1
+        try:
+            from mt5_client.position_tracker import PositionTracker
+            manual_summary = PositionTracker().get_closed_manual_summary(symbol, since=state.freeze_start_time)
+            total_op_closed += manual_summary.total_count
+        except Exception:
+            pass
+
+    # 4. Blok trigger metrics dari state (jika tersedia)
     metrics_str = ""
     if state is not None and hasattr(state, 'trigger_risk_range_pts'):
         metrics_str = (
@@ -253,19 +266,21 @@ def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, 
             f"(Syarat: <= {config.max_spread_points} pts)\n\n"
         )
 
-    # 4. Body pesan
+    # 5. Body pesan
+    op_count_str = f"Total OP Ditutup: *{total_op_closed} posisi*\n" if total_op_closed > 0 else ""
     msg = (
         f"{header}\n"
         f"📊 RCS RESULT\n"
         f"{metrics_str}"
         f"Symbol: {symbol}\n"
+        f"{op_count_str}"
         f"Info: {event_desc}\n"
-        f"Closed PnL: *${profit:.2f}*\n"
+        f"Closed Net PnL: *${profit:.2f}*\n"
     )
     if recovery != 0.0:
         msg += f"Hasil Recovery: *${recovery:.2f}*"
         
-    # 5. Kirim ke grup profit atau loss — tanpa HEADER_TEXT karena sudah ada di body
+    # 6. Kirim ke grup profit atau loss — tanpa HEADER_TEXT karena sudah ada di body
     target_group = config.profit_signal_jid if profit > 0 else config.loss_signal_jid
     
     send_rcs_wa_notif(

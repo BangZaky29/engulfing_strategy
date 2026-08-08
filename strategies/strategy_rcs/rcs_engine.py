@@ -69,9 +69,9 @@ def run_rcs_bot():
     last_candle_times = {sym: None for sym in symbols}
 
     # Setup callbacks untuk PositionTracker
-    def _on_manual_open(sym: str, positions: list):
+    def _on_manual_open(sym: str, positions: list, total_count: int = 0):
         is_frz = (states[sym].phase == RCSPhase.FREEZE) if sym in states else False
-        notify_manual_position_detected(sym, positions, is_freeze=is_frz)
+        notify_manual_position_detected(sym, positions, total_count=total_count, is_freeze=is_frz)
         log_manual_open(sym, positions)
 
     def _on_manual_close(sym: str, closed_positions: list):
