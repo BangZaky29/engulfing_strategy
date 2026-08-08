@@ -1,6 +1,6 @@
 # =====================================================
 # mt5_client/position_tracker/event_log.py
-# Pencatatan event posisi ke Supabase tabel position_events
+# Pencatatan dan pembacaan event posisi ke/dari Supabase tabel position_events
 # =====================================================
 
 import time
@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from .models import TrackedPosition, PositionOrigin
+from database.position_event_repo import PositionEventRepo
 
 
 def log_position_event(
@@ -25,7 +26,7 @@ def log_position_event(
     metadata: dict | None = None,
 ):
     """
-    Catat event posisi ke Supabase tabel position_events.
+    Catat event posisi ke Supabase tabel position_events via PositionEventRepo.
 
     event_type:
     - MANUAL_OPEN    : OP manual baru terdeteksi
@@ -35,33 +36,30 @@ def log_position_event(
     - SYSTEM_PAUSED  : Siklus di-pause karena OP manual
     - FREEZE_MANUAL  : OP manual terdeteksi saat FREEZE
     """
-    try:
-        from database.supabase_client import get_supabase
-        supabase = get_supabase()
-        if supabase is None:
-            return
+    payload = {
+        "event_type": event_type,
+        "ticket": ticket,
+        "symbol": symbol,
+        "direction": direction,
+        "volume": volume,
+        "origin": origin,
+        "strategy": strategy,
+        "profit": round(profit, 2),
+        "metadata": {
+            **(metadata or {}),
+            "swap": round(swap, 4),
+            "commission": round(commission, 4),
+            "net_profit": round(profit + swap + commission, 2),
+            "logged_at": datetime.now().isoformat(),
+        },
+    }
 
-        payload = {
-            "event_type": event_type,
-            "ticket": ticket,
-            "symbol": symbol,
-            "direction": direction,
-            "volume": volume,
-            "origin": origin,
-            "strategy": strategy,
-            "profit": round(profit, 2),
-            "metadata": {
-                **(metadata or {}),
-                "swap": round(swap, 4),
-                "commission": round(commission, 4),
-                "net_profit": round(profit + swap + commission, 2),
-                "logged_at": datetime.now().isoformat(),
-            },
-        }
+    PositionEventRepo.insert(payload)
 
-        supabase.table("position_events").insert(payload).execute()
-    except Exception as e:
-        print(f"⚠️ Gagal log position event ({event_type}): {e}")
+
+def get_recent_position_events(symbol: Optional[str] = None, limit: int = 50) -> list:
+    """Membaca log event posisi terbaru dari tabel position_events di Supabase."""
+    return PositionEventRepo.get_recent(symbol=symbol, limit=limit)
 
 
 def log_manual_open(symbol: str, positions: list[TrackedPosition]):

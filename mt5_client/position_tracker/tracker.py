@@ -180,6 +180,10 @@ class PositionTracker:
             existing.current_swap = pos.swap
             existing.current_commission = pos.commission if hasattr(pos, 'commission') else 0.0
             existing.volume = pos.volume
+            existing.current_price = getattr(pos, "price_current", pos.price_open) or pos.price_open
+            existing.sl_price = getattr(pos, "sl", 0.0) or 0.0
+            existing.tp_price = getattr(pos, "tp", 0.0) or 0.0
+            existing.margin = getattr(pos, "margin", 0.0) or 0.0
             return existing
 
         # 2. Cek magic number
@@ -204,6 +208,10 @@ class PositionTracker:
             comment=pos.comment if hasattr(pos, 'comment') else "",
             origin=origin,
             strategy=strategy,
+            current_price=getattr(pos, "price_current", pos.price_open) or pos.price_open,
+            sl_price=getattr(pos, "sl", 0.0) or 0.0,
+            tp_price=getattr(pos, "tp", 0.0) or 0.0,
+            margin=getattr(pos, "margin", 0.0) or 0.0,
             current_profit=pos.profit,
             current_swap=pos.swap,
             current_commission=pos.commission if hasattr(pos, 'commission') else 0.0,
@@ -305,6 +313,13 @@ class PositionTracker:
         for ticket, old_tracked in prev.items():
             if ticket not in current_tickets and old_tracked.origin == PositionOrigin.SYSTEM:
                 self.unregister_system_ticket(ticket)
+
+        # Sync posisi aktif ke Supabase table position_tracker_positions
+        try:
+            from database.active_position_repo import ActivePositionRepo
+            ActivePositionRepo.sync_active_positions(symbol, list(current_tickets.values()))
+        except Exception:
+            pass
 
         # Emit callbacks untuk manual open
         if new_manual:

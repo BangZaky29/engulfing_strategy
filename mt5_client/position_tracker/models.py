@@ -28,6 +28,10 @@ class TrackedPosition:
     comment: str
     origin: PositionOrigin
     strategy: str               # "RCS" / "ENGULFING" / "ITR" / "UNKNOWN"
+    current_price: float = 0.0
+    sl_price: float = 0.0
+    tp_price: float = 0.0
+    margin: float = 0.0
     current_profit: float = 0.0
     current_swap: float = 0.0
     current_commission: float = 0.0

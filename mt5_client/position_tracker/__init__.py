@@ -7,6 +7,7 @@ from .tracker import PositionTracker
 from .models import TrackedPosition, PositionOrigin, PositionSnapshot, ClosedManualSummary
 from .event_log import (
     log_position_event,
+    get_recent_position_events,
     log_manual_open,
     log_manual_close,
     log_system_paused,
