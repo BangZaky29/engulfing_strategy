@@ -29,13 +29,68 @@ from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs, 
 from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text
 from strategies.strategy_rcs.rcs_daily_guard import check_rcs_daily_target, get_rcs_daily_guard_status_text
 from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery, calculate_cycle_profit
-from strategies.strategy_rcs.rcs_notifier import notify_trigger, notify_skip, notify_open, notify_freeze, notify_result, notify_system_status, notify_company_target_reached_rcs
+from strategies.strategy_rcs.rcs_notifier import (
+    notify_trigger,
+    notify_skip,
+    notify_open,
+    notify_freeze,
+    notify_result,
+    notify_system_status,
+    notify_company_target_reached_rcs,
+    notify_startup_hanging_positions,
+)
 from config.company_daily_guard import (
     check_company_daily_target,
     get_company_guard_status_text,
     should_send_company_notif,
 )
 from utils.colors import cprint, Colors
+
+def perform_startup_position_audit(symbols: list, rcs_configs: dict, states: dict, tracker: PositionTracker):
+    """
+    Melakukan audit posisi awal saat bot pertama kali di-running.
+    Mendeteksi apakah ada OP Manual atau OP Sistem tertinggal dari sesi sebelumnya.
+    Jika ada, infokan ke RCS_GROUP_JID (GRUP COPET SKIPPED) dan pause pair tersebut.
+    """
+    for symbol in symbols:
+        rcs_cfg = rcs_configs[symbol]
+        state = states[symbol]
+
+        snapshot = tracker.poll_positions(symbol)
+        if snapshot.total_count == 0:
+            continue
+
+        # Ada posisi tertinggal!
+        print(cprint(f"\n⚠️ [{symbol}] AUDIT STARTUP: Ditemukan {snapshot.total_count} posisi tertinggal di broker MT5!", Colors.YELLOW))
+        print(cprint(f"   • Manual: {snapshot.manual_count} posisi | Sistem: {snapshot.system_count} posisi | Floating: ${snapshot.total_floating:.2f}", Colors.YELLOW))
+
+        # Cek apakah tiket sistem cocok dengan magic RCS
+        for pos in snapshot.system_positions:
+            if pos.magic_number == rcs_cfg.magic_op1:
+                state.op1_ticket = pos.ticket
+                state.op1_open_price = pos.open_price
+                if state.phase == RCSPhase.IDLE:
+                    state.phase = RCSPhase.OP1
+            elif pos.magic_number == rcs_cfg.magic_op2:
+                state.op2_ticket = pos.ticket
+                state.op2_notified = True
+                if rcs_cfg.op2_mode == "HEDGE":
+                    state.phase = RCSPhase.FREEZE
+                    state.freeze_is_hedge = True
+            elif pos.magic_number == rcs_cfg.magic_op3:
+                state.op3_ticket = pos.ticket
+                state.phase = RCSPhase.FREEZE
+                state.freeze_is_hedge = True
+
+        state.manual_positions_count = snapshot.manual_count
+        state.manual_positions_profit = snapshot.total_manual_floating
+        state.is_paused_by_manual = True
+
+        # Kirim notifikasi WA ke RCS_GROUP_JID & PRIVATE_JID
+        try:
+            notify_startup_hanging_positions(symbol, snapshot, rcs_cfg)
+        except Exception as e:
+            print(f"⚠️ Gagal kirim notifikasi startup hanging positions ({symbol}): {e}")
 
 def run_rcs_bot():
     # Instantiate global for global properties like enabled and symbols
@@ -110,6 +165,9 @@ def run_rcs_bot():
     
     # Kirim Notifikasi Sistem Aktif ke RCS_GROUP_JID
     notify_system_status('START', rcs_configs)
+
+    # Perform startup position audit (Deteksi posisi tergantung saat bot baru nyala)
+    perform_startup_position_audit(symbols, rcs_configs, states, tracker)
     
     try:
         while True:
@@ -123,7 +181,8 @@ def run_rcs_bot():
                 state.manual_positions_profit = snapshot.total_manual_floating
 
                 has_manual = tracker.has_manual_positions(symbol)
-                state.is_paused_by_manual = has_manual
+                has_hanging = (snapshot.total_count > 0)
+                state.is_paused_by_manual = has_hanging
 
                 # 1. Info dari MT5
                 info = mt5.symbol_info(symbol)
@@ -131,9 +190,9 @@ def run_rcs_bot():
                 if info is None or tick is None:
                     continue
 
-                # Cek jika ada OP Manual saat IDLE: Tampilkan warning & block trigger baru
-                if has_manual and state.phase == RCSPhase.IDLE:
-                    notify_system_paused_due_manual(symbol, snapshot.manual_count, snapshot.total_manual_floating)
+                # Cek jika ada OP Tergantung (Manual / System Orphan) saat IDLE: Tampilkan warning & block trigger baru
+                if has_hanging and state.phase == RCSPhase.IDLE:
+                    notify_system_paused_due_manual(symbol, snapshot.total_count, snapshot.total_floating)
                     continue
 
                 # 2. Polling Timeframe untuk trigger detection (setiap ada candle baru)

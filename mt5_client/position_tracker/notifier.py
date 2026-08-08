@@ -103,9 +103,10 @@ def notify_manual_position_detected(symbol: str, positions: list[TrackedPosition
 def notify_manual_position_closed(symbol: str, positions: list[TrackedPosition], remaining: int):
     """
     Kirim notifikasi saat OP manual ditutup.
-    Target: PRIVATE_JID + RCS_GROUP_JID
+    Target: PROFIT_SIGNAL (jika net >= 0) / LOSS_SIGNAL (jika net < 0) + PRIVATE_JID
     """
-    group_jid = os.getenv("RCS_GROUP_JID", "")
+    profit_jid = os.getenv("PROFIT_SIGNAL", "")
+    loss_jid = os.getenv("LOSS_SIGNAL", "")
     private_jid = os.getenv("PRIVATE_JID", "")
 
     pos_details = []
@@ -114,9 +115,16 @@ def notify_manual_position_closed(symbol: str, positions: list[TrackedPosition],
         net = p.close_profit + p.close_swap + p.close_commission
         total_net += net
         result_emoji = "🟢" if net >= 0 else "🔴"
-        pos_details.append(
-            f"  • Tkt #{p.ticket} | {p.direction} {p.volume} lot | PnL: ${net:.2f} {result_emoji}"
-        )
+        
+        fees = p.close_swap + p.close_commission
+        if abs(fees) > 0.001:
+            pos_details.append(
+                f"  • Tkt #{p.ticket} | {p.direction} {p.volume} lot | Gross: ${p.close_profit:.2f} | Comm/Swap: ${fees:.2f} | Net: ${net:.2f} {result_emoji}"
+            )
+        else:
+            pos_details.append(
+                f"  • Tkt #{p.ticket} | {p.direction} {p.volume} lot | Net PnL: ${net:.2f} {result_emoji}"
+            )
     details_str = "\n".join(pos_details)
 
     # Terminal log
@@ -127,7 +135,11 @@ def notify_manual_position_closed(symbol: str, positions: list[TrackedPosition],
     print(cprint(f"   📊 Sisa OP Manual aktif: {remaining}", Colors.CYAN))
     print(cprint(f"{'='*50}\n", Colors.CYAN))
 
+    header_emoji = "🎉 [PROFIT (POSITION TRACKER | MANUAL)]" if total_net >= 0 else "☠️ [LOSS (POSITION TRACKER | MANUAL)]"
+    target_group_jid = profit_jid if total_net >= 0 else loss_jid
+
     msg = (
+        f"{header_emoji}\n\n"
         f"🤖 *[POSITION TRACKER] OP MANUAL DITUTUP* [{symbol}]\n\n"
         f"Jumlah ditutup: *{len(positions)} posisi*\n"
         f"{details_str}\n\n"
@@ -135,9 +147,13 @@ def notify_manual_position_closed(symbol: str, positions: list[TrackedPosition],
         f"📊 Sisa OP Manual aktif: {remaining}"
     )
 
-    _send_wa(msg, private_jid, "PT_MANUAL_CLOSE")
-    if group_jid:
-        _send_wa(msg, group_jid, "PT_MANUAL_CLOSE")
+    # Kirim ke Grup Profit/Loss sesuai hasil PnL
+    if target_group_jid:
+        _send_wa(msg, target_group_jid, "PT_MANUAL_CLOSE")
+
+    # Juga kirim ke PRIVATE_JID
+    if private_jid and private_jid != target_group_jid:
+        _send_wa(msg, private_jid, "PT_MANUAL_CLOSE")
 
 
 def notify_all_manual_cleared(symbol: str):

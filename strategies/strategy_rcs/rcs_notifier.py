@@ -210,17 +210,42 @@ def notify_open(
     # Target: PRIVATE_JID — selalu tanpa header
     send_rcs_wa_notif(config, msg, 'RCS_OPEN', target_jid=config.private_jid, include_header=False)
 
-def notify_freeze(symbol: str, floating_usd: float, config: RCSConfig):
-    if not config.notif_freeze: return
-    msg = (
-        f"❄️ *RCS PHASE FREEZE*\n\n"
-        f"Symbol: {symbol}\n"
-        f"Posisi telah terkunci (Hedge).\n"
-        f"Snapshot Floating: *${floating_usd:.2f}*\n\n"
-        f"Menunggu posisi ditutup manual oleh trader..."
-    )
     # Target: PRIVATE_JID — tanpa header
     send_rcs_wa_notif(config, msg, 'RCS_FREEZE', target_jid=config.private_jid, include_header=False)
+
+def notify_startup_hanging_positions(symbol: str, snapshot, config: RCSConfig):
+    """
+    Kirim notifikasi saat bot startup jika mendeteksi posisi aktif tertinggal di broker.
+    Target: RCS_GROUP_JID (GRUP COPET SKIPPED) & PRIVATE_JID
+    """
+    rcs_skip_jid = config.group_jid or os.getenv("RCS_GROUP_JID") or "120363409493021715@g.us"
+    private_jid = config.private_jid or os.getenv("PRIVATE_JID")
+
+    all_positions = snapshot.system_positions + snapshot.manual_positions
+    pos_lines = []
+    for p in all_positions:
+        origin_label = "MANUAL" if (hasattr(p.origin, 'value') and p.origin.value == "MANUAL") else f"SYSTEM ({p.strategy})"
+        pos_lines.append(
+            f"• Tkt #{p.ticket} | {p.direction} {p.volume} lot @ {p.open_price:.5f} | PnL: ${p.net_profit:.2f} [{origin_label}]"
+        )
+    pos_str = "\n".join(pos_lines)
+
+    msg = (
+        f"⚠️ *DETEKSI POSISI TERGANTUNG SAAT STARTUP* [{symbol}]\n\n"
+        f"Sistem mendeteksi *{snapshot.total_count} posisi aktif* tertinggal di broker MT5:\n"
+        f"• Posisi Manual: {snapshot.manual_count} posisi\n"
+        f"• Posisi Sistem: {snapshot.system_count} posisi\n"
+        f"• Total Floating PnL: *${snapshot.total_floating:.2f}*\n\n"
+        f"📍 RINCIAN POSISI TERTINGGAL:\n"
+        f"{pos_str}\n\n"
+        f"🛑 *STATUS SIKLUS:* DIBLOKIR (PAUSED)\n"
+        f"Sistem TIDAK akan membuka siklus baru pada {symbol} sampai semua posisi di atas ditutup."
+    )
+
+    if rcs_skip_jid:
+        send_rcs_wa_notif(config, msg, 'RCS_STARTUP_HANGING', target_jid=rcs_skip_jid, include_header=True)
+    if private_jid and private_jid != rcs_skip_jid:
+        send_rcs_wa_notif(config, msg, 'RCS_STARTUP_HANGING', target_jid=private_jid, include_header=True)
 
 def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
     if not config.notif_result: return
