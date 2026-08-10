@@ -5,6 +5,8 @@
 
 import os
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import mplfinance as mpf
 from config.mt5_config import EMAConfig
 
