@@ -422,101 +422,101 @@ def run_rcs_bot():
                             # Manage trigger age kalau pakai trigger lama
                             pass
                             
-                # 3. Fast Tick Polling untuk Monitoring Pending Order & Posisi
-                if state.phase == RCSPhase.OP1:
-                    if state.op1_ticket is not None:
-                        # 0. Cek apakah OP1 lenyap dari peredaran (Posisi kosong DAN Order kosong)
-                        pos1 = mt5.positions_get(ticket=state.op1_ticket)
-                        ord1 = mt5.orders_get(ticket=state.op1_ticket)
-                        
-                        if not pos1 and not ord1:
-                            print(cprint(f"👻 OP1 (Tkt:{state.op1_ticket}) hilang dari market {symbol} (TP/SL Hit atau Cancel).", Colors.YELLOW))
-                            print(cprint(f"🧹 Membersihkan sisa pending order OP2 dan OP3...", Colors.YELLOW))
-                            if state.op2_ticket:
-                                cancel_pending_order_rcs(state.op2_ticket)
-                            if state.op3_ticket:
-                                cancel_pending_order_rcs(state.op3_ticket)
+                    # 3. Fast Tick Polling untuk Monitoring Pending Order & Posisi
+                    if state.phase == RCSPhase.OP1:
+                        if state.op1_ticket is not None:
+                            # 0. Cek apakah OP1 lenyap dari peredaran (Posisi kosong DAN Order kosong)
+                            pos1 = mt5.positions_get(ticket=state.op1_ticket)
+                            ord1 = mt5.orders_get(ticket=state.op1_ticket)
                             
-                            real_profit = calculate_cycle_profit(state, tracker=tracker, symbol=symbol)
-                            notify_result(symbol, "Siklus Selesai (Posisi/Order Hilang)", real_profit, 0.0, rcs_cfg, state=state)
-                            state.reset()
-                            tracker.clear_closed_manual(symbol)
-                            continue
-                            
-                        # 1. Cek transisi OP2 dari Order menjadi Position
-                        if state.op2_ticket and not state.op2_notified:
-                            pos2 = mt5.positions_get(ticket=state.op2_ticket)
-                            ord2 = mt5.orders_get(ticket=state.op2_ticket)
-                            
-                            if pos2 and not ord2:
-                                state.op2_notified = True
-                                op2_open_price = pos2[0].price_open
+                            if not pos1 and not ord1:
+                                print(cprint(f"👻 OP1 (Tkt:{state.op1_ticket}) hilang dari market {symbol} (TP/SL Hit atau Cancel).", Colors.YELLOW))
+                                print(cprint(f"🧹 Membersihkan sisa pending order OP2 dan OP3...", Colors.YELLOW))
+                                if state.op2_ticket:
+                                    cancel_pending_order_rcs(state.op2_ticket)
+                                if state.op3_ticket:
+                                    cancel_pending_order_rcs(state.op3_ticket)
                                 
-                                # OP2 baru saja tertrigger menjadi posisi!
-                                if rcs_cfg.op2_mode == "HEDGE":
-                                    # Hapus TP1 dari OP1 agar broker tidak auto-close saat freeze
+                                real_profit = calculate_cycle_profit(state, tracker=tracker, symbol=symbol)
+                                notify_result(symbol, "Siklus Selesai (Posisi/Order Hilang)", real_profit, 0.0, rcs_cfg, state=state)
+                                state.reset()
+                                tracker.clear_closed_manual(symbol)
+                                continue
+                                
+                            # 1. Cek transisi OP2 dari Order menjadi Position
+                            if state.op2_ticket and not state.op2_notified:
+                                pos2 = mt5.positions_get(ticket=state.op2_ticket)
+                                ord2 = mt5.orders_get(ticket=state.op2_ticket)
+                                
+                                if pos2 and not ord2:
+                                    state.op2_notified = True
+                                    op2_open_price = pos2[0].price_open
+                                    
+                                    # OP2 baru saja tertrigger menjadi posisi!
+                                    if rcs_cfg.op2_mode == "HEDGE":
+                                        # Hapus TP1 dari OP1 agar broker tidak auto-close saat freeze
+                                        if state.op1_ticket:
+                                            if remove_tp_from_position(state.op1_ticket):
+                                                print(cprint(f"   🔓 TP1 dihapus dari OP1 (Tkt:{state.op1_ticket}) — posisi dikunci hedge.", Colors.CYAN))
+                                        print(cprint(f"❄️ HEDGE (OP2) Terbuka di {op2_open_price:.5f} ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
+                                        state.phase = RCSPhase.FREEZE
+                                        state.freeze_is_hedge = True
+                                        enter_freeze(state, rcs_cfg, tracker=tracker, symbol=symbol)
+                                        notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
+                                    else:
+                                        print(cprint(f"🎯 OP2 (Hedge Reentry Limit) tersentuh di {op2_open_price:.5f} ({symbol})! Posisi aktif. Target TP2: {state.tp2_price:.5f}", Colors.GREEN))
+                                        notify_open(symbol, "OP2 (Hedge Reentry)", state.op2_ticket, op2_open_price, state.tp2_price, rcs_cfg)
+                                        
+                            # 1b. Cek jika OP2 pernah aktif (op2_notified == True) lalu OP2 menyentuh TP2 & ditutup oleh broker!
+                            if state.op2_ticket and state.op2_notified and state.phase != RCSPhase.FREEZE:
+                                pos2 = mt5.positions_get(ticket=state.op2_ticket)
+                                if not pos2:
+                                    # OP2 posisi sudah hilang (tersentuh TP2)!
+                                    print(cprint(f"🎯 OP2 (Hedge Reentry) menyentuh TP2 ({symbol})! Menutup sisa posisi OP1 (Tkt:{state.op1_ticket})...", Colors.GREEN))
+                                    
+                                    # Tutup OP1 aktif jika masih ada
+                                    if state.op1_ticket:
+                                        pos1_check = mt5.positions_get(ticket=state.op1_ticket)
+                                        if pos1_check:
+                                            close_position_by_ticket(state.op1_ticket)
+                                            print(cprint(f"✅ Posisi OP1 (Tkt:{state.op1_ticket}) berhasil ditutup otomatis.", Colors.GREEN))
+                                            
+                                    # Batalkan sisa pending order (OP3 / SL)
+                                    print(cprint(f"🧹 Membersihkan sisa pending order OP3...", Colors.YELLOW))
+                                    if state.op3_ticket:
+                                        cancel_pending_order_rcs(state.op3_ticket)
+                                        
+                                    real_profit = calculate_cycle_profit(state, tracker=tracker, symbol=symbol)
+                                    notify_result(symbol, "Siklus Selesai (OP2 Menyentuh TP2)", real_profit, 0.0, rcs_cfg, state=state)
+                                    state.reset()
+                                    tracker.clear_closed_manual(symbol)
+                                    continue
+        
+                            # 2. Cek transisi OP3 dari Order menjadi Position
+                            if state.op3_ticket and state.phase != RCSPhase.FREEZE:
+                                pos3 = mt5.positions_get(ticket=state.op3_ticket)
+                                ord3 = mt5.orders_get(ticket=state.op3_ticket)
+                                if pos3 and not ord3:
+                                    # OP3 hedge terbuka → hapus TP1 dan TP2 agar broker tidak auto-close
                                     if state.op1_ticket:
                                         if remove_tp_from_position(state.op1_ticket):
-                                            print(cprint(f"   🔓 TP1 dihapus dari OP1 (Tkt:{state.op1_ticket}) — posisi dikunci hedge.", Colors.CYAN))
-                                    print(cprint(f"❄️ HEDGE (OP2) Terbuka di {op2_open_price:.5f} ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
+                                            print(cprint(f"   🔓 TP1 dihapus dari OP1 (Tkt:{state.op1_ticket}) — posisi dikunci hedge OP3.", Colors.CYAN))
+                                    if state.op2_ticket:
+                                        if remove_tp_from_position(state.op2_ticket):
+                                            print(cprint(f"   🔓 TP2 dihapus dari OP2 (Tkt:{state.op2_ticket}) — posisi dikunci hedge OP3.", Colors.CYAN))
+                                    print(cprint(f"❄️ HEDGE (OP3) Terbuka ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
                                     state.phase = RCSPhase.FREEZE
                                     state.freeze_is_hedge = True
                                     enter_freeze(state, rcs_cfg, tracker=tracker, symbol=symbol)
                                     notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
-                                else:
-                                    print(cprint(f"🎯 OP2 (Hedge Reentry Limit) tersentuh di {op2_open_price:.5f} ({symbol})! Posisi aktif. Target TP2: {state.tp2_price:.5f}", Colors.GREEN))
-                                    notify_open(symbol, "OP2 (Hedge Reentry)", state.op2_ticket, op2_open_price, state.tp2_price, rcs_cfg)
-                                    
-                        # 1b. Cek jika OP2 pernah aktif (op2_notified == True) lalu OP2 menyentuh TP2 & ditutup oleh broker!
-                        if state.op2_ticket and state.op2_notified and state.phase != RCSPhase.FREEZE:
-                            pos2 = mt5.positions_get(ticket=state.op2_ticket)
-                            if not pos2:
-                                # OP2 posisi sudah hilang (tersentuh TP2)!
-                                print(cprint(f"🎯 OP2 (Hedge Reentry) menyentuh TP2 ({symbol})! Menutup sisa posisi OP1 (Tkt:{state.op1_ticket})...", Colors.GREEN))
-                                
-                                # Tutup OP1 aktif jika masih ada
-                                if state.op1_ticket:
-                                    pos1_check = mt5.positions_get(ticket=state.op1_ticket)
-                                    if pos1_check:
-                                        close_position_by_ticket(state.op1_ticket)
-                                        print(cprint(f"✅ Posisi OP1 (Tkt:{state.op1_ticket}) berhasil ditutup otomatis.", Colors.GREEN))
-                                        
-                                # Batalkan sisa pending order (OP3 / SL)
-                                print(cprint(f"🧹 Membersihkan sisa pending order OP3...", Colors.YELLOW))
-                                if state.op3_ticket:
-                                    cancel_pending_order_rcs(state.op3_ticket)
-                                    
-                                real_profit = calculate_cycle_profit(state, tracker=tracker, symbol=symbol)
-                                notify_result(symbol, "Siklus Selesai (OP2 Menyentuh TP2)", real_profit, 0.0, rcs_cfg, state=state)
-                                state.reset()
-                                tracker.clear_closed_manual(symbol)
-                                continue
-    
-                        # 2. Cek transisi OP3 dari Order menjadi Position
-                        if state.op3_ticket and state.phase != RCSPhase.FREEZE:
-                            pos3 = mt5.positions_get(ticket=state.op3_ticket)
-                            ord3 = mt5.orders_get(ticket=state.op3_ticket)
-                            if pos3 and not ord3:
-                                # OP3 hedge terbuka → hapus TP1 dan TP2 agar broker tidak auto-close
-                                if state.op1_ticket:
-                                    if remove_tp_from_position(state.op1_ticket):
-                                        print(cprint(f"   🔓 TP1 dihapus dari OP1 (Tkt:{state.op1_ticket}) — posisi dikunci hedge OP3.", Colors.CYAN))
-                                if state.op2_ticket:
-                                    if remove_tp_from_position(state.op2_ticket):
-                                        print(cprint(f"   🔓 TP2 dihapus dari OP2 (Tkt:{state.op2_ticket}) — posisi dikunci hedge OP3.", Colors.CYAN))
-                                print(cprint(f"❄️ HEDGE (OP3) Terbuka ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
-                                state.phase = RCSPhase.FREEZE
-                                state.freeze_is_hedge = True
-                                enter_freeze(state, rcs_cfg, tracker=tracker, symbol=symbol)
-                                notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
-                    
-                elif state.phase == RCSPhase.FREEZE:
-                    if check_unfreeze(symbol, state, rcs_cfg, tracker=tracker):
-                        profit, recovery = calculate_recovery(symbol, state, rcs_cfg, tracker=tracker)
-                        print(cprint(f"☀️ UNFREEZE! Semua posisi (sistem & manual) telah ditutup ({symbol}). Recovery: ${recovery:.2f}", Colors.GREEN))
-                        notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg, state=state)
-                        state.reset()
-                        tracker.clear_closed_manual(symbol)
+                        
+                    elif state.phase == RCSPhase.FREEZE:
+                        if check_unfreeze(symbol, state, rcs_cfg, tracker=tracker):
+                            profit, recovery = calculate_recovery(symbol, state, rcs_cfg, tracker=tracker)
+                            print(cprint(f"☀️ UNFREEZE! Semua posisi (sistem & manual) telah ditutup ({symbol}). Recovery: ${recovery:.2f}", Colors.GREEN))
+                            notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg, state=state)
+                            state.reset()
+                            tracker.clear_closed_manual(symbol)
                 
                 except Exception as sym_err:
                     print(cprint(f"❌ Exception terisolasi pada symbol {symbol}: {sym_err}", Colors.RED))
