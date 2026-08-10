@@ -186,79 +186,86 @@ def run_rcs_bot():
     try:
         while True:
             for symbol in symbols:
-                state = states[symbol]
-                rcs_cfg = rcs_configs[symbol]
-                
-                # 0. Poll Position Tracker (Interval 0.5s via main loop)
-                snapshot = tracker.poll_positions(symbol)
-                state.manual_positions_count = snapshot.manual_count
-                state.manual_positions_profit = snapshot.total_manual_floating
+                try:
+                    state = states[symbol]
+                    rcs_cfg = rcs_configs[symbol]
+                    
+                    # 0. Poll Position Tracker (Interval 0.5s via main loop)
+                    snapshot = tracker.poll_positions(symbol)
+                    state.manual_positions_count = snapshot.manual_count
+                    state.manual_positions_profit = snapshot.total_manual_floating
 
-                has_manual = tracker.has_manual_positions(symbol)
-                has_hanging = (snapshot.total_count > 0)
-                state.is_paused_by_manual = has_hanging
+                    has_manual = tracker.has_manual_positions(symbol)
+                    has_hanging = (snapshot.total_count > 0)
+                    state.is_paused_by_manual = has_hanging
 
-                # 1. Info dari MT5
-                info = mt5.symbol_info(symbol)
-                tick = mt5.symbol_info_tick(symbol)
-                if info is None or tick is None:
-                    continue
+                    # 1. Info dari MT5
+                    info = mt5.symbol_info(symbol)
+                    tick = mt5.symbol_info_tick(symbol)
+                    if info is None or tick is None:
+                        now_t = time.time()
+                        if now_t - getattr(state, '_last_symbol_err_time', 0) > 30:
+                            state._last_symbol_err_time = now_t
+                            print(cprint(f"⚠️ [{symbol}] Gagal mendapatkan info/tick dari MT5. Pastikan nama symbol '{symbol}' di .env cocok dengan Market Watch broker!", Colors.RED))
+                        continue
 
-                # Cek jika ada OP Tergantung (Manual / System Orphan) saat IDLE: Tampilkan warning & block trigger baru
-                if has_hanging and state.phase == RCSPhase.IDLE:
-                    notify_system_paused_due_manual(symbol, snapshot.total_count, snapshot.total_floating)
-                    continue
+                    # Cek jika ada OP Tergantung (Manual / System Orphan) saat IDLE: Tampilkan warning & block trigger baru
+                    if has_hanging and state.phase == RCSPhase.IDLE:
+                        notify_system_paused_due_manual(symbol, snapshot.total_count, snapshot.total_floating)
+                        continue
 
-                # 2. Polling Timeframe untuk trigger detection (setiap ada candle baru)
-                # Fetch TF M5 (atau timeframe RCS_SIGNAL_TIMEFRAME)
-                candle_data = get_closed_candles(symbol, mt5_cfg, EMAConfig(), tf_label=rcs_cfg.signal_timeframe, verbose=False)
-                if candle_data:
-                    current_time = candle_data["timestamp"]
-                    # Format to remove seconds if it's a datetime object
-                    if hasattr(current_time, 'strftime'):
-                        display_time = current_time.strftime("%Y.%m.%d %H:%M")
-                    else:
-                        # if it's a string, just slice it if possible
-                        display_time = str(current_time)[:16].replace('-', '.')
-                        
-                    if last_candle_times[symbol] is None or current_time != last_candle_times[symbol]:
-                        # New candle detected!
-                        last_candle_times[symbol] = current_time
-                        
-                        if state.phase == RCSPhase.IDLE:
-                            if state.cooldown_until_candle > 0:
-                                state.cooldown_until_candle -= 1
-                                if state.cooldown_until_candle > 0:
-                                    print(cprint(f"⏳ [{symbol}] Sedang Cooldown... Sisa {state.cooldown_until_candle} candle", Colors.GRAY))
-                                else:
-                                    print(cprint(f"✅ [{symbol}] Cooldown selesai. Mencari trigger baru...", Colors.GREEN))
+                    # 2. Polling Timeframe untuk trigger detection (setiap ada candle baru)
+                    # Fetch TF M5 (atau timeframe RCS_SIGNAL_TIMEFRAME)
+                    candle_data = get_closed_candles(symbol, mt5_cfg, EMAConfig(), tf_label=rcs_cfg.signal_timeframe, verbose=False)
+                    if candle_data:
+                        current_time = candle_data["timestamp"]
+                        # Format to remove seconds if it's a datetime object
+                        if hasattr(current_time, 'strftime'):
+                            display_time = current_time.strftime("%Y.%m.%d %H:%M")
+                        else:
+                            # if it's a string, just slice it if possible
+                            display_time = str(current_time)[:16].replace('-', '.')
                             
-                            if state.cooldown_until_candle == 0 and not has_manual:
-                                # =====================================================
-                                # Cek Guard: Schedule + Company Target + Individual Guard
-                                # =====================================================
-                                # 1. Cek jam kerja RCS (individu Copet: 05:00-14:00)
-                                rcs_schedule_ok = is_rcs_trading_active(rcs_cfg)
+                        if last_candle_times[symbol] is None or current_time != last_candle_times[symbol]:
+                            # New candle detected!
+                            last_candle_times[symbol] = current_time
+                            
+                            if state.phase == RCSPhase.IDLE:
+                                if state.cooldown_until_candle > 0:
+                                    state.cooldown_until_candle -= 1
+                                    if state.cooldown_until_candle > 0:
+                                        print(cprint(f"⏳ [{symbol}] Sedang Cooldown... Sisa {state.cooldown_until_candle} candle", Colors.GRAY))
+                                    else:
+                                        print(cprint(f"✅ [{symbol}] Cooldown selesai. Mencari trigger baru...", Colors.GREEN))
+                                
+                                if state.cooldown_until_candle == 0 and not has_manual:
+                                    # =====================================================
+                                    # Cek Guard: Schedule + Company Target + Individual Guard
+                                    # =====================================================
+                                    # 1. Cek jam kerja RCS (individu Copet: 05:00-14:00)
+                                    rcs_schedule_ok = is_rcs_trading_active(rcs_cfg)
 
-                                # 2. Cek Company Daily Target (gabungan semua Tuyul)
-                                company_allowed, company_reason = check_company_daily_target()
-                                if not company_allowed and company_reason:
-                                    if should_send_company_notif():
-                                        print(cprint(f"\n🏁 [COMPANY TARGET] {company_reason}", Colors.MAGENTA))
-                                        notify_company_target_reached_rcs(company_reason)
+                                    # 2. Cek Company Daily Target (gabungan semua Tuyul)
+                                    company_allowed, company_reason = check_company_daily_target()
+                                    if not company_allowed and company_reason:
+                                        if should_send_company_notif():
+                                            print(cprint(f"\n🏁 [COMPANY TARGET] {company_reason}", Colors.MAGENTA))
+                                            notify_company_target_reached_rcs(company_reason)
 
-                                # 3. Cek Individual RCS Daily Guard
-                                rcs_allowed, rcs_reason = check_rcs_daily_target(rcs_cfg)
-                                if not rcs_allowed and rcs_reason:
-                                    print(cprint(f"   🛡️ [COPET Guard] {rcs_reason}", Colors.YELLOW))
+                                    # 3. Cek Individual RCS Daily Guard
+                                    rcs_allowed, rcs_reason = check_rcs_daily_target(rcs_cfg)
+                                    if not rcs_allowed and rcs_reason:
+                                        print(cprint(f"   🛡️ [COPET Guard] {rcs_reason}", Colors.YELLOW))
 
-                                # Boleh execute hanya jika semua guard lolos
-                                execute_allowed = rcs_schedule_ok and company_allowed and rcs_allowed
+                                    # Boleh execute hanya jika semua guard lolos
+                                    execute_allowed = rcs_schedule_ok and company_allowed and rcs_allowed
 
-                                if not execute_allowed:
-                                    if not rcs_schedule_ok:
-                                        print(cprint(f"⏸️ [{symbol}] Di luar jam kerja Copet ({rcs_cfg.rcs_trading_active_start}→{rcs_cfg.rcs_trading_active_end})", Colors.GRAY), end='\r', flush=True)
-                                    continue
+                                    if not execute_allowed:
+                                        if not rcs_schedule_ok:
+                                            if getattr(state, '_last_sched_pause_time', None) != current_time:
+                                                state._last_sched_pause_time = current_time
+                                                print(cprint(f"⏸️ [{symbol}] Di luar jam kerja Copet ({rcs_cfg.rcs_trading_active_start}→{rcs_cfg.rcs_trading_active_end})", Colors.GRAY))
+                                        continue
 
                                 # 1. Cek Pattern (Engulfing / ICT)
                                 direction = None
@@ -510,7 +517,12 @@ def run_rcs_bot():
                         notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg, state=state)
                         state.reset()
                         tracker.clear_closed_manual(symbol)
-                    
+                
+                except Exception as sym_err:
+                    print(cprint(f"❌ Exception terisolasi pada symbol {symbol}: {sym_err}", Colors.RED))
+                    import traceback
+                    traceback.print_exc()
+
             time.sleep(0.5) # Fast loop 0.5s untuk monitoring
             
     except KeyboardInterrupt:

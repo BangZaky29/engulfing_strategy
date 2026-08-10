@@ -6,6 +6,7 @@
 import os
 import time
 import uuid
+import threading
 from datetime import datetime
 import MetaTrader5 as mt5
 
@@ -18,7 +19,7 @@ from utils.colors import cprint, Colors
 
 HEADER_TEXT = "🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
 
-def send_rcs_wa_notif(
+def _send_wa_notif_worker(
     config: RCSConfig,
     message: str,
     event_type: str,
@@ -26,12 +27,6 @@ def send_rcs_wa_notif(
     media_url: str | None = None,
     include_header: bool = True,
 ):
-    """
-    Fungsi helper untuk kirim pesan ke Supabase WA Outbox dengan routing JID.
-
-    include_header=True  → prepend HEADER_TEXT (untuk grup skip/result)
-    include_header=False → tanpa header (untuk PRIVATE_JID / grup OP Signal)
-    """
     dest_jid = target_jid if target_jid else config.group_jid
     if not dest_jid:
         return
@@ -60,6 +55,24 @@ def send_rcs_wa_notif(
         print(cprint(f"📲 Notifikasi WA {event_type} terkirim ke {dest_jid}", Colors.GREEN))
     except Exception as e:
         print(cprint(f"⚠️ Gagal kirim WA notif ({event_type}): {e}", Colors.RED))
+
+def send_rcs_wa_notif(
+    config: RCSConfig,
+    message: str,
+    event_type: str,
+    target_jid: str | None = None,
+    media_url: str | None = None,
+    include_header: bool = True,
+):
+    """
+    Fungsi helper untuk kirim pesan ke Supabase WA Outbox dengan routing JID secara asynchronous.
+    """
+    t = threading.Thread(
+        target=_send_wa_notif_worker,
+        args=(config, message, event_type, target_jid, media_url, include_header),
+        daemon=True
+    )
+    t.start()
 
 def generate_and_upload_rcs_screenshot(symbol: str, state, config: RCSConfig) -> str:
     """Generates screenshot menggunakan Timeframe dinamis RCS_SIGNAL_TIMEFRAME dan mengunggah ke Supabase Storage."""
@@ -275,9 +288,7 @@ def notify_startup_clean_positions(symbols: list[str], config: RCSConfig):
     if rcs_skip_jid:
         send_rcs_wa_notif(config, msg, 'RCS_STARTUP_CLEAN', target_jid=rcs_skip_jid, include_header=True)
 
-def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
-    if not config.notif_result: return
-    
+def _async_notify_result_worker(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
     # 1. Generate & Upload Screenshot if state is provided
     media_url = ""
     if state is not None:
@@ -294,12 +305,13 @@ def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, 
     # 3. Hitung akumulasi total OP yang ditutup dalam siklus (Sistem + Manual)
     total_op_closed = 0
     if state is not None:
-        if state.op1_ticket: total_op_closed += 1
-        if state.op2_ticket: total_op_closed += 1
-        if state.op3_ticket: total_op_closed += 1
+        if getattr(state, 'op1_ticket', None): total_op_closed += 1
+        if getattr(state, 'op2_ticket', None): total_op_closed += 1
+        if getattr(state, 'op3_ticket', None): total_op_closed += 1
         try:
             from mt5_client.position_tracker import PositionTracker
-            manual_summary = PositionTracker().get_closed_manual_summary(symbol, since=state.freeze_start_time)
+            freeze_start = getattr(state, 'freeze_start_time', None)
+            manual_summary = PositionTracker().get_closed_manual_summary(symbol, since=freeze_start)
             total_op_closed += manual_summary.total_count
         except Exception:
             pass
@@ -342,6 +354,15 @@ def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, 
         media_url=media_url if media_url else None,
         include_header=False,
     )
+
+def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
+    if not config.notif_result: return
+    t = threading.Thread(
+        target=_async_notify_result_worker,
+        args=(symbol, event_desc, profit, recovery, config, state),
+        daemon=True
+    )
+    t.start()
 
 def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info: str = ""):
     from strategies.strategy_rcs.rcs_schedule import get_rcs_trading_status_text
