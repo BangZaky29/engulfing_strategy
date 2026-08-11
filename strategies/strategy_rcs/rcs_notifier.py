@@ -10,7 +10,7 @@ import threading
 from datetime import datetime
 import MetaTrader5 as mt5
 
-from database.supabase_client import get_supabase
+from database.supabase_client import get_supabase, execute_supabase
 from database.supabase_storage import upload_screenshot
 from mt5_client.visualizer import generate_screenshot
 from config.mt5_config import MT5Config, EMAConfig
@@ -31,10 +31,6 @@ def _send_wa_notif_worker(
     if not dest_jid:
         return
 
-    supabase = get_supabase()
-    if supabase is None:
-        return
-
     full_message = (HEADER_TEXT + message) if include_header else message
     message_type = 'IMAGE' if media_url else 'TEXT'
 
@@ -51,7 +47,7 @@ def _send_wa_notif_worker(
         payload['image_url'] = media_url
 
     try:
-        supabase.table('wa_outbox').insert(payload).execute()
+        execute_supabase(lambda sb: sb.table('wa_outbox').insert(payload).execute())
         print(cprint(f"📲 Notifikasi WA {event_type} terkirim ke {dest_jid}", Colors.GREEN))
     except Exception as e:
         print(cprint(f"⚠️ Gagal kirim WA notif ({event_type}): {e}", Colors.RED))
@@ -441,7 +437,7 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
             })
 
         if outbox_rows:
-            sb.table('wa_outbox').insert(outbox_rows).execute()
+            execute_supabase(lambda sb: sb.table('wa_outbox').insert(outbox_rows).execute())
             print(cprint(f"📲 Broadcast Notifikasi RCS System ({status}) ke {len(outbox_rows)} WA (Gabungan {len(configs)} symbol)", Colors.GREEN))
     except Exception as e:
         print(cprint(f"⚠️ Gagal broadcast WA notif RCS System ({status}): {e}", Colors.RED))

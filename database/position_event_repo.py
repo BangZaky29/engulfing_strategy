@@ -4,7 +4,7 @@
 # =====================================================
 
 from typing import Optional
-from database.supabase_client import get_supabase
+from database.supabase_client import execute_supabase
 
 
 class PositionEventRepo:
@@ -19,11 +19,7 @@ class PositionEventRepo:
         Catatan: Jika tabel belum dibuat di Supabase, menangkap exception secara graceful.
         """
         try:
-            sb = get_supabase()
-            if sb is None:
-                return False
-
-            sb.table(PositionEventRepo.TABLE).insert(event_data).execute()
+            execute_supabase(lambda sb: sb.table(PositionEventRepo.TABLE).insert(event_data).execute())
             return True
         except Exception as e:
             err_msg = str(e)
@@ -43,16 +39,15 @@ class PositionEventRepo:
             limit: Batas jumlah record yang diambil
         """
         try:
-            sb = get_supabase()
-            if sb is None:
-                return []
+            def _query(sb):
+                query = sb.table(PositionEventRepo.TABLE).select("*").order("created_at", desc=True).limit(limit)
+                if symbol:
+                    query = query.eq("symbol", symbol)
+                return query.execute()
 
-            query = sb.table(PositionEventRepo.TABLE).select("*").order("created_at", desc=True).limit(limit)
-            if symbol:
-                query = query.eq("symbol", symbol)
-
-            res = query.execute()
+            res = execute_supabase(_query)
             return res.data or []
         except Exception as e:
             print(f"⚠️ Gagal membaca data dari position_events: {e}")
             return []
+

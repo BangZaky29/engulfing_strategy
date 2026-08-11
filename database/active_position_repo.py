@@ -4,7 +4,7 @@
 # =====================================================
 
 from datetime import datetime
-from database.supabase_client import get_supabase
+from database.supabase_client import execute_supabase
 
 
 class ActivePositionRepo:
@@ -16,19 +16,17 @@ class ActivePositionRepo:
     def sync_active_positions(symbol: str, active_tracked_positions: list) -> bool:
         """
         Upsert posisi yang sedang aktif dan hapus posisi pada symbol tersebut yang sudah ditutup.
+        Menggunakan batching dan auto-reconnect untuk efisiensi koneksi.
         """
-        sb = get_supabase()
-        if sb is None:
-            return False
-
         try:
             now_iso = datetime.now().isoformat()
             active_tickets = []
+            payloads = []
 
             for pos in active_tracked_positions:
                 active_tickets.append(pos.ticket)
                 origin_str = pos.origin.value if hasattr(pos.origin, "value") else str(pos.origin)
-                payload = {
+                payloads.append({
                     "ticket": pos.ticket,
                     "symbol": pos.symbol,
                     "position_type": pos.direction,
@@ -46,17 +44,22 @@ class ActivePositionRepo:
                     "entry_price": pos.open_price,
                     "sl_price": getattr(pos, "sl_price", 0.0) or 0.0,
                     "tp_price": getattr(pos, "tp_price", 0.0) or 0.0,
-                }
-                sb.table(ActivePositionRepo.TABLE).upsert(payload, on_conflict="ticket").execute()
+                })
 
-            # Clean up: Hapus posisi aktif di Supabase untuk symbol ini yang sudah ditutup di MT5
-            existing_res = sb.table(ActivePositionRepo.TABLE).select("ticket").eq("symbol", symbol).execute()
-            if existing_res and existing_res.data:
-                db_tickets = [row["ticket"] for row in existing_res.data]
-                delete_tickets = [t for t in db_tickets if t not in active_tickets]
-                if delete_tickets:
-                    sb.table(ActivePositionRepo.TABLE).delete().eq("symbol", symbol).in_("ticket", delete_tickets).execute()
+            def _do_sync(sb):
+                # 1. Batch upsert jika ada payload posisi aktif
+                if payloads:
+                    sb.table(ActivePositionRepo.TABLE).upsert(payloads, on_conflict="ticket").execute()
 
+                # 2. Clean up: Hapus posisi aktif di Supabase untuk symbol ini yang sudah ditutup di MT5
+                existing_res = sb.table(ActivePositionRepo.TABLE).select("ticket").eq("symbol", symbol).execute()
+                if existing_res and existing_res.data:
+                    db_tickets = [row["ticket"] for row in existing_res.data]
+                    delete_tickets = [t for t in db_tickets if t not in active_tickets]
+                    if delete_tickets:
+                        sb.table(ActivePositionRepo.TABLE).delete().eq("symbol", symbol).in_("ticket", delete_tickets).execute()
+
+            execute_supabase(_do_sync)
             return True
         except Exception as e:
             err_msg = str(e)
@@ -66,3 +69,4 @@ class ActivePositionRepo:
             else:
                 print(f"⚠️ Gagal sync active positions ke Supabase ({symbol}): {e}")
             return False
+

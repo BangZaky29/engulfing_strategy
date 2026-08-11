@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import MetaTrader5 as mt5
 
-from database.supabase_client import get_supabase
+from database.supabase_client import get_supabase, execute_supabase
 from .tracker_store import save_tracked_trades
 
 
@@ -68,7 +68,6 @@ def sample_floating_snapshot(ticket: int, info: dict, positions, data: dict) -> 
 
                 # insert ke Supabase
                 try:
-                    supabase = get_supabase()
                     trigger_type = info.get("trigger_type") or "Engulfing"
 
                     symbol_info = mt5.symbol_info(info["symbol"])  # type: ignore
@@ -102,7 +101,7 @@ def sample_floating_snapshot(ticket: int, info: dict, positions, data: dict) -> 
                         
                     }
 
-                    supabase.table("trade_floating_snapshots").insert(sb_payload).execute()
+                    execute_supabase(lambda sb: sb.table("trade_floating_snapshots").insert(sb_payload).execute())
                     info["latest_snapshot_time"] = now_dt.isoformat()
                     if not info.get("entry_time"):
                         try:

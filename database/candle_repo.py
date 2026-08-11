@@ -3,7 +3,7 @@
 # Repository: CRUD operasi untuk table 'candles'
 # =====================================================
 
-from database.supabase_client import get_supabase
+from database.supabase_client import execute_supabase
 from postgrest.types import CountMethod
 
 
@@ -18,7 +18,6 @@ class CandleRepo:
         Insert/update candle. Upsert berdasarkan (symbol, timeframe, timestamp).
         """
         try:
-            sb = get_supabase()
             payload = {
                 "symbol": data["symbol"],
                 "timeframe": data["timeframe"],
@@ -41,9 +40,11 @@ class CandleRepo:
                 "is_bullish": data.get("is_bullish"),
             }
 
-            sb.table(CandleRepo.TABLE).upsert(
-                payload, on_conflict="symbol,timeframe,timestamp"
-            ).execute()
+            execute_supabase(
+                lambda sb: sb.table(CandleRepo.TABLE).upsert(
+                    payload, on_conflict="symbol,timeframe,timestamp"
+                ).execute()
+            )
 
             return True
 
@@ -55,9 +56,8 @@ class CandleRepo:
     def get_recent(symbol: str, timeframe: str, limit: int = 50) -> list:
         """Ambil candle terbaru dari Supabase."""
         try:
-            sb = get_supabase()
-            result = (
-                sb.table(CandleRepo.TABLE)
+            result = execute_supabase(
+                lambda sb: sb.table(CandleRepo.TABLE)
                 .select("*")
                 .eq("symbol", symbol)
                 .eq("timeframe", timeframe)
@@ -75,9 +75,8 @@ class CandleRepo:
     def count(symbol: str, timeframe: str) -> int:
         """Hitung total candle tersimpan."""
         try:
-            sb = get_supabase()
-            result = (
-                sb.table(CandleRepo.TABLE)
+            result = execute_supabase(
+                lambda sb: sb.table(CandleRepo.TABLE)
                 .select("id", count=CountMethod.exact)
                 .eq("symbol", symbol)
                 .eq("timeframe", timeframe)
@@ -88,3 +87,4 @@ class CandleRepo:
         except Exception as e:
             print(f"❌ Error count candles: {e}")
             return 0
+

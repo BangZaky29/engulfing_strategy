@@ -4,7 +4,7 @@
 # =====================================================
 
 import os
-from database.supabase_client import get_supabase
+from database.supabase_client import execute_supabase
 
 
 def upload_screenshot(local_file_path: str, bucket_name: str, folder_date: str, filename: str) -> tuple[bool, str]:
@@ -15,26 +15,25 @@ def upload_screenshot(local_file_path: str, bucket_name: str, folder_date: str, 
     """
     if not os.path.exists(local_file_path):
         print(f"❌ File tidak ditemukan: {local_file_path}")
-        return False
+        return False, ""
 
-    supabase = get_supabase()
     destination_path = f"{folder_date}/{filename}"
 
     try:
-        with open(local_file_path, "rb") as f:
-            # Upload file. Pastikan bucket sudah ada dan RLS insert/update diizinkan (atau pakai service role)
-            # Jika file sudah ada, opsi upsert bisa dipakai, tapi SDK supabase-py agak terbatas. 
-            # Kita tangkap exception jika gagal.
-            res = supabase.storage.from_(bucket_name).upload(
-                path=destination_path,
-                file=f,
-                file_options={"content-type": "image/png"}
-            )
-            # Ambil Public URL
-            public_url = supabase.storage.from_(bucket_name).get_public_url(destination_path)
-            
-            print(f"✅ Gambar sukses diupload ke Supabase: {destination_path}")
-            return True, public_url
+        def _upload(sb):
+            with open(local_file_path, "rb") as f:
+                res = sb.storage.from_(bucket_name).upload(
+                    path=destination_path,
+                    file=f,
+                    file_options={"content-type": "image/png"}
+                )
+                public_url = sb.storage.from_(bucket_name).get_public_url(destination_path)
+                return public_url
+
+        public_url = execute_supabase(_upload)
+        print(f"✅ Gambar sukses diupload ke Supabase: {destination_path}")
+        return True, public_url
     except Exception as e:
         print(f"❌ Gagal upload ke Supabase: {e}")
         return False, ""
+
