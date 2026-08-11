@@ -30,7 +30,7 @@ def build_and_upsert_trigger_analytics(
     if exit_time:
         try:
             exit_dt = datetime.fromtimestamp(exit_time, tz=timezone.utc)
-        except:
+        except Exception as e:
             exit_dt = None
 
     max_neg = None

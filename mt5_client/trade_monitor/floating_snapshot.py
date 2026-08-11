@@ -11,6 +11,8 @@ import MetaTrader5 as mt5
 from database.supabase_client import get_supabase, execute_supabase
 from .tracker_store import save_tracked_trades
 
+_snapshot_buffer = []
+_last_flush_time = datetime.now(timezone.utc)
 
 def sample_floating_snapshot(ticket: int, info: dict, positions, data: dict) -> None:
     """Mengambil snapshot floating profit untuk order yang aktif dan menyimpannya ke database Supabase."""
@@ -27,7 +29,7 @@ def sample_floating_snapshot(ticket: int, info: dict, positions, data: dict) -> 
                     last_snap = datetime.fromisoformat(last_snap_str)
                     if last_snap.tzinfo is None:
                         last_snap = last_snap.replace(tzinfo=timezone.utc)
-                except:
+                except Exception as e:
                     last_snap = None
 
             min_interval_sec = 3
@@ -55,7 +57,7 @@ def sample_floating_snapshot(ticket: int, info: dict, positions, data: dict) -> 
                             floating_pct = (float(current_price) - float(entry_price)) / float(entry_price) * 100.0
                         else:
                             floating_pct = (float(entry_price) - float(current_price)) / float(entry_price) * 100.0
-                except:
+                except Exception as e:
                     floating_pct = None
 
                 if floating_pct is None:
@@ -66,7 +68,7 @@ def sample_floating_snapshot(ticket: int, info: dict, positions, data: dict) -> 
                 snap_tf_execute = info.get("tf", "M5")
                 snap_tf_monitor = info.get("tf_monitor", "M15")
 
-                # insert ke Supabase
+                # insert ke Supabase (menggunakan In-Memory Buffer)
                 try:
                     trigger_type = info.get("trigger_type") or "Engulfing"
 
@@ -101,7 +103,18 @@ def sample_floating_snapshot(ticket: int, info: dict, positions, data: dict) -> 
                         
                     }
 
-                    execute_supabase(lambda sb: sb.table("trade_floating_snapshots").insert(sb_payload).execute())
+                    global _snapshot_buffer, _last_flush_time
+                    _snapshot_buffer.append(sb_payload)
+                    
+                    if len(_snapshot_buffer) >= 20 or (now_dt - _last_flush_time).total_seconds() >= 30:
+                        buf_copy = _snapshot_buffer.copy()
+                        _snapshot_buffer.clear()
+                        _last_flush_time = now_dt
+                        # Lakukan insert secara asynchronous / batching
+                        def _flush_buffer(sb):
+                            sb.table("trade_floating_snapshots").insert(buf_copy).execute()
+                        execute_supabase(_flush_buffer)
+
                     info["latest_snapshot_time"] = now_dt.isoformat()
                     if not info.get("entry_time"):
                         try:
@@ -109,11 +122,11 @@ def sample_floating_snapshot(ticket: int, info: dict, positions, data: dict) -> 
                             if entry_time_ts:
                                 # time biasanya berupa epoch seconds
                                 info["entry_time"] = datetime.fromtimestamp(entry_time_ts, tz=timezone.utc).isoformat()
-                        except:
+                        except Exception as e:
                             pass
                     save_tracked_trades(data)
                 except Exception as ex:
-                    print(f"⚠️ Gagal insert floating snapshot untuk #{ticket}: {ex}")
+                    print(f"⚠️ Gagal buffer floating snapshot untuk #{ticket}: {ex}")
     except Exception as ex:
         # sampling jangan pernah block trade_monitor loop
         print(f"⚠️ Gagal sampling floating snapshot untuk #{ticket}: {ex}")

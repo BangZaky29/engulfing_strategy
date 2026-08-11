@@ -53,13 +53,22 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
         # 1. State Machine: PENDING -> ACTIVE
         if status == "PENDING":
             # Cek apakah masih jadi pending order
-            orders = mt5.orders_get(ticket=ticket)  # type: ignore
+            orders = mt5.orders_get(ticket=ticket)
+            if orders is None:
+                err = mt5.last_error()
+                if err and err[0] != 4753: 
+                    continue # Error koneksi, skip evaluasi tiket ini
+                    
             if orders is not None and len(orders) > 0:
                 # Masih pending, belum tersentuh
                 continue
                 
             # Jika sudah hilang dari orders_get, cek apakah muncul di positions_get
-            positions = mt5.positions_get(ticket=ticket)  # type: ignore
+            positions = mt5.positions_get(ticket=ticket)
+            if positions is None:
+                err = mt5.last_error()
+                if err and err[0] != 4753: 
+                    continue # Error koneksi, skip evaluasi tiket ini
             if positions is not None and len(positions) > 0:
                 # ORDER TERSENTUH (FILLED)!
                 print(f"🎯 PENDING ORDER TERSENTUH: #{ticket} ({info['symbol']}) | Sesi: {session_str}")
@@ -99,7 +108,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                 floating_pct0 = (float(current_price0) - float(entry_price0)) / float(entry_price0) * 100.0
                             else:
                                 floating_pct0 = (float(entry_price0) - float(current_price0)) / float(entry_price0) * 100.0
-                    except:
+                    except Exception as e:
                         floating_pct0 = 0.0
 
                     symbol_info0 = mt5.symbol_info(info["symbol"])  # type: ignore
@@ -139,7 +148,11 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
             # Jika tidak ada di orders dan tidak ada di positions, 
             # berarti either Cancelled atau sudah langsung hit TP/SL.
             # Cek di history_orders_get
-            hist_orders = mt5.history_orders_get(ticket=ticket)  # type: ignore
+            hist_orders = mt5.history_orders_get(ticket=ticket)
+            if hist_orders is None:
+                err = mt5.last_error()
+                if err and err[0] != 4753: 
+                    continue # Error koneksi, skip
             if hist_orders is not None and len(hist_orders) > 0:
                 h_order = hist_orders[0]
                 if h_order.state in [mt5.ORDER_STATE_EXPIRED, mt5.ORDER_STATE_CANCELED]:
@@ -193,7 +206,7 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
                                     public_url = uploaded_url
                                     try:
                                         os.remove(new_path)
-                                    except:
+                                    except Exception as e:
                                         pass
                     except Exception as e:
                         print(f"⚠️ Gagal generate/upload SS untuk active log {ticket}: {e}")
@@ -220,7 +233,11 @@ def check_closed_trades(mt5_cfg: MT5Config, ema_cfg: EMAConfig):
 
         # 2. Cek apakah posisi masih aktif (Status = ACTIVE)
         if status == "ACTIVE":
-            positions = mt5.positions_get(ticket=ticket)  # type: ignore
+            positions = mt5.positions_get(ticket=ticket)
+            if positions is None:
+                err = mt5.last_error()
+                if err and err[0] != 4753: 
+                    continue # Error koneksi, skip evaluasi tiket ini
             
             # --- sampling floating snapshots saat trade ACTIVE ---
             sample_floating_snapshot(ticket, info, positions, data)

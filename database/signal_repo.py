@@ -61,8 +61,8 @@ class SignalRepo:
                     import json
                     notes_obj = json.loads(signal.get('notes', '{}'))
                     ticket_id_str = str(notes_obj.get('ticket_id', ''))
-                except:
-                    pass
+                except Exception as e:
+                    notes_dict = {}
             
             if not ticket_id_str.startswith("INFO_") and not ticket_id_str.startswith("TFM_"):
                 if signal.get('is_confirmed'):

@@ -52,7 +52,7 @@ def process_candle_signal(
                         notes_obj["h1_direct_execute"] = True
                         notes_obj["h1_direct_max_dist"] = max_dist
                         signal["notes"] = json.dumps(notes_obj)
-                except:
+                except Exception as e:
                     pass
 
             if tf == target_tf or is_h1_direct:
@@ -90,7 +90,7 @@ def process_candle_signal(
                             notes_obj["tfm_bias"] = signal.get("tfm_bias")
                             notes_obj["tfm_snapshot"] = signal.get("tfm_snapshot")
                         signal["notes"] = json.dumps(notes_obj)
-                    except:
+                    except Exception as e:
                         pass
                 else:
                     signal["skip_reason"] = exec_skip_reason or "Eksekusi MT5 gagal"
@@ -112,7 +112,7 @@ def process_candle_signal(
                             if signal.get("m5_trigger_source"):
                                 notes_obj["m5_trigger_source"] = signal["m5_trigger_source"]
                             signal["notes"] = json.dumps(notes_obj)
-                        except:
+                        except Exception as e:
                             pass
 
                 # Simpan sinyal ke Supabase
@@ -135,7 +135,7 @@ def process_candle_signal(
                 signal["ticket_id"] = None
                 try:
                     notes_obj = json.loads(signal.get("notes", "{}"))
-                except:
+                except Exception as e:
                     notes_obj = {}
                 notes_obj["ticket_id"] = f"INFO_{tf}"
                 signal["notes"] = json.dumps(notes_obj)
@@ -164,7 +164,7 @@ def process_candle_signal(
                         for s in recent_signals:
                             try:
                                 s_notes = json.loads(s.get("notes", "{}"))
-                            except:
+                            except Exception as e:
                                 s_notes = {}
                             if s_notes.get("ticket_id") == "INFO_SYNC" and s.get("pattern_type") == signal["pattern_type"]:
                                 latest_sync = s
@@ -186,7 +186,7 @@ def process_candle_signal(
                             
                             try:
                                 notes_obj = json.loads(sync_signal.get("notes", "{}"))
-                            except:
+                            except Exception as e:
                                 notes_obj = {}
                             notes_obj["sync_with"] = other_tf
                             notes_obj["ticket_id"] = "INFO_SYNC"

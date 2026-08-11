@@ -267,7 +267,27 @@ class PositionTracker:
 
         all_positions = mt5.positions_get(symbol=symbol)
         if all_positions is None:
-            all_positions = ()
+            err = mt5.last_error()
+            # 4753 = Position not found (benar-benar tidak ada posisi)
+            # Jika error lain, anggap koneksi bermasalah dan pertahankan state sebelumnya
+            if err and err[0] == 4753:
+                all_positions = ()
+            else:
+                print(f"⚠️ PositionTracker: Gagal baca posisi MT5 untuk {symbol}. Error: {err}. Retaining prev state.")
+                prev = self._prev_snapshot.get(symbol, {})
+                sys_list = [p for p in prev.values() if p.origin == PositionOrigin.SYSTEM]
+                man_list = [p for p in prev.values() if p.origin == PositionOrigin.MANUAL]
+                sys_float = sum(p.net_profit for p in sys_list)
+                man_float = sum(p.net_profit for p in man_list)
+                return PositionSnapshot(
+                    symbol=symbol,
+                    timestamp=datetime.now(),
+                    system_positions=sys_list,
+                    manual_positions=man_list,
+                    total_system_floating=sys_float,
+                    total_manual_floating=man_float,
+                )
+
 
         current_tickets: dict[int, TrackedPosition] = {}
         system_list = []

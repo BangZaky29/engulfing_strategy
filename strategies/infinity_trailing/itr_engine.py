@@ -268,7 +268,7 @@ def run_itr_bot():
                                 'message': f'🎯 [OPSI 1] Cycle Target ${itr_cfg.opsi1_target_usd} TERCAPAI!\nProfit diamankan: ${floating_pnl:.2f}\n➡️ Lanjut arah tren berikutnya: {current_direction}',
                                 'dedupe_key': f'itr_opsi1_{int(time.time())}_{uuid.uuid4().hex[:8]}'
                             }).execute()
-                        except:
+                        except Exception as e:
                             pass
 
                     time.sleep(1.0)

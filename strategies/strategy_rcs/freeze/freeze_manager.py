@@ -20,10 +20,19 @@ def get_total_floating_rcs(state: RCSState, tracker=None, symbol: str = "") -> f
         tracker: PositionTracker instance (opsional, untuk include OP manual)
         symbol: Symbol pair (wajib jika tracker diberikan)
     """
-    # 1. Hitung floating dari OP sistem (OP1, OP2, OP3)
-    pos1 = mt5.positions_get(ticket=state.op1_ticket) if state.op1_ticket else None
-    pos2 = mt5.positions_get(ticket=state.op2_ticket) if state.op2_ticket else None
-    pos3 = mt5.positions_get(ticket=state.op3_ticket) if state.op3_ticket else None
+    def get_pos(ticket):
+        if not ticket: return None
+        pos = mt5.positions_get(ticket=ticket)
+        if pos is None:
+            err = mt5.last_error()
+            if err and err[0] == 4753: return ()
+            # Jika error koneksi, jangan return () agar tidak dikira 0
+            return None 
+        return pos
+
+    pos1 = get_pos(state.op1_ticket)
+    pos2 = get_pos(state.op2_ticket)
+    pos3 = get_pos(state.op3_ticket)
     
     total = 0.0
     if pos1 and len(pos1) > 0:
@@ -67,12 +76,17 @@ def check_unfreeze(symbol: str, state: RCSState, config: RCSConfig, tracker=None
     Ini mencegah sistem melanjutkan siklus baru saat trader
     masih punya OP recovery manual yang terbuka.
     """
-    # 1. Cek posisi sistem (OP1, OP2, OP3)
-    pos1 = mt5.positions_get(ticket=state.op1_ticket) if state.op1_ticket else None
-    pos2 = mt5.positions_get(ticket=state.op2_ticket) if state.op2_ticket else None
-    pos3 = mt5.positions_get(ticket=state.op3_ticket) if state.op3_ticket else None
-    
-    system_clear = not pos1 and not pos2 and not pos3
+    def check_pos(ticket):
+        if not ticket: return True # Clear
+        pos = mt5.positions_get(ticket=ticket)
+        if pos is None:
+            err = mt5.last_error()
+            if err and err[0] == 4753: return True # Benar-benar clear
+            print(f"⚠️ FreezeManager: Gagal baca posisi MT5 untuk tiket {ticket}. Error: {err}")
+            return False # Error, jangan anggap clear
+        return len(pos) == 0
+
+    system_clear = check_pos(state.op1_ticket) and check_pos(state.op2_ticket) and check_pos(state.op3_ticket)
 
     # 2. Cek posisi manual (dari PositionTracker)
     if tracker:
