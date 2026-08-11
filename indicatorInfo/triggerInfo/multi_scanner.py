@@ -6,6 +6,7 @@ import requests
 import traceback
 from datetime import datetime, timezone
 import MetaTrader5 as mt5
+from dotenv import load_dotenv
 
 # Add root directory to sys.path so it can find config, mt5_client, utils, etc.
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -209,13 +210,24 @@ class MultiPatternScanner:
             time.sleep(5) # Fast scan interval (5 seconds)
 
 if __name__ == "__main__":
+    # Load .env file from root directory
+    env_path = os.path.join(root_dir, ".env")
+    load_dotenv(env_path)
+
     if not init_mt5():
         print("Gagal init MT5.")
         exit(1)
         
+    # Read from .env, with fallbacks
+    symbols_str = os.getenv("SCANNER_SYMBOLS", "XAUUSD,NASDAQ-100,BTC")
+    timeframes_str = os.getenv("SCANNER_TIMEFRAMES", "M5,M15,M30,H1,H4,D1")
+    
+    symbols_list = [s.strip() for s in symbols_str.split(",") if s.strip()]
+    timeframes_list = [t.strip() for t in timeframes_str.split(",") if t.strip()]
+        
     scanner = MultiPatternScanner(
-        symbols=["XAUUSD", "NASDAQ-100", "BTC"],
-        timeframes=["M5", "M15", "M30", "H1", "H4", "D1"]
+        symbols=symbols_list,
+        timeframes=timeframes_list
     )
     
     try:
