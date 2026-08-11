@@ -13,7 +13,7 @@ from typing import Dict, List, Any, Optional
 from config.mt5_config import MT5Config, EMAConfig
 from config.rcs_config import RCSConfig
 from mt5_client import init_mt5, shutdown_mt5, get_closed_candles
-from mt5_client.position_tracker import PositionTracker
+from mt5_client.position_tracker import PositionTracker, notify_system_paused_due_manual
 from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
 
 # -- Imports from existing modules --
@@ -28,8 +28,7 @@ from config.company_daily_guard import check_company_daily_target, should_send_c
 # -- Notifiers --
 from strategies.strategy_rcs.rcs_notifier import (
     notify_trigger, notify_skip, notify_open, notify_freeze, 
-    notify_result, notify_system_status, notify_company_target_reached_rcs,
-    notify_system_paused_due_manual
+    notify_result, notify_system_status, notify_company_target_reached_rcs
 )
 
 from utils.colors import cprint, Colors
