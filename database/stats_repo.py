@@ -83,7 +83,7 @@ class StatsRepo:
                 .single()
                 .execute()
             )
-            return result.data
+            return result.data if isinstance(result.data, dict) else None
 
         except Exception:
             return None
