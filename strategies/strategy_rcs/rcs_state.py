@@ -4,6 +4,8 @@
 # =====================================================
 
 import datetime
+import json
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -56,8 +58,10 @@ class RCSState:
     manual_detected_time: Optional[datetime.datetime] = None  # Kapan pertama kali OP manual terdeteksi
     is_paused_by_manual: bool = False                       # Flag: siklus baru di-block karena OP manual
     
-    def reset(self):
-        """Kembalikan ke state IDLE."""
+    def reset(self, symbol: str = None):
+        """Kembalikan ke state IDLE dan bersihkan file state jika symbol diberikan."""
+        if symbol:
+            self.clear_state_file(symbol)
         self.phase = RCSPhase.IDLE
         self.trigger_direction = None
         self.trigger_risk_range = 0.0
@@ -94,3 +98,46 @@ class RCSState:
         
         # Note: cooldown_until_candle tidak di-reset di sini 
         # karena itu dipakai justru saat IDLE untuk menahan open posisi baru.
+
+    def _get_state_file_path(self, symbol: str) -> str:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(current_dir, f"rcs_state_{symbol.replace('-', '_')}.json")
+
+    def save_to_file(self, symbol: str):
+        """Menyimpan trigger metrics krusial ke file JSON agar tahan restart."""
+        data = {
+            "trigger_dist_ema_pts": self.trigger_dist_ema_pts,
+            "trigger_risk_range_pts": self.trigger_risk_range_pts,
+            "trigger_body_pct": self.trigger_body_pct,
+            "trigger_spread_pts": self.trigger_spread_pts,
+        }
+        try:
+            with open(self._get_state_file_path(symbol), "w") as f:
+                json.dump(data, f)
+        except Exception as e:
+            print(f"⚠️ Gagal menyimpan state {symbol}: {e}")
+
+    def load_from_file(self, symbol: str):
+        """Memuat trigger metrics dari file JSON setelah bot restart."""
+        filepath = self._get_state_file_path(symbol)
+        if not os.path.exists(filepath):
+            return
+            
+        try:
+            with open(filepath, "r") as f:
+                data = json.load(f)
+            self.trigger_dist_ema_pts = data.get("trigger_dist_ema_pts", 0)
+            self.trigger_risk_range_pts = data.get("trigger_risk_range_pts", 0)
+            self.trigger_body_pct = data.get("trigger_body_pct", 0.0)
+            self.trigger_spread_pts = data.get("trigger_spread_pts", 0)
+        except Exception as e:
+            print(f"⚠️ Gagal memuat state {symbol}: {e}")
+
+    def clear_state_file(self, symbol: str):
+        """Menghapus file JSON state jika ada."""
+        filepath = self._get_state_file_path(symbol)
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except Exception:
+                pass

@@ -71,6 +71,9 @@ def perform_startup_position_audit(symbols: list, rcs_configs: dict, states: dic
         # Ada posisi tertinggal!
         print(cprint(f"\n⚠️ [{symbol}] AUDIT STARTUP: Ditemukan {snapshot.total_count} posisi tertinggal di broker MT5!", Colors.YELLOW))
         print(cprint(f"   • Manual: {snapshot.manual_count} posisi | Sistem: {snapshot.system_count} posisi | Floating: ${snapshot.total_floating:.2f}", Colors.YELLOW))
+        
+        # Load context indicator yang tersimpan (jika ada) sebelum bot mati
+        state.load_from_file(symbol)
 
         # Cek apakah tiket sistem cocok dengan magic RCS
         for pos in snapshot.system_positions:

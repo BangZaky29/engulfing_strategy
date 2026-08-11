@@ -191,6 +191,7 @@ class RCSEngine:
         state.trigger_risk_range_pts = risk_range_pts
         state.trigger_body_pct = body_pct
         state.trigger_spread_pts = spread
+        state.save_to_file(symbol)
         
         current_price = tick.ask if direction == "BUY" else tick.bid
         if place_op1_order(symbol, current_price, state, rcs_cfg):
@@ -210,7 +211,7 @@ class RCSEngine:
                 notify_open(symbol, "OP1", state.op1_ticket, state.op1_open_price, state.tp1_price, rcs_cfg, direction=direction, is_op1=True)
         else:
             print(cprint(f"❌ Gagal memasang OP1 pada {symbol}. Reset state.", Colors.RED))
-            state.reset()
+            state.reset(symbol)
 
     def _handle_op1_phase(self, symbol: str, state: RCSState, rcs_cfg: RCSConfig) -> None:
         if state.op1_ticket is None:
@@ -232,7 +233,7 @@ class RCSEngine:
             
             real_profit = calculate_cycle_profit(state, tracker=self.tracker, symbol=symbol)
             notify_result(symbol, "Siklus Selesai", real_profit, 0.0, rcs_cfg, state=state)
-            state.reset()
+            state.reset(symbol)
             self.tracker.clear_closed_manual(symbol)
             return
             
@@ -276,7 +277,7 @@ class RCSEngine:
                     
                 real_profit = calculate_cycle_profit(state, tracker=self.tracker, symbol=symbol)
                 notify_result(symbol, "Siklus Selesai (OP2 Menyentuh TP2)", real_profit, 0.0, rcs_cfg, state=state)
-                state.reset()
+                state.reset(symbol)
                 self.tracker.clear_closed_manual(symbol)
                 return
 
@@ -302,5 +303,5 @@ class RCSEngine:
             profit, recovery = calculate_recovery(symbol, state, rcs_cfg, tracker=self.tracker)
             print(cprint(f"☀️ UNFREEZE! Semua posisi telah ditutup ({symbol}). Recovery: ${recovery:.2f}", Colors.GREEN))
             notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg, state=state)
-            state.reset()
+            state.reset(symbol)
             self.tracker.clear_closed_manual(symbol)

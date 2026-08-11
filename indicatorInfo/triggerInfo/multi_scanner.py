@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import json
-import requests
 import traceback
 from datetime import datetime, timezone
 import MetaTrader5 as mt5
@@ -17,7 +16,8 @@ if root_dir not in sys.path:
 from config.mt5_config import MT5Config
 from mt5_client import init_mt5, shutdown_mt5
 from utils.colors import cprint, Colors
-from database.supabase_client import get_supabase
+from database.supabase_client import get_supabase, execute_supabase
+import uuid
 
 # =========================================================
 # Pattern Detectors
@@ -41,15 +41,8 @@ def detect_engulfing(candle_data: dict, point: float) -> str:
     return ""
 
 def detect_marubozu(candle_data: dict, point: float, min_body_pct=90.0) -> str:
-    # Requires candle_data to have body_pct
     if "body_pct" in candle_data and candle_data["body_pct"] >= min_body_pct:
         c1_close, c1_open = candle_data["close_"], candle_data["open_"]
-        c1_high, c1_low = candle_data["high_"], candle_data["low_"]
-        
-        # Additional logic: check if riskRange > avgRange * 1.5
-        # Since we only have basic candle data here, we do a simplistic version or 
-        # assume it is handled before calling this if full history is available.
-        # For this scanner, we just check body% and direction.
         if c1_close > c1_open: return "BUY"
         if c1_close < c1_open: return "SELL"
     return ""
@@ -80,11 +73,11 @@ def detect_same_candle(candles: list, min_streak=3) -> str:
 # =========================================================
 
 class MultiPatternScanner:
-    def __init__(self, symbols, timeframes, webhook_url=None):
+    def __init__(self, symbols, timeframes):
         self.symbols = symbols
         self.timeframes = timeframes
-        self.webhook_url = webhook_url or "http://localhost:3000/api/webhook/indicator"
         self.supabase = get_supabase()
+        self.group_hedging_jid = os.getenv("GROUP_HEDGING_JID", "120363428247734021@g.us")
         
         # Deduplication cache: {symbol_tf: {timestamp: [patterns]}}
         self.seen_triggers = {}
@@ -105,10 +98,8 @@ class MultiPatternScanner:
         # Ambil 10 candle terakhir
         rates = mt5.copy_rates_from_pos(symbol, tf_mt5, 1, 10)
         if rates is None or len(rates) < 10:
-            return
+            return []
 
-        # Prepare candle data for latest closed candle (index 8, since 9 is the oldest in array if ordered by time asc)
-        # Actually mt5 returns ordered from oldest to newest. index -1 is the most recent closed (since we shifted by 1).
         c1 = rates[-1]
         c2 = rates[-2]
         
@@ -135,13 +126,13 @@ class MultiPatternScanner:
         # 1. Check Engulfing
         eng_dir = detect_engulfing(candle_data, point)
         if eng_dir and "Engulfing" not in self.seen_triggers[cache_key]:
-            triggers_found.append(("Engulfing", eng_dir, {"body_pct": body_pct}))
+            triggers_found.append(("Engulfing", eng_dir, {"body_pct": round(body_pct, 1)}))
             self.seen_triggers[cache_key].append("Engulfing")
             
         # 2. Check Marubozu
         mar_dir = detect_marubozu(candle_data, point)
         if mar_dir and "Marubozu" not in self.seen_triggers[cache_key]:
-            triggers_found.append(("Marubozu", mar_dir, {"body_pct": body_pct}))
+            triggers_found.append(("Marubozu", mar_dir, {"body_pct": round(body_pct, 1)}))
             self.seen_triggers[cache_key].append("Marubozu")
             
         # 3. Check Same Candle
@@ -153,11 +144,11 @@ class MultiPatternScanner:
             triggers_found.append(("SameCandle", direction, {"streak": streak}))
             self.seen_triggers[cache_key].append("SameCandle")
 
-        # Push to Supabase and Webhook
+        # Print ke terminal & simpan ke Supabase
         for pattern_name, direction, details in triggers_found:
             print(cprint(f"📡 [SCANNER] {symbol} {tf_str} -> {pattern_name} {direction}", Colors.CYAN))
             
-            # Save to Supabase
+            # Save to Supabase indicator_triggers table
             if self.supabase:
                 try:
                     self.supabase.table("indicator_triggers").insert({
@@ -170,31 +161,82 @@ class MultiPatternScanner:
                     }).execute()
                 except Exception as e:
                     print(cprint(f"⚠️ Supabase Insert Error: {e}", Colors.YELLOW))
-                    
-            # Send Webhook
-            payload = {
-                "type": "INDICATOR_TRIGGER",
-                "symbol": symbol,
-                "timeframe": tf_str,
-                "pattern": pattern_name,
-                "direction": direction,
-                "details": details,
-                "timestamp": c_time.isoformat()
-            }
-            try:
-                requests.post(self.webhook_url, json=payload, timeout=3)
-            except Exception as e:
-                pass # Silently ignore webhook failure
+
+        return triggers_found
+
+    def _format_summary_message(self, all_triggers: list) -> str:
+        """Gabungkan semua trigger dalam 1 siklus scan menjadi 1 pesan ringkasan WA."""
+        if not all_triggers:
+            return ""
+
+        # Group by symbol
+        by_symbol = {}
+        for symbol, tf_str, pattern_name, direction, details in all_triggers:
+            if symbol not in by_symbol:
+                by_symbol[symbol] = []
+            
+            emoji = "🟢" if direction == "BUY" else "🔴"
+            detail_str = ""
+            if details.get("streak"):
+                detail_str = f" ({details['streak']}x)"
+            elif details.get("body_pct"):
+                detail_str = f" ({details['body_pct']}%)"
+            
+            by_symbol[symbol].append(f"  {emoji} {tf_str} → {pattern_name} {direction}{detail_str}")
+        
+        lines = ["📡 *MULTI-PATTERN SCANNER* 📡", "━━━━━━━━━━━━━━━━━"]
+        for symbol, entries in by_symbol.items():
+            lines.append(f"📌 *{symbol}*")
+            lines.extend(entries)
+            lines.append("")
+        
+        lines.append("━━━━━━━━━━━━━━━━━")
+        lines.append(f"⏰ {datetime.now().strftime('%H:%M:%S WIB')}")
+        lines.append("_Tanya Bro Ai untuk analisa lebih lanjut._")
+        
+        return "\n".join(lines)
+
+    def _send_wa_summary(self, all_triggers: list):
+        """Kirim ringkasan trigger ke WA Group melalui wa_outbox (metode yang sama dengan RCS)."""
+        if not all_triggers:
+            return
+        
+        message = self._format_summary_message(all_triggers)
+        if not message:
+            return
+
+        payload = {
+            'source_table': 'scanner_system',
+            'event_type': 'SCANNER_TRIGGER',
+            'group_jid': self.group_hedging_jid,
+            'message_type': 'TEXT',
+            'message': message,
+            'dedupe_key': f'scanner_{int(time.time())}_{uuid.uuid4().hex[:8]}'
+        }
+
+        try:
+            execute_supabase(lambda sb: sb.table('wa_outbox').insert(payload).execute())
+            print(cprint(f"📲 Scanner summary terkirim ke {self.group_hedging_jid} ({len(all_triggers)} trigger)", Colors.GREEN))
+        except Exception as e:
+            print(cprint(f"⚠️ Gagal kirim scanner summary ke WA: {e}", Colors.RED))
 
     def run_forever(self):
         print(cprint("🚀 MultiPatternScanner berjalan...", Colors.GREEN))
         while True:
+            all_triggers_this_cycle = []
+            
             for sym in self.symbols:
                 for tf in self.timeframes:
                     try:
-                        self.scan_symbol_tf(sym, tf)
+                        triggers = self.scan_symbol_tf(sym, tf)
+                        for pattern_name, direction, details in triggers:
+                            all_triggers_this_cycle.append((sym, tf, pattern_name, direction, details))
                     except Exception as e:
                         traceback.print_exc()
+            
+            # Kirim 1 pesan ringkasan gabungan ke WA Group (bukan 1-per-trigger)
+            if all_triggers_this_cycle:
+                self._send_wa_summary(all_triggers_this_cycle)
             
             # Clean up old seen keys to prevent memory leak
             current_time = time.time()

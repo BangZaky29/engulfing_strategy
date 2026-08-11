@@ -783,21 +783,3 @@ v2.19 - Perbaikan bug: dot Same Candle masih muncul LEBIH DARI 1
 ====================================================================
 AKHIR DOKUMEN
 ====================================================================
-
-
-ANALISA : 
-- Blueprint inturksi berikutnya : C:\codingVibes\mt5\engulfing\indicatorInfo\triggerInfo\MultiPatternScanner_Blueprint_v2.19.md
-- C:\codingVibes\mt5\engulfing\indicatorInfo\triggerInfo
-- wa_trigger : C:\codingVibes\mt5\engulfing_webs\wa_trigger
-
-INTRUKSI : 
-- berdasrakn blue print yg sya kirim itu buatkan planning yg akan mengimplementasikan ke code base python dan wa trigger bro dlam indikator2 yg ada 
-- buatkan planning dari hasil analisa blue print tersebut untuk implementasi ke code python ny dan node js wa trigger bro dan apa ygharu s dlakukan : C:\codingVibes\mt5\engulfing\indicatorInfo\triggerInfo\MultiPatternScanner_Blueprint_v2.19.md
-- dan untuk info indikatir ini akan d share ke group ini bro : 120363428247734021@g.us  =>  GROUP HEDGING, sebagai wadah informasi k wa tigger ny bro 
-- dan dalam group itu siapapun yg ada d group itu bisa bertanya ke wa bot nya dengan konfirmasi chat harus menggunakan atua mengandung unsur teks "Ai"atau"bro Ai" untuk menanyakan sesuatu terkait info dari infikator indikator yg ada untuk meminta saran terbaik dari kondisi indikator yg ada sekrng apa yg terjadi terhadap proses, misala trader sdang mengalami hedging frezz sistem nya OP3 terbuka dan trader meminta saran apa yg harus d lakukan, dalam melakukan recovery untuk profit, atau apakah harus menunggu muncul trigger tertentu dari info trigger atau gmna? nah ini akan berkolaborasi dengan Ai gemini tokennya: # === Gemini AI ===
-GEMINI_API_KEY=AIzaSyAlpxK5PowwP-PPFePVaKipvR2dLh9fRj8
-GEMINI_MODEL=gemini-2.5-flash
-- saya mau Ai dalam group itu hanya group : 120363428247734021@g.us  =>  GROUP HEDGING, yg bisa berkomunikasi d group lain gakbisa 
-- jadi Ai ny akan membantuk recovery si trader atau pertanyaan lain terkait posisi saat ini, saran lainya, info trigger yg ada di semua TFM5, M30 dst, atau info execute recovery apa yg terbaik harus d lakukan terhadap info trigger yg ada, dengan saran saran ini trader lebih mudah dalam mengambil keputusan ini dlam bentuk teks percakapann nnti nya, nmun untuk info dari trgger tetap d infokan k group itu secara otomatis 
-- jadi Ai akan membantuk menganalisa, memberi saran terkait recovery dengan mengandalkan info dari trigger info supaya recovery berjalan dengan baik dengan minimum kesalahan OP, d posis mana harus OP ketika dapat trigger dll nya, maka dengan ini secara langsung Ai juga akan menganalisa real-time maupun melalau databse supabase nya bro 
-- ok buatkan planning nya bro 
