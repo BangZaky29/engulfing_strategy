@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import json
 import requests
@@ -6,10 +7,16 @@ import traceback
 from datetime import datetime, timezone
 import MetaTrader5 as mt5
 
+# Add root directory to sys.path so it can find config, mt5_client, utils, etc.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
 from config.mt5_config import MT5Config
 from mt5_client import init_mt5, shutdown_mt5
 from utils.colors import cprint, Colors
-from database.supabase_client import get_supabase_client
+from database.supabase_client import get_supabase
 
 # =========================================================
 # Pattern Detectors
@@ -76,7 +83,7 @@ class MultiPatternScanner:
         self.symbols = symbols
         self.timeframes = timeframes
         self.webhook_url = webhook_url or "http://localhost:3000/api/webhook/indicator"
-        self.supabase = get_supabase_client()
+        self.supabase = get_supabase()
         
         # Deduplication cache: {symbol_tf: {timestamp: [patterns]}}
         self.seen_triggers = {}
