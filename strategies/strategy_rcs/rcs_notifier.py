@@ -7,6 +7,7 @@ import os
 import time
 import uuid
 import threading
+import copy
 from datetime import datetime
 import MetaTrader5 as mt5
 
@@ -353,9 +354,10 @@ def _async_notify_result_worker(symbol: str, event_desc: str, profit: float, rec
 
 def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
     if not config.notif_result: return
+    state_snapshot = copy.copy(state) if state is not None else None
     t = threading.Thread(
         target=_async_notify_result_worker,
-        args=(symbol, event_desc, profit, recovery, config, state),
+        args=(symbol, event_desc, profit, recovery, config, state_snapshot),
         daemon=True
     )
     t.start()
