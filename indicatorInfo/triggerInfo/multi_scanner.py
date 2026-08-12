@@ -187,77 +187,98 @@ class MultiPatternScanner:
                 at_key = f"{active_key}_{pattern_name}"
                 self.active_triggers[at_key] = (symbol, tf_str, pattern_name, direction, details, candle_ts)
         elif candle_changed:
-            # Candle sudah berganti tapi TIDAK ada trigger baru → hapus active trigger untuk symbol+tf ini
+            # Candle sudah berganti tapi TIDAK ada trigger baru → hapus & catat sebagai expired
             keys_to_remove = [k for k in self.active_triggers if k.startswith(f"{active_key}_")]
             for k in keys_to_remove:
+                expired_data = self.active_triggers[k]
+                self.expired_this_cycle.append(expired_data)  # (symbol, tf, pattern, dir, details, ts)
                 del self.active_triggers[k]
-                print(cprint(f"🔕 [EXPIRED] {active_key} trigger expired (candle berganti)", Colors.YELLOW))
+                print(cprint(f"🔕 [EXPIRED] {expired_data[0]} {expired_data[1]} → {expired_data[2]} {expired_data[3]} (candle berganti)", Colors.YELLOW))
         # Jika candle belum berganti dan tidak ada trigger baru → active_triggers tetap (carry over)
 
         return triggers_found
 
-    def _format_summary_message(self, all_triggers: list) -> str:
-        """Gabungkan semua trigger (baru + aktif) menjadi 1 pesan ringkasan WA.
+    def _format_summary_message(self, all_triggers: list, expired_triggers: list = None) -> str:
+        """Gabungkan semua trigger (baru + aktif + expired) menjadi 1 pesan ringkasan WA.
         
-        Format tuple: (symbol, tf_str, pattern_name, direction, details, is_new)
-        is_new: True = trigger baru (🆕), False = trigger carry over (🔄)
+        all_triggers format: (symbol, tf_str, pattern_name, direction, details, status)
+        status: "new" = trigger baru, "active" = carry over
+        expired_triggers format: (symbol, tf_str, pattern_name, direction, details, candle_ts)
         """
-        if not all_triggers:
+        if not all_triggers and not expired_triggers:
             return ""
 
         # Definisi urutan timeframe untuk sorting
         tf_order = {"M1": 0, "M5": 1, "M15": 2, "M30": 3, "H1": 4, "H4": 5, "D1": 6, "W1": 7, "MN": 8}
 
-        # Group by symbol
+        # Group by symbol: trigger aktif
         by_symbol = {}
-        for symbol, tf_str, pattern_name, direction, details, is_new in all_triggers:
+        for symbol, tf_str, pattern_name, direction, details, status in (all_triggers or []):
             if symbol not in by_symbol:
-                by_symbol[symbol] = []
+                by_symbol[symbol] = {"triggers": [], "expired": []}
             
             emoji = "🟢" if direction == "BUY" else "🔴"
-            status = "🆕" if is_new else "🔄"
+            status_icon = "🆕" if status == "new" else "🔄"
             detail_str = ""
             if details.get("streak"):
                 detail_str = f" ({details['streak']}x)"
             elif details.get("body_pct"):
                 detail_str = f" ({details['body_pct']}%)"
             
-            by_symbol[symbol].append({
-                "tf": tf_str,
-                "line": f"  {emoji} {tf_str} → {pattern_name} {direction}{detail_str} {status}",
+            by_symbol[symbol]["triggers"].append({
+                "line": f"  {emoji} {tf_str} → {pattern_name} {direction}{detail_str} {status_icon}",
                 "tf_order": tf_order.get(tf_str, 99)
             })
         
+        # Group expired by symbol
+        for symbol, tf_str, pattern_name, direction, details, candle_ts in (expired_triggers or []):
+            if symbol not in by_symbol:
+                by_symbol[symbol] = {"triggers": [], "expired": []}
+            
+            dir_emoji = "BUY" if direction == "BUY" else "SELL"
+            by_symbol[symbol]["expired"].append({
+                "line": f"  🔕 {tf_str} → {pattern_name} {dir_emoji} _expired_",
+                "tf_order": tf_order.get(tf_str, 99)
+            })
+
         lines = ["📡 *MULTI-PATTERN SCANNER* 📡", "━━━━━━━━━━━━━━━━━"]
-        for symbol, entries in by_symbol.items():
-            # Sort entries by timeframe order (kecil ke besar)
-            entries.sort(key=lambda x: x["tf_order"])
+        for symbol, data in by_symbol.items():
             lines.append(f"📌 *{symbol}*")
-            for entry in entries:
+            # Sort & append active triggers
+            data["triggers"].sort(key=lambda x: x["tf_order"])
+            for entry in data["triggers"]:
                 lines.append(entry["line"])
+            # Sort & append expired triggers
+            if data["expired"]:
+                data["expired"].sort(key=lambda x: x["tf_order"])
+                for entry in data["expired"]:
+                    lines.append(entry["line"])
             lines.append("")
         
         lines.append("━━━━━━━━━━━━━━━━━")
+        lines.append("🆕 _Baru_ │ 🔄 _Aktif_ │ 🔕 _Expired_")
         lines.append(f"⏰ {datetime.now().strftime('%H:%M:%S WIB')}")
         lines.append("_Tanya Bro Ai untuk analisa lebih lanjut._")
         
         return "\n".join(lines)
 
-    def _send_wa_summary(self, all_triggers: list):
-        """Kirim ringkasan trigger ke WA Group melalui wa_outbox (metode yang sama dengan RCS).
+    def _send_wa_summary(self, all_triggers: list, expired_triggers: list = None):
+        """Kirim ringkasan trigger ke WA Group melalui wa_outbox.
         
-        all_triggers berisi tuple: (symbol, tf, pattern_name, direction, details, is_new)
+        all_triggers: (symbol, tf, pattern_name, direction, details, status)
+        expired_triggers: (symbol, tf, pattern_name, direction, details, candle_ts)
         """
-        if not all_triggers:
+        if not all_triggers and not expired_triggers:
             return
         
-        message = self._format_summary_message(all_triggers)
+        message = self._format_summary_message(all_triggers, expired_triggers)
         if not message:
             return
 
-        # Hitung trigger baru vs aktif untuk log
-        new_count = sum(1 for t in all_triggers if t[5])
-        active_count = sum(1 for t in all_triggers if not t[5])
+        # Hitung trigger per kategori untuk log
+        new_count = sum(1 for t in (all_triggers or []) if t[5] == "new")
+        active_count = sum(1 for t in (all_triggers or []) if t[5] == "active")
+        expired_count = len(expired_triggers or [])
 
         payload = {
             'source_table': 'scanner_system',
@@ -270,7 +291,11 @@ class MultiPatternScanner:
 
         try:
             execute_supabase(lambda sb: sb.table('wa_outbox').insert(payload).execute())
-            print(cprint(f"📲 Scanner summary terkirim ke {self.group_jid} ({new_count} baru, {active_count} aktif)", Colors.GREEN))
+            log_parts = []
+            if new_count: log_parts.append(f"{new_count} baru")
+            if active_count: log_parts.append(f"{active_count} aktif")
+            if expired_count: log_parts.append(f"{expired_count} expired")
+            print(cprint(f"📲 Scanner summary terkirim ke {self.group_jid} ({', '.join(log_parts)})", Colors.GREEN))
         except Exception as e:
             print(cprint(f"⚠️ Gagal kirim scanner summary ke WA: {e}", Colors.RED))
 
@@ -278,6 +303,7 @@ class MultiPatternScanner:
         print(cprint("🚀 MultiPatternScanner berjalan...", Colors.GREEN))
         while True:
             new_triggers_this_cycle = []
+            self.expired_this_cycle = []  # Reset setiap siklus
             
             for sym in self.symbols:
                 for tf in self.timeframes:
@@ -288,24 +314,27 @@ class MultiPatternScanner:
                     except Exception as e:
                         traceback.print_exc()
             
-            # Hanya kirim pesan jika ada trigger BARU dalam siklus ini
-            if new_triggers_this_cycle:
+            # Kirim pesan jika ada trigger BARU atau ada trigger EXPIRED
+            has_new = len(new_triggers_this_cycle) > 0
+            has_expired = len(self.expired_this_cycle) > 0
+            
+            if has_new or has_expired:
                 # Bangun daftar gabungan: trigger baru (🆕) + trigger aktif lama (🔄)
                 combined_triggers = []
                 
-                # 1. Tambahkan semua trigger BARU dengan is_new=True
+                # 1. Tambahkan semua trigger BARU dengan status="new"
                 new_keys = set()
                 for sym, tf, pattern_name, direction, details in new_triggers_this_cycle:
-                    combined_triggers.append((sym, tf, pattern_name, direction, details, True))
+                    combined_triggers.append((sym, tf, pattern_name, direction, details, "new"))
                     new_keys.add(f"{sym}_{tf}_{pattern_name}")
                 
                 # 2. Tambahkan trigger AKTIF (carry over) yang bukan dari siklus ini
                 for at_key, (sym, tf, pattern_name, direction, details, candle_ts) in self.active_triggers.items():
                     trigger_id = f"{sym}_{tf}_{pattern_name}"
                     if trigger_id not in new_keys:
-                        combined_triggers.append((sym, tf, pattern_name, direction, details, False))
+                        combined_triggers.append((sym, tf, pattern_name, direction, details, "active"))
                 
-                self._send_wa_summary(combined_triggers)
+                self._send_wa_summary(combined_triggers, self.expired_this_cycle if has_expired else None)
             
             # Clean up old seen keys to prevent memory leak
             current_time = time.time()
