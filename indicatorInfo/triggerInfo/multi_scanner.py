@@ -77,10 +77,18 @@ class MultiPatternScanner:
         self.symbols = symbols
         self.timeframes = timeframes
         self.supabase = get_supabase()
-        self.group_hedging_jid = os.getenv("GROUP_HEDGING_JID", "120363428247734021@g.us")
+        self.group_jid = os.getenv("SCANNER_GROUP_JID", "120363410782502082@g.us")
         
-        # Deduplication cache: {symbol_tf: {timestamp: [patterns]}}
+        # Deduplication cache: {cache_key: [pattern_names]}
         self.seen_triggers = {}
+        
+        # Active triggers state: trigger tetap aktif sampai candle berganti DAN pattern hilang
+        # Key: f"{symbol}_{tf}" → Value: (symbol, tf, pattern_name, direction, details, candle_timestamp)
+        self.active_triggers = {}
+        
+        # Track candle timestamp terakhir per symbol+tf untuk deteksi pergantian candle
+        # Key: f"{symbol}_{tf}" → Value: candle_timestamp (int)
+        self.last_candle_time = {}
         
     def _tf_to_mt5(self, tf_str):
         mapping = {
@@ -104,10 +112,17 @@ class MultiPatternScanner:
         c2 = rates[-2]
         
         c_time = datetime.fromtimestamp(c1['time'], timezone.utc)
-        cache_key = f"{symbol}_{tf_str}_{c1['time']}"
+        candle_ts = int(c1['time'])
+        cache_key = f"{symbol}_{tf_str}_{candle_ts}"
+        active_key = f"{symbol}_{tf_str}"
         
         if cache_key not in self.seen_triggers:
             self.seen_triggers[cache_key] = []
+        
+        # Deteksi apakah candle sudah berganti dibanding siklus sebelumnya
+        prev_candle_ts = self.last_candle_time.get(active_key)
+        candle_changed = (prev_candle_ts is not None and candle_ts != prev_candle_ts)
+        self.last_candle_time[active_key] = candle_ts
             
         triggers_found = []
         point = mt5.symbol_info(symbol).point
@@ -162,32 +177,64 @@ class MultiPatternScanner:
                 except Exception as e:
                     print(cprint(f"⚠️ Supabase Insert Error: {e}", Colors.YELLOW))
 
+        # =========================================================
+        # Update active_triggers state
+        # =========================================================
+        if triggers_found:
+            # Ada trigger baru → update active_triggers dengan trigger terbaru
+            # Simpan semua pattern yang aktif di symbol+tf ini
+            for pattern_name, direction, details in triggers_found:
+                at_key = f"{active_key}_{pattern_name}"
+                self.active_triggers[at_key] = (symbol, tf_str, pattern_name, direction, details, candle_ts)
+        elif candle_changed:
+            # Candle sudah berganti tapi TIDAK ada trigger baru → hapus active trigger untuk symbol+tf ini
+            keys_to_remove = [k for k in self.active_triggers if k.startswith(f"{active_key}_")]
+            for k in keys_to_remove:
+                del self.active_triggers[k]
+                print(cprint(f"🔕 [EXPIRED] {active_key} trigger expired (candle berganti)", Colors.YELLOW))
+        # Jika candle belum berganti dan tidak ada trigger baru → active_triggers tetap (carry over)
+
         return triggers_found
 
     def _format_summary_message(self, all_triggers: list) -> str:
-        """Gabungkan semua trigger dalam 1 siklus scan menjadi 1 pesan ringkasan WA."""
+        """Gabungkan semua trigger (baru + aktif) menjadi 1 pesan ringkasan WA.
+        
+        Format tuple: (symbol, tf_str, pattern_name, direction, details, is_new)
+        is_new: True = trigger baru (🆕), False = trigger carry over (🔄)
+        """
         if not all_triggers:
             return ""
 
+        # Definisi urutan timeframe untuk sorting
+        tf_order = {"M1": 0, "M5": 1, "M15": 2, "M30": 3, "H1": 4, "H4": 5, "D1": 6, "W1": 7, "MN": 8}
+
         # Group by symbol
         by_symbol = {}
-        for symbol, tf_str, pattern_name, direction, details in all_triggers:
+        for symbol, tf_str, pattern_name, direction, details, is_new in all_triggers:
             if symbol not in by_symbol:
                 by_symbol[symbol] = []
             
             emoji = "🟢" if direction == "BUY" else "🔴"
+            status = "🆕" if is_new else "🔄"
             detail_str = ""
             if details.get("streak"):
                 detail_str = f" ({details['streak']}x)"
             elif details.get("body_pct"):
                 detail_str = f" ({details['body_pct']}%)"
             
-            by_symbol[symbol].append(f"  {emoji} {tf_str} → {pattern_name} {direction}{detail_str}")
+            by_symbol[symbol].append({
+                "tf": tf_str,
+                "line": f"  {emoji} {tf_str} → {pattern_name} {direction}{detail_str} {status}",
+                "tf_order": tf_order.get(tf_str, 99)
+            })
         
         lines = ["📡 *MULTI-PATTERN SCANNER* 📡", "━━━━━━━━━━━━━━━━━"]
         for symbol, entries in by_symbol.items():
+            # Sort entries by timeframe order (kecil ke besar)
+            entries.sort(key=lambda x: x["tf_order"])
             lines.append(f"📌 *{symbol}*")
-            lines.extend(entries)
+            for entry in entries:
+                lines.append(entry["line"])
             lines.append("")
         
         lines.append("━━━━━━━━━━━━━━━━━")
@@ -197,7 +244,10 @@ class MultiPatternScanner:
         return "\n".join(lines)
 
     def _send_wa_summary(self, all_triggers: list):
-        """Kirim ringkasan trigger ke WA Group melalui wa_outbox (metode yang sama dengan RCS)."""
+        """Kirim ringkasan trigger ke WA Group melalui wa_outbox (metode yang sama dengan RCS).
+        
+        all_triggers berisi tuple: (symbol, tf, pattern_name, direction, details, is_new)
+        """
         if not all_triggers:
             return
         
@@ -205,10 +255,14 @@ class MultiPatternScanner:
         if not message:
             return
 
+        # Hitung trigger baru vs aktif untuk log
+        new_count = sum(1 for t in all_triggers if t[5])
+        active_count = sum(1 for t in all_triggers if not t[5])
+
         payload = {
             'source_table': 'scanner_system',
             'event_type': 'SCANNER_TRIGGER',
-            'group_jid': self.group_hedging_jid,
+            'group_jid': self.group_jid,
             'message_type': 'TEXT',
             'message': message,
             'dedupe_key': f'scanner_{int(time.time())}_{uuid.uuid4().hex[:8]}'
@@ -216,27 +270,42 @@ class MultiPatternScanner:
 
         try:
             execute_supabase(lambda sb: sb.table('wa_outbox').insert(payload).execute())
-            print(cprint(f"📲 Scanner summary terkirim ke {self.group_hedging_jid} ({len(all_triggers)} trigger)", Colors.GREEN))
+            print(cprint(f"📲 Scanner summary terkirim ke {self.group_jid} ({new_count} baru, {active_count} aktif)", Colors.GREEN))
         except Exception as e:
             print(cprint(f"⚠️ Gagal kirim scanner summary ke WA: {e}", Colors.RED))
 
     def run_forever(self):
         print(cprint("🚀 MultiPatternScanner berjalan...", Colors.GREEN))
         while True:
-            all_triggers_this_cycle = []
+            new_triggers_this_cycle = []
             
             for sym in self.symbols:
                 for tf in self.timeframes:
                     try:
                         triggers = self.scan_symbol_tf(sym, tf)
                         for pattern_name, direction, details in triggers:
-                            all_triggers_this_cycle.append((sym, tf, pattern_name, direction, details))
+                            new_triggers_this_cycle.append((sym, tf, pattern_name, direction, details))
                     except Exception as e:
                         traceback.print_exc()
             
-            # Kirim 1 pesan ringkasan gabungan ke WA Group (bukan 1-per-trigger)
-            if all_triggers_this_cycle:
-                self._send_wa_summary(all_triggers_this_cycle)
+            # Hanya kirim pesan jika ada trigger BARU dalam siklus ini
+            if new_triggers_this_cycle:
+                # Bangun daftar gabungan: trigger baru (🆕) + trigger aktif lama (🔄)
+                combined_triggers = []
+                
+                # 1. Tambahkan semua trigger BARU dengan is_new=True
+                new_keys = set()
+                for sym, tf, pattern_name, direction, details in new_triggers_this_cycle:
+                    combined_triggers.append((sym, tf, pattern_name, direction, details, True))
+                    new_keys.add(f"{sym}_{tf}_{pattern_name}")
+                
+                # 2. Tambahkan trigger AKTIF (carry over) yang bukan dari siklus ini
+                for at_key, (sym, tf, pattern_name, direction, details, candle_ts) in self.active_triggers.items():
+                    trigger_id = f"{sym}_{tf}_{pattern_name}"
+                    if trigger_id not in new_keys:
+                        combined_triggers.append((sym, tf, pattern_name, direction, details, False))
+                
+                self._send_wa_summary(combined_triggers)
             
             # Clean up old seen keys to prevent memory leak
             current_time = time.time()
@@ -248,6 +317,14 @@ class MultiPatternScanner:
                     keys_to_del.append(k)
             for k in keys_to_del:
                 del self.seen_triggers[k]
+            
+            # Clean up old active_triggers (candle timestamp > 2 hari)
+            at_keys_to_del = []
+            for k, (_, _, _, _, _, candle_ts) in self.active_triggers.items():
+                if current_time - candle_ts > 86400 * 2:
+                    at_keys_to_del.append(k)
+            for k in at_keys_to_del:
+                del self.active_triggers[k]
                 
             time.sleep(5) # Fast scan interval (5 seconds)
 
