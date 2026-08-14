@@ -2,7 +2,7 @@
 
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from utils.colors import cprint, Colors
 from database.supabase_client import execute_supabase
@@ -36,14 +36,22 @@ class ScannerNotifier:
 
             emoji = "🟢" if direction == "BUY" else "🔴"
             status_icon = "🆕" if status == "new" else "🔄"
+            
+            candle_time_str = ""
+            if "candle_ts" in details:
+                candle_time_str = f" | {datetime.fromtimestamp(details['candle_ts'], timezone.utc).strftime('%H.%M')}"
+
             detail_str = ""
             if details.get("streak"):
-                detail_str = f" ({details['streak']}x)"
+                detail_str = f" ({details['streak']}x{candle_time_str})"
             elif details.get("body_pct"):
-                detail_str = f" ({details['body_pct']}%)"
+                if "c1_pips" in details:
+                    detail_str = f" ({details['body_pct']}% | H {details['c1_pips']}{candle_time_str})"
+                else:
+                    detail_str = f" ({details['body_pct']}%{candle_time_str})"
 
             by_symbol[symbol]["triggers"].append({
-                "line": f"  {emoji} {tf_str} → {pattern_name} {direction}{detail_str} {status_icon}",
+                "line": f"{emoji} {tf_str} → {pattern_name} {direction}{detail_str} {status_icon}",
                 "tf_order": self.TF_ORDER.get(tf_str, 99)
             })
 
@@ -54,14 +62,14 @@ class ScannerNotifier:
 
             dir_label = "BUY" if direction == "BUY" else "SELL"
             by_symbol[symbol]["expired"].append({
-                "line": f"  🔕 {tf_str} → {pattern_name} {dir_label} _expired_",
+                "line": f"🔕 {tf_str} → {pattern_name} {dir_label} _expired_",
                 "tf_order": self.TF_ORDER.get(tf_str, 99)
             })
 
         # Build message lines
-        lines = ["📡 *MULTI-PATTERN SCANNER* 📡", "━━━━━━━━━━━━━━━━━"]
+        lines = ["📡 *SCANNER UPDATE*"]
         for symbol, data in by_symbol.items():
-            lines.append(f"📌 *{symbol}*")
+            lines.append(f"   📌 *{symbol}*")
             # Sort & append active triggers
             data["triggers"].sort(key=lambda x: x["tf_order"])
             for entry in data["triggers"]:
@@ -71,12 +79,8 @@ class ScannerNotifier:
                 data["expired"].sort(key=lambda x: x["tf_order"])
                 for entry in data["expired"]:
                     lines.append(entry["line"])
-            lines.append("")
 
-        lines.append("━━━━━━━━━━━━━━━━━")
-        lines.append("🆕 _Baru_ │ 🔄 _Aktif_ │ 🔕 _Expired_")
-        lines.append(f"⏰ {datetime.now().strftime('%H:%M:%S WIB')}")
-        lines.append("_Tanya Bro Ai untuk analisa lebih lanjut._")
+        lines.append(f"⏰ {datetime.now().strftime('%H:%M WIB')} | 🆕 Baru | 🔄 Aktif | 🔕 Exp")
 
         return "\n".join(lines)
 

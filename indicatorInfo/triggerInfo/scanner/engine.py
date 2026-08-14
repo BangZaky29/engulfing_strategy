@@ -91,7 +91,8 @@ class MultiPatternScanner:
             "body_pct": body_pct
         }
 
-        point = mt5.symbol_info(symbol).point
+        sym_info = mt5.symbol_info(symbol)
+        point = sym_info.point if sym_info and getattr(sym_info, 'point', 0) > 0 else 0.00001
         reversed_rates = list(reversed(rates))
 
         # === Run semua pattern dari registry ===
@@ -102,6 +103,7 @@ class MultiPatternScanner:
 
             results = pattern.detect(candle_data, reversed_rates, point)
             for direction, details in results:
+                details['candle_ts'] = candle_ts
                 triggers_found.append((pattern.name, direction, details))
                 self.seen_triggers[cache_key].append(pattern.name)
 
