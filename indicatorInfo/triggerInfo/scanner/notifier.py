@@ -51,7 +51,7 @@ class ScannerNotifier:
                     detail_str = f" ({details['body_pct']}%{candle_time_str})"
 
             by_symbol[symbol]["triggers"].append({
-                "line": f"{emoji} {tf_str} → {pattern_name} {direction}{detail_str} {status_icon}",
+                "line": f"{emoji} {tf_str} : {pattern_name} {direction}{detail_str} {status_icon}",
                 "tf_order": self.TF_ORDER.get(tf_str, 99)
             })
 
@@ -62,7 +62,7 @@ class ScannerNotifier:
 
             dir_label = "BUY" if direction == "BUY" else "SELL"
             by_symbol[symbol]["expired"].append({
-                "line": f"🔕 {tf_str} → {pattern_name} {dir_label} _expired_",
+                "line": f"🔕 {tf_str} : {pattern_name} {dir_label} _expired_",
                 "tf_order": self.TF_ORDER.get(tf_str, 99)
             })
 
@@ -80,6 +80,7 @@ class ScannerNotifier:
                 for entry in data["expired"]:
                     lines.append(entry["line"])
 
+        lines.append("")
         lines.append(f"⏰ {datetime.now().strftime('%H:%M WIB')} | 🆕 Baru | 🔄 Aktif | 🔕 Exp")
 
         return "\n".join(lines)

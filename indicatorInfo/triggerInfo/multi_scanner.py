@@ -32,8 +32,8 @@ def main():
         exit(1)
 
     # Read config from .env
-    symbols_str = os.getenv("SCANNER_SYMBOLS", "XAUUSD,NASDAQ-100,BTC")
-    timeframes_str = os.getenv("SCANNER_TIMEFRAMES", "M5,M15,M30,H1,H4,D1")
+    symbols_str = os.getenv("SCANNER_SYMBOLS", "XAUUSD,NASDAQ-100,BTC").split('#')[0]
+    timeframes_str = os.getenv("SCANNER_TIMEFRAMES", "M5,M15,M30,H1,H4,D1").split('#')[0]
 
     symbols_list = [s.strip() for s in symbols_str.split(",") if s.strip()]
     timeframes_list = [t.strip() for t in timeframes_str.split(",") if t.strip()]
