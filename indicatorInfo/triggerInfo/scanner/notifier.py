@@ -44,11 +44,12 @@ class ScannerNotifier:
             detail_str = ""
             if details.get("streak"):
                 detail_str = f" ({details['streak']}x{candle_time_str})"
-            elif details.get("body_pct"):
-                if "c1_pips" in details:
-                    detail_str = f" ({details['body_pct']}% | H {details['c1_pips']}{candle_time_str})"
-                else:
-                    detail_str = f" ({details['body_pct']}%{candle_time_str})"
+            elif "c1_pips" in details:
+                detail_str = f" (H {details['c1_pips']}{candle_time_str})"
+            else:
+                clean_time = candle_time_str.replace(" | ", "")
+                if clean_time:
+                    detail_str = f" ({clean_time})"
 
             by_symbol[symbol]["triggers"].append({
                 "line": f"{emoji} {tf_str} : {pattern_name} {direction}{detail_str} {status_icon}",
