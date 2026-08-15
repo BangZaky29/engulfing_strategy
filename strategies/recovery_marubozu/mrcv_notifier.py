@@ -154,7 +154,7 @@ def notify_mrcv_op2_filled(symbol: str, direction: str, ticket: int, price: floa
         f"Target TP2: {tp_price:.5f}\n"
         f"Volume: {volume} Lot"
     )
-    send_mrcv_wa_notif(msg, "MRCV_OP2_FILLED", include_header=True)
+    send_mrcv_wa_notif(msg, "MRCV_OP2_FILLED", include_header=False)
 
 def notify_mrcv_op3_freeze(symbol: str, op3_direction: str, ticket: int, price: float, volume: float, floating_freeze: float):
     """
@@ -169,7 +169,7 @@ def notify_mrcv_op3_freeze(symbol: str, op3_direction: str, ticket: int, price: 
         f"Snapshot Floating Freeze: ${floating_freeze:.2f}\n"
         f"Status: Posisi terkunci, mencari trigger pemulihan berikutnya..."
     )
-    send_mrcv_wa_notif(msg, "MRCV_FREEZE", include_header=True)
+    send_mrcv_wa_notif(msg, "MRCV_FREEZE", include_header=False)
 
 def notify_mrcv_cycle_done(
     symbol: str,
@@ -236,7 +236,7 @@ def notify_mrcv_hanging_positions(symbol: str, positions: list):
         f"🛑 *STATUS SIKLUS:* DIJEDA (PAUSED)\n"
         f"Mesin Marubozu TIDAK akan membuka OP baru sampai posisi di atas ditutup manual oleh trader."
     )
-    send_mrcv_wa_notif(msg, "MRCV_HANGING_PAUSED", include_header=True)
+    send_mrcv_wa_notif(msg, "MRCV_HANGING_PAUSED", include_header=False)
 
 def notify_mrcv_positions_cleared(symbol: str):
     """
@@ -248,5 +248,5 @@ def notify_mrcv_positions_cleared(symbol: str):
         f"Seluruh posisi pada {symbol} telah bersih (0 posisi).\n"
         f"🚀 *STATUS:* Mesin Marubozu kembali AKTIF mencari trigger normal."
     )
-    send_mrcv_wa_notif(msg, "MRCV_POSITIONS_CLEARED", include_header=True)
+    send_mrcv_wa_notif(msg, "MRCV_POSITIONS_CLEARED", include_header=False)
 
