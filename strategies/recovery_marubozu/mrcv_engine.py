@@ -300,12 +300,21 @@ def run_mrcv_bot():
                 if candle is None:
                     time.sleep(1)
                     continue
+
+                current_candle_time = str(candle.get("timestamp"))
+
+                # Proteksi Anti-Duplicate: Jangan eksekusi candle yang sama jika siklus sebelumnya selesai lebih cepat
+                if mrcv_state.last_processed_candle_time == current_candle_time:
+                    time.sleep(1)
+                    continue
                     
                 point = mt5.symbol_info(symbol).point
                 
                 trigger = pattern_detector.detect(candle, None, point)
                 if trigger:
-                    # Valid Marubozu
+                    # Valid Marubozu baru ditemukan pada candle baru
+                    mrcv_state.last_processed_candle_time = current_candle_time
+                    mrcv_state.save_to_file(symbol)
                     process_marubozu_trigger(symbol, candle, mrcv_state)
                     
             time.sleep(1)

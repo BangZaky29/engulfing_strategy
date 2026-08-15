@@ -32,6 +32,7 @@ class MRCVState:
     op1_open_price: float = 0.0
     op2_filled: bool = False
     op3_filled: bool = False
+    last_processed_candle_time: Optional[str] = None
 
     def reset_cycle(self):
         """Reset only the active cycle (after hitting TP or SL), keeping cumulative profit."""
@@ -56,6 +57,7 @@ class MRCVState:
         """Reset everything including cumulative profit (when Close All happens)."""
         self.reset_cycle()
         self.cumulative_profit = 0.0
+        self.last_processed_candle_time = None
         self.save_to_file(symbol)
 
     def _get_state_file_path(self, symbol: str) -> str:
@@ -65,6 +67,7 @@ class MRCVState:
     def save_to_file(self, symbol: str):
         data = {
             "cumulative_profit": self.cumulative_profit,
+            "last_processed_candle_time": self.last_processed_candle_time,
         }
         try:
             with open(self._get_state_file_path(symbol), "w") as f:
@@ -80,6 +83,7 @@ class MRCVState:
             with open(filepath, "r") as f:
                 data = json.load(f)
             self.cumulative_profit = data.get("cumulative_profit", 0.0)
+            self.last_processed_candle_time = data.get("last_processed_candle_time", None)
         except Exception as e:
             print(f"⚠️ Gagal memuat state MRCV {symbol}: {e}")
 
