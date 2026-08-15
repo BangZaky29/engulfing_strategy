@@ -9,7 +9,7 @@ from mt5_client.candle_fetcher import get_closed_candles
 from indicatorInfo.triggerInfo.scanner.patterns.marubozu import MarubozuPattern
 
 from strategies.strategy_rcs.rcs_state import RCSState
-from strategies.strategy_rcs.rcs_order_manager import close_position_rcs, cancel_pending_order_rcs
+from strategies.strategy_rcs.rcs_order_manager import close_position_rcs, cancel_pending_order_rcs, remove_tp_from_position
 from strategies.recovery_marubozu.mrcv_state import MRCVState, MRCVPhase
 from strategies.recovery_marubozu.mrcv_core import process_marubozu_trigger, cleanup_pending_orders
 from strategies.recovery_marubozu.mrcv_notifier import (
@@ -220,13 +220,25 @@ def run_mrcv_bot():
                         volume=op2_pos.volume
                     )
 
-                # Deteksi OP3 Stop (Hedge) Terbuka / Freeze Aktif
+                # Deteksi OP3 Stop (Hedge) Terbuka -> Beralih ke PHASE_FREEZE & Hapus TP1 + TP2
                 if op3_active and not mrcv_state.op3_filled and op3_pos:
                     mrcv_state.op3_filled = True
+                    mrcv_state.phase = MRCVPhase.FREEZE
                     mrcv_state.save_to_file(symbol)
+                    
+                    # 1. Hapus TP pada OP1
+                    if mrcv_state.op1_ticket:
+                        remove_tp_from_position(mrcv_state.op1_ticket)
+                    
+                    # 2. Hapus TP pada OP2 (jika sudah aktif) atau Batalkan jika masih Pending Limit
+                    if op2_active and mrcv_state.op2_ticket:
+                        remove_tp_from_position(mrcv_state.op2_ticket)
+                    elif mrcv_state.op2_ticket:
+                        cancel_pending_order_rcs(mrcv_state.op2_ticket)
+                    
                     total_freeze_floating = get_positions_profit(symbol, mrcv_magics)
                     op3_direction = "SELL" if mrcv_state.trigger_direction == "BUY" else "BUY"
-                    print(cprint(f"❄️ [MRCV] OP3 HEDGE AKTIF! FREEZE di {op3_pos.price_open:.5f} | Floating: ${total_freeze_floating:.2f}", Colors.YELLOW))
+                    print(cprint(f"❄️ [MRCV] OP3 HEDGE AKTIF! Beralih ke PHASE_FREEZE. TP1 & TP2 telah dihapus! Floating: ${total_freeze_floating:.2f}", Colors.YELLOW))
                     notify_mrcv_op3_freeze(
                         symbol=symbol,
                         op3_direction=op3_direction,
@@ -235,15 +247,16 @@ def run_mrcv_bot():
                         volume=op3_pos.volume,
                         floating_freeze=total_freeze_floating
                     )
+                    time.sleep(1)
+                    continue
 
-                # Jika OP1 sudah tidak aktif, berarti sudah kena TP1
+                # Jika OP1 sudah tidak aktif (hanya saat belum masuk FREEZE), berarti kena TP1 normal
                 if not op1_active and mrcv_state.op1_ticket:
                     prof1 = get_closed_profit(mrcv_state.op1_ticket)
-                    # Jika OP2 atau OP3 tadinya aktif tapi sekarang mati, ambil juga profitnya
+                    # Jika OP2 tadinya aktif tapi sekarang mati, ambil juga profitnya
                     prof2 = get_closed_profit(mrcv_state.op2_ticket) if mrcv_state.op2_ticket and not op2_active else 0.0
-                    prof3 = get_closed_profit(mrcv_state.op3_ticket) if mrcv_state.op3_ticket and not op3_active else 0.0
                     
-                    total_prof = prof1 + prof2 + prof3
+                    total_prof = prof1 + prof2
                     mrcv_state.cumulative_profit += total_prof
                     mrcv_state.save_to_file(symbol)
                     
@@ -261,11 +274,26 @@ def run_mrcv_bot():
                         screenshot_url=img_url
                     )
                     
-                    # Hapus pending order sisa
+                    # Hapus pending order sisa (OP2 & OP3 stop yang belum tersentuh)
                     cleanup_pending_orders(mrcv_state)
-                    # Tutup jika ada OP2/OP3 yang terlanjur aktif tapi belum TP/SL
-                    close_all_positions(symbol, mrcv_magics)
                     
+                    mrcv_state.reset_cycle()
+                    time.sleep(1)
+                    continue
+
+            # --- MONITORING KONDISI FREEZE MRCV ---
+            if mrcv_state.phase == MRCVPhase.FREEZE:
+                # Periksa apakah posisi MRCV telah ditutup manual oleh trader di MT5
+                positions = mt5.positions_get(symbol=symbol)
+                mrcv_pos_count = 0
+                if positions:
+                    for p in positions:
+                        if p.magic in mrcv_magics:
+                            mrcv_pos_count += 1
+                
+                # Jika seluruh posisi MRCV telah ditutup (0 posisi tersisa), unfreeze kembali ke IDLE
+                if mrcv_pos_count == 0:
+                    print(cprint(f"☀️ [MRCV] UNFREEZE! Seluruh posisi MRCV telah ditutup ({symbol}). Kembali ke IDLE.", Colors.GREEN))
                     mrcv_state.reset_cycle()
                     time.sleep(1)
                     continue

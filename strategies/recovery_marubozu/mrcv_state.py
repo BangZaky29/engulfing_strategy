@@ -6,6 +6,7 @@ from typing import Optional
 class MRCVPhase:
     IDLE = "PHASE_IDLE"
     ACTIVE = "PHASE_ACTIVE"
+    FREEZE = "PHASE_FREEZE"
 
 @dataclass
 class MRCVState:
