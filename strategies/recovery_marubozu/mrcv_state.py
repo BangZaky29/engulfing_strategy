@@ -30,6 +30,8 @@ class MRCVState:
     op3_ticket: Optional[int] = None
     
     op1_open_price: float = 0.0
+    op2_filled: bool = False
+    op3_filled: bool = False
 
     def reset_cycle(self):
         """Reset only the active cycle (after hitting TP or SL), keeping cumulative profit."""
@@ -47,6 +49,8 @@ class MRCVState:
         self.op2_ticket = None
         self.op3_ticket = None
         self.op1_open_price = 0.0
+        self.op2_filled = False
+        self.op3_filled = False
 
     def reset_all(self, symbol: str):
         """Reset everything including cumulative profit (when Close All happens)."""

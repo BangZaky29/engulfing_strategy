@@ -10,7 +10,7 @@ from strategies.strategy_rcs.rcs_order_manager import (
 )
 from mt5_client.connection import init_mt5
 from strategies.recovery_marubozu.mrcv_state import MRCVState, MRCVPhase
-from strategies.recovery_marubozu.mrcv_notifier import send_mrcv_wa_notif
+from strategies.recovery_marubozu.mrcv_notifier import notify_mrcv_trigger
 
 def calculate_ring_c1(symbol: str, candle: dict) -> float:
     """
@@ -115,8 +115,32 @@ def process_marubozu_trigger(symbol: str, candle: dict, state: MRCVState):
     state.tp1_price = tp1_price
     state.tp2_price = tp2_price
 
-    msg = f"🚀 *[MRCV TRIGGER: MARUBOZU]*\nSinyal recovery ditemukan. Menjalankan skenario order:\n🟢 OP1 {direction} (Market) di {state.op1_open_price:.5f} (TP1: {tp1_price:.5f})\n📉 OP2 {direction} LIMIT di {op2_price:.5f} (TP2: {tp2_price:.5f})\n❄️ OP3 {op3_direction} STOP (Hedge) di {op3_price:.5f}"
-    send_mrcv_wa_notif(msg, "MRCV_TRIGGER")
+    tf_label = os.getenv("MRCV_TIMEFRAME", "M5")
+    c_high = float(candle.get("high_", 0.0))
+    c_low = float(candle.get("low_", 0.0))
+    ts = candle.get("timestamp")
+    if hasattr(ts, 'strftime'):
+        time_str = ts.strftime("%H:%M")
+    else:
+        time_str = str(ts) if ts else "-"
+
+    pips = ring_pts / 10.0
+
+    notify_mrcv_trigger(
+        symbol=symbol,
+        tf_label=tf_label,
+        direction=direction,
+        c_high=c_high,
+        c_low=c_low,
+        ring_pts=ring_pts,
+        pips=pips,
+        time_str=time_str,
+        state=state,
+        lot_op1=lot_op1,
+        lot_op2=lot_op2,
+        lot_op3=lot_op3,
+        op3_direction=op3_direction
+    )
 
 def cleanup_pending_orders(state: MRCVState):
     """Menghapus pending order yang masih aktif jika siklus selesai."""

@@ -2,14 +2,16 @@ import os
 import time
 import uuid
 import threading
+from datetime import datetime
 import MetaTrader5 as mt5
 
 from database.supabase_client import execute_supabase
+from database.supabase_storage import upload_screenshot
 from mt5_client.visualizer import generate_screenshot
 from config.mt5_config import MT5Config, EMAConfig
 from utils.colors import cprint, Colors
 
-HEADER_TEXT = "🤖 *[MARUBOZU RECOVERY MACHINE (MRCV)]*\n\n"
+HEADER_TEXT = "🟢 [STRATEGI: MARUBOZU CANDLE SYSTEM (RECOVERY SYSTEM | MRCV)]\n\n"
 
 def _send_wa_notif_worker(
     message: str,
@@ -63,13 +65,10 @@ def send_mrcv_wa_notif(
 def generate_and_upload_mrcv_screenshot(symbol: str, state) -> str:
     """Generates screenshot menggunakan TF M5 dan mengunggah ke Supabase Storage."""
     try:
-        from database.supabase_storage import upload_screenshot
-        
         tf_label = os.getenv("MRCV_TIMEFRAME", "M5")
         mt5_cfg = MT5Config()
         tf_const = mt5_cfg.get_mt5_timeframe(tf_label)
         
-        # Ambil cukup banyak candle untuk konteks (misal 50 candle M5)
         rates = mt5.copy_rates_from_pos(symbol, tf_const, 0, 50)
         if rates is None or len(rates) == 0:
             return ""
@@ -88,17 +87,166 @@ def generate_and_upload_mrcv_screenshot(symbol: str, state) -> str:
             tp_price=tp_price,
             ema_cfg=EMAConfig(),
             mode=mode,
-            entry_time=None,
-            trigger_time=int(time.time()),
-            pattern_name="Marubozu Recovery",
-            extra_text="Siklus Selesai"
+            tf_label=tf_label,
+            output_dir="temp_screenshots",
+            num_candles=40
         )
         
-        if not img_path:
-            return ""
+        if img_path and os.path.exists(img_path):
+            folder_date = datetime.now().strftime("%Y-%m-%d")
+            filename = f"MRCV_{mode}_{symbol}_{tf_label}_{ticket}_{int(time.time())}.png"
+            new_path = os.path.join("temp_screenshots", filename)
+            os.rename(img_path, new_path)
             
-        url = upload_screenshot(img_path, "trade_screenshots")
-        return url or ""
+            success, public_url = upload_screenshot(new_path, "engulfing", folder_date, filename)
+            if os.path.exists(new_path):
+                os.remove(new_path)
+                
+            if success:
+                return public_url
     except Exception as e:
         print(cprint(f"⚠️ Gagal generate/upload screenshot MRCV: {e}", Colors.RED))
-        return ""
+        
+    return ""
+
+def notify_mrcv_trigger(
+    symbol: str,
+    tf_label: str,
+    direction: str,
+    c_high: float,
+    c_low: float,
+    ring_pts: float,
+    pips: float,
+    time_str: str,
+    state,
+    lot_op1: float,
+    lot_op2: float,
+    lot_op3: float,
+    op3_direction: str
+):
+    """
+    Kirim notifikasi trigger sinyal awal ke MRCV_GROUP_JID.
+    """
+    msg = (
+        f"🌟 SIGNAL MRCV [{direction}] 🌟\n"
+        f"Symbol: {symbol} ({tf_label})\n\n"
+        f"📊 *Detail Candle Trigger C1:*\n"
+        f"• High: {c_high:.5f} | Low: {c_low:.5f}\n"
+        f"• Range C1: {ring_pts:.1f} pts ({pips:.1f} pips)\n"
+        f"• Waktu Candle:  {time_str}\n\n"
+        f"📍 *Rincian Level Order:*\n"
+        f"🟢 OP1 {direction} (Market) : {state.op1_level:.5f} | TP1: {state.tp1_price:.5f} (Lot: {lot_op1})\n"
+        f"📉 OP2 {direction} LIMIT    : {state.op2_level:.5f} | TP2: {state.tp2_price:.5f} (Lot: {lot_op2})\n"
+        f"❄️ OP3 {op3_direction} STOP (Hedge) : {state.op3_level:.5f} (Lot: {lot_op3})"
+    )
+    send_mrcv_wa_notif(msg, "MRCV_TRIGGER", include_header=False)
+
+def notify_mrcv_op2_filled(symbol: str, direction: str, ticket: int, price: float, tp_price: float, volume: float):
+    """
+    Kirim notifikasi OP2 Limit terbuka/aktif ke MRCV_GROUP_JID.
+    """
+    msg = (
+        f"📉 *[MRCV OP2 LIMIT TERBUKA]*\n"
+        f"Symbol: {symbol}\n"
+        f"Arah: {direction} LIMIT (Aktif)\n"
+        f"Ticket: #{ticket}\n"
+        f"Harga Open: {price:.5f}\n"
+        f"Target TP2: {tp_price:.5f}\n"
+        f"Volume: {volume} Lot"
+    )
+    send_mrcv_wa_notif(msg, "MRCV_OP2_FILLED", include_header=True)
+
+def notify_mrcv_op3_freeze(symbol: str, op3_direction: str, ticket: int, price: float, volume: float, floating_freeze: float):
+    """
+    Kirim notifikasi OP3 Stop (Hedge) aktif / Freeze ke MRCV_GROUP_JID.
+    """
+    msg = (
+        f"❄️ *[MRCV PHASE FREEZE - HEDGE AKTIF]*\n"
+        f"Symbol: {symbol}\n"
+        f"OP3 Stop tersentuh! Posisi kini terkunci (Hedge).\n\n"
+        f"Ticket OP3: #{ticket}\n"
+        f"Arah: {op3_direction} (Hedge) @ {price:.5f} ({volume} Lot)\n"
+        f"Snapshot Floating Freeze: ${floating_freeze:.2f}\n"
+        f"Status: Posisi terkunci, mencari trigger pemulihan berikutnya..."
+    )
+    send_mrcv_wa_notif(msg, "MRCV_FREEZE", include_header=True)
+
+def notify_mrcv_cycle_done(
+    symbol: str,
+    cycle_profit: float,
+    cumulative_profit: float,
+    rcs_floating: float,
+    is_wait_rcs: bool,
+    screenshot_url: str = ""
+):
+    """
+    Kirim notifikasi siklus selesai + screenshot ke grup PROFIT/LOSS.
+    """
+    profit_jid = os.getenv("PROFIT_SIGNAL") if cycle_profit >= 0 else os.getenv("LOSS_SIGNAL")
+    if not profit_jid:
+        return
+
+    if not is_wait_rcs:
+        # Mode Mandiri (MRCV_WAIT_FOR_RCS_HEDGE=false)
+        msg = (
+            f"Putaran Marubozu sukses tertutup.\n"
+            f"Profit putaran ini: ${cycle_profit:+.2f}\n\n"
+            f"📊 *Status Performa MRCV:*\n"
+            f"Total Kumulatif Profit: ${cumulative_profit:+.2f}"
+        )
+    else:
+        # Mode Recovery RCS (MRCV_WAIT_FOR_RCS_HEDGE=true)
+        msg = (
+            f"Putaran recovery Marubozu sukses tertutup.\n"
+            f"Profit putaran ini: ${cycle_profit:+.2f}\n\n"
+            f"📊 *Status Recovery:*\n"
+            f"Total Kumulatif MRCV: ${cumulative_profit:+.2f}\n"
+            f"Floating RCS saat ini: ${rcs_floating:.2f}\n"
+            f"⏳ *Mesin akan terus mencari trigger sampai kumulatif profit melebihi floating RCS.*"
+        )
+
+    send_mrcv_wa_notif(
+        msg,
+        "MRCV_CYCLE_DONE",
+        target_jid=profit_jid,
+        media_url=screenshot_url if screenshot_url else None,
+        include_header=True
+    )
+
+def notify_mrcv_hanging_positions(symbol: str, positions: list):
+    """
+    Kirim notifikasi deteksi posisi aktif / manual menggantung ke MRCV_GROUP_JID.
+    """
+    pos_lines = []
+    total_floating = 0.0
+    for p in positions:
+        total_floating += p.profit
+        dir_str = "BUY" if p.type == mt5.ORDER_TYPE_BUY else "SELL"
+        pos_lines.append(
+            f"• #{p.ticket} | {dir_str} {p.volume} lot @ {p.price_open:.5f} | PnL: ${p.profit:+.2f}"
+        )
+    pos_str = "\n".join(pos_lines)
+
+    msg = (
+        f"⚠️ *[MRCV DETEKSI POSISI AKTIF/MANUAL]*\n"
+        f"Symbol: {symbol}\n"
+        f"Sistem mendeteksi {len(positions)} posisi aktif pada broker MT5:\n"
+        f"{pos_str}\n\n"
+        f"📊 Total Floating: ${total_floating:+.2f}\n"
+        f"🛑 *STATUS SIKLUS:* DIJEDA (PAUSED)\n"
+        f"Mesin Marubozu TIDAK akan membuka OP baru sampai posisi di atas ditutup manual oleh trader."
+    )
+    send_mrcv_wa_notif(msg, "MRCV_HANGING_PAUSED", include_header=True)
+
+def notify_mrcv_positions_cleared(symbol: str):
+    """
+    Kirim notifikasi saat semua posisi pada broker MT5 telah bersih.
+    """
+    msg = (
+        f"✅ *[MRCV POSISI BERSIH - SIKLUS AKTIF]*\n"
+        f"Symbol: {symbol}\n"
+        f"Seluruh posisi pada {symbol} telah bersih (0 posisi).\n"
+        f"🚀 *STATUS:* Mesin Marubozu kembali AKTIF mencari trigger normal."
+    )
+    send_mrcv_wa_notif(msg, "MRCV_POSITIONS_CLEARED", include_header=True)
+

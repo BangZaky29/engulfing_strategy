@@ -12,7 +12,15 @@ from strategies.strategy_rcs.rcs_state import RCSState
 from strategies.strategy_rcs.rcs_order_manager import close_position_rcs, cancel_pending_order_rcs
 from strategies.recovery_marubozu.mrcv_state import MRCVState, MRCVPhase
 from strategies.recovery_marubozu.mrcv_core import process_marubozu_trigger, cleanup_pending_orders
-from strategies.recovery_marubozu.mrcv_notifier import send_mrcv_wa_notif, generate_and_upload_mrcv_screenshot
+from strategies.recovery_marubozu.mrcv_notifier import (
+    send_mrcv_wa_notif, 
+    generate_and_upload_mrcv_screenshot,
+    notify_mrcv_op2_filled,
+    notify_mrcv_op3_freeze,
+    notify_mrcv_cycle_done,
+    notify_mrcv_hanging_positions,
+    notify_mrcv_positions_cleared
+)
 
 def get_positions_profit(symbol: str, magics: list[int]) -> float:
     positions = mt5.positions_get(symbol=symbol)
@@ -87,10 +95,23 @@ def run_mrcv_bot():
     print(cprint(f"🤖 Memulai Marubozu Recovery Machine (MRCV) [{symbol}]", Colors.MAGENTA))
     wait_mode = os.getenv("MRCV_WAIT_FOR_RCS_HEDGE", "true").lower() == "true"
     mode_text = "Menunggu RCS Hedging (Standby)" if wait_mode else "Selalu Aktif (Mandiri)"
-    send_mrcv_wa_notif(
-        f"Mesin Marubozu Recovery telah dihidupkan.\n📊 Symbol: {symbol}\n⚙️ Mode: {mode_text}",
-        "MRCV_START"
+    start_msg = (
+        f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
+        f"🟢 [STRATEGI: MARUBOZU CANDLE SYSTEM (RECOVERY SYSTEM | MRCV)]\n\n"
+        f"📊 Symbol: {symbol}\n"
+        f"⚙️ Mode: {mode_text}"
     )
+    send_mrcv_wa_notif(start_msg, "MRCV_START", include_header=False)
+    
+    # Audit Posisi Awal saat Startup
+    startup_positions = mt5.positions_get(symbol=symbol)
+    is_paused_by_hanging = False
+    if startup_positions and len(startup_positions) > 0:
+        print(cprint(f"⚠️ [MRCV] Terdeteksi {len(startup_positions)} posisi aktif di MT5 saat startup [{symbol}].", Colors.YELLOW))
+        notify_mrcv_hanging_positions(symbol, list(startup_positions))
+        is_paused_by_hanging = True
+    else:
+        print(cprint(f"✅ [MRCV] Audit Posisi: CLEAN (0 posisi pada {symbol}).", Colors.GREEN))
     
     last_hedge_status = False
     
@@ -144,11 +165,19 @@ def run_mrcv_bot():
             total_net = mrcv_state.cumulative_profit + mrcv_floating + rcs_floating
             
             if is_rcs_hedge and total_net >= 0.0:
-                print(cprint(f"🎉 [MRCV] Target Tercapai! Total Net: {total_net:.2f}. Melakukan Close All.", Colors.GREEN))
-                send_mrcv_wa_notif(
-                    f"Misi penyelamatan berhasil! Total profit dari Marubozu Recovery telah menutupi kerugian / floating minus dari Tuyul RCS.\n\nSeluruh posisi (RCS & MRCV) telah dibersihkan secara paksa (Sapu Bersih).\n🟢 Tuyul RCS kini di-reset dan kembali berjalan normal.\nTotal Net Profit: ${total_net:.2f}",
-                    "MRCV_SUCCESS"
+                print(cprint(f"🎉 [MRCV] Target Tercapai! Total Net: {total_net:+.2f}. Melakukan Close All.", Colors.GREEN))
+                success_msg = (
+                    f"🎉 *[RECOVERY SUCCESS - CLOSE ALL]*\n"
+                    f"Misi penyelamatan berhasil! Total profit dari Marubozu Recovery telah menutupi kerugian / floating minus dari Tuyul RCS.\n\n"
+                    f"Seluruh posisi (RCS & MRCV) telah dibersihkan secara paksa (Sapu Bersih).\n"
+                    f"🟢 Tuyul RCS kini di-reset dan kembali berjalan normal.\n"
+                    f"Total Net Profit: ${total_net:+.2f}"
                 )
+                send_mrcv_wa_notif(success_msg, "MRCV_SUCCESS", include_header=False)
+                profit_jid = os.getenv("PROFIT_SIGNAL")
+                if profit_jid:
+                    send_mrcv_wa_notif(success_msg, "MRCV_SUCCESS", target_jid=profit_jid, include_header=False)
+
                 close_all_positions(symbol, all_magics)
                 # Reset MRCV State
                 mrcv_state.reset_all(symbol)
@@ -159,11 +188,12 @@ def run_mrcv_bot():
             
             # --- CEK SIKLUS MRCV ---
             if mrcv_state.phase == MRCVPhase.ACTIVE:
-                # Periksa apakah posisi OP1 sudah close (kena TP/SL)
                 positions = mt5.positions_get(symbol=symbol)
                 op1_active = False
                 op2_active = False
                 op3_active = False
+                op2_pos = None
+                op3_pos = None
                 
                 if positions:
                     for p in positions:
@@ -171,9 +201,41 @@ def run_mrcv_bot():
                             op1_active = True
                         if p.ticket == mrcv_state.op2_ticket:
                             op2_active = True
+                            op2_pos = p
                         if p.ticket == mrcv_state.op3_ticket:
                             op3_active = True
+                            op3_pos = p
                             
+                # Deteksi OP2 Limit Terbuka / Aktif
+                if op2_active and not mrcv_state.op2_filled and op2_pos:
+                    mrcv_state.op2_filled = True
+                    mrcv_state.save_to_file(symbol)
+                    print(cprint(f"📉 [MRCV] OP2 LIMIT TERBUKA! Ticket #{op2_pos.ticket} di {op2_pos.price_open:.5f}", Colors.CYAN))
+                    notify_mrcv_op2_filled(
+                        symbol=symbol,
+                        direction=mrcv_state.trigger_direction or "BUY",
+                        ticket=op2_pos.ticket,
+                        price=op2_pos.price_open,
+                        tp_price=mrcv_state.tp2_price,
+                        volume=op2_pos.volume
+                    )
+
+                # Deteksi OP3 Stop (Hedge) Terbuka / Freeze Aktif
+                if op3_active and not mrcv_state.op3_filled and op3_pos:
+                    mrcv_state.op3_filled = True
+                    mrcv_state.save_to_file(symbol)
+                    total_freeze_floating = get_positions_profit(symbol, mrcv_magics)
+                    op3_direction = "SELL" if mrcv_state.trigger_direction == "BUY" else "BUY"
+                    print(cprint(f"❄️ [MRCV] OP3 HEDGE AKTIF! FREEZE di {op3_pos.price_open:.5f} | Floating: ${total_freeze_floating:.2f}", Colors.YELLOW))
+                    notify_mrcv_op3_freeze(
+                        symbol=symbol,
+                        op3_direction=op3_direction,
+                        ticket=op3_pos.ticket,
+                        price=op3_pos.price_open,
+                        volume=op3_pos.volume,
+                        floating_freeze=total_freeze_floating
+                    )
+
                 # Jika OP1 sudah tidak aktif, berarti sudah kena TP1
                 if not op1_active and mrcv_state.op1_ticket:
                     prof1 = get_closed_profit(mrcv_state.op1_ticket)
@@ -185,17 +247,19 @@ def run_mrcv_bot():
                     mrcv_state.cumulative_profit += total_prof
                     mrcv_state.save_to_file(symbol)
                     
-                    print(cprint(f"💰 [MRCV] Siklus Selesai! Profit siklus: {total_prof:.2f} | Kumulatif: {mrcv_state.cumulative_profit:.2f}", Colors.CYAN))
+                    print(cprint(f"💰 [MRCV] Siklus Selesai! Profit siklus: {total_prof:+.2f} | Kumulatif: {mrcv_state.cumulative_profit:+.2f}", Colors.CYAN))
                     
                     img_url = generate_and_upload_mrcv_screenshot(symbol, mrcv_state)
-                    profit_jid = os.getenv("PROFIT_SIGNAL") if total_prof >= 0 else os.getenv("LOSS_SIGNAL")
-                    msg = f"Putaran recovery Marubozu sukses tertutup.\nProfit putaran ini: ${total_prof:.2f}.\n\n📊 *Status Recovery:*\nTotal Kumulatif MRCV: ${mrcv_state.cumulative_profit:.2f}\nFloating RCS saat ini: ${rcs_floating:.2f}\n⏳ *Mesin akan terus mencari trigger sampai kumulatif profit melebihi floating RCS.*"
                     
-                    # Send to profit group with image
-                    send_mrcv_wa_notif(msg, "MRCV_CYCLE_DONE", target_jid=profit_jid, media_url=img_url)
-                    
-                    # Send text only to MRCV group
-                    send_mrcv_wa_notif(msg, "MRCV_CYCLE_DONE")
+                    # Kirim notifikasi siklus selesai ke grup PROFIT/LOSS + screenshot
+                    notify_mrcv_cycle_done(
+                        symbol=symbol,
+                        cycle_profit=total_prof,
+                        cumulative_profit=mrcv_state.cumulative_profit,
+                        rcs_floating=rcs_floating,
+                        is_wait_rcs=wait_for_hedge,
+                        screenshot_url=img_url
+                    )
                     
                     # Hapus pending order sisa
                     cleanup_pending_orders(mrcv_state)
@@ -206,8 +270,32 @@ def run_mrcv_bot():
                     time.sleep(1)
                     continue
 
-            # --- CARI TRIGGER MARUBOZU ---
+            # --- CARI TRIGGER MARUBOZU (HANYA JIKA IDLE & TIDAK ADA POSISI TERGANTUNG) ---
             if mrcv_state.phase == MRCVPhase.IDLE:
+                all_current_positions = mt5.positions_get(symbol=symbol)
+                hanging_positions = []
+                
+                if all_current_positions:
+                    if not wait_for_hedge:
+                        # Mode Mandiri: Setiap posisi aktif di broker memblokir siklus baru saat IDLE
+                        hanging_positions = list(all_current_positions)
+                    else:
+                        # Mode Recovery: Posisi manual / non-RCS memblokir siklus
+                        hanging_positions = [p for p in all_current_positions if p.magic not in rcs_magics and p.magic not in mrcv_magics]
+                
+                if len(hanging_positions) > 0:
+                    if not is_paused_by_hanging:
+                        is_paused_by_hanging = True
+                        print(cprint(f"⚠️ [MRCV] Terdeteksi {len(hanging_positions)} posisi aktif pada {symbol}. Siklus Marubozu di-pause sampai posisi ditutup manual.", Colors.YELLOW))
+                        notify_mrcv_hanging_positions(symbol, hanging_positions)
+                    time.sleep(1)
+                    continue
+                else:
+                    if is_paused_by_hanging:
+                        is_paused_by_hanging = False
+                        print(cprint(f"✅ [MRCV] Semua posisi pada {symbol} telah bersih (0 posisi). Siklus Marubozu aktif kembali.", Colors.GREEN))
+                        notify_mrcv_positions_cleared(symbol)
+
                 candle = get_closed_candles(symbol, tf_label=tf_str)
                 if candle is None:
                     time.sleep(1)
@@ -223,7 +311,13 @@ def run_mrcv_bot():
             time.sleep(1)
             
         except KeyboardInterrupt:
-            send_mrcv_wa_notif("🛑 Mesin Marubozu Recovery telah DIMATIKAN secara manual.", "MRCV_STOP")
+            stop_msg = (
+                f"🛑 SISTEM DIMATIKAN 🛑\n\n"
+                f"🛑 [STRATEGI: MARUBOZU CANDLE SYSTEM (RECOVERY SYSTEM | MRCV)]\n\n"
+                f"📊 Symbol: {symbol}\n"
+                f"Status: Mesin telah dihentikan secara manual."
+            )
+            send_mrcv_wa_notif(stop_msg, "MRCV_STOP", include_header=False)
             time.sleep(2) # Beri waktu untuk thread mengirim notifikasi WA sebelum terminal mati
             print(cprint("\n🛑 MRCV Bot dihentikan oleh user.", Colors.YELLOW))
             break
