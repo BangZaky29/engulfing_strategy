@@ -47,15 +47,52 @@ def close_all_positions(symbol: str, magics: list[int]):
                 cancel_pending_order_rcs(o.ticket)
 
 def get_closed_profit(ticket: int) -> float:
-    """Ambil profit dari history deal MT5 berdasarkan ticket order."""
+    """Ambil total net profit (profit + swap + commission) dari history deal MT5 berdasarkan ticket posisi."""
+    if not ticket:
+        return 0.0
+    
+    # Coba hingga 5 kali dengan jeda singkat untuk memastikan MT5 selesai merekam deal OUT
+    for _ in range(5):
+        deals = mt5.history_deals_get(position=ticket)
+        if deals:
+            total_net = 0.0
+            found_out = False
+            for d in deals:
+                if d.entry == mt5.DEAL_ENTRY_OUT:
+                    total_net += (d.profit + d.swap + d.commission)
+                    found_out = True
+            if found_out:
+                return total_net
+        time.sleep(0.15)
+
+    # Fallback ke time-based history query jika position=ticket belum terindeks
     now = time.time()
     deals = mt5.history_deals_get(now - 86400, now + 3600)
     if deals:
+        total_net = 0.0
+        found = False
         for d in deals:
-            if d.position_id == ticket or d.order == ticket:
-                if d.entry == mt5.DEAL_ENTRY_OUT:
-                    return d.profit
+            if (d.position_id == ticket or d.order == ticket) and d.entry == mt5.DEAL_ENTRY_OUT:
+                total_net += (d.profit + d.swap + d.commission)
+                found = True
+        if found:
+            return total_net
+
     return 0.0
+
+def calculate_mrcv_cycle_profit(state: MRCVState) -> tuple[float, float, float]:
+    """
+    Hitung total profit aktual dari seluruh ticket OP MRCV (OP1, OP2, OP3) pada siklus ini.
+    Returns: (total_profit, prof_op1, prof_op2)
+    """
+    time.sleep(0.3) # Tunggu settlement MT5
+    
+    prof1 = get_closed_profit(state.op1_ticket) if state.op1_ticket else 0.0
+    prof2 = get_closed_profit(state.op2_ticket) if state.op2_ticket and state.op2_filled else 0.0
+    prof3 = get_closed_profit(state.op3_ticket) if state.op3_ticket and state.op3_filled else 0.0
+    
+    total = prof1 + prof2 + prof3
+    return total, prof1, prof2
 
 def run_mrcv_bot():
     mt5_cfg = MT5Config()
@@ -83,6 +120,7 @@ def run_mrcv_bot():
     
     mrcv_state = MRCVState()
     mrcv_state.load_from_file(symbol)
+    print(cprint(f"📊 [MRCV] Status Kumulatif Profit Awal [{symbol}]: ${mrcv_state.cumulative_profit:+.2f}", Colors.CYAN))
     
     rcs_state = RCSState()
     
@@ -146,6 +184,8 @@ def run_mrcv_bot():
                 # Jika tidak ada hedge, MRCV idle
                 if last_hedge_status:
                     last_hedge_status = False
+                    print(cprint(f"✅ [MRCV] Hedging RCS pada {symbol} telah bersih/selesai. Reset akumulasi MRCV ke $0.0.", Colors.GREEN))
+                    mrcv_state.reset_all(symbol)
                 time.sleep(1)
                 continue
                 
@@ -278,17 +318,23 @@ def run_mrcv_bot():
                     time.sleep(1)
                     continue
 
-                # Jika OP1 sudah tidak aktif (hanya saat belum masuk FREEZE), berarti kena TP1 normal
-                if not op1_active and mrcv_state.op1_ticket:
-                    prof1 = get_closed_profit(mrcv_state.op1_ticket)
-                    # Jika OP2 tadinya aktif tapi sekarang mati, ambil juga profitnya
-                    prof2 = get_closed_profit(mrcv_state.op2_ticket) if mrcv_state.op2_ticket and not op2_active else 0.0
+                # 1. KASUS: OP2 Pernah Aktif (Limit Terbuka) lalu Menyentuh TP2
+                if mrcv_state.op2_ticket and mrcv_state.op2_filled and not op2_active:
+                    print(cprint(f"🎯 [MRCV] OP2 menyentuh TP2 ({symbol})! Menutup sisa posisi OP1 & membatalkan OP3...", Colors.GREEN))
+                    # Tutup sisa posisi OP1 jika masih ada di MT5
+                    if op1_active and mrcv_state.op1_ticket:
+                        close_position_rcs(mrcv_state.op1_ticket)
                     
-                    total_prof = prof1 + prof2
+                    # Batalkan pending order OP3 Stop (Hedge) jika masih ada
+                    if mrcv_state.op3_ticket:
+                        cancel_pending_order_rcs(mrcv_state.op3_ticket)
+                        
+                    # Ambil total profit akurat dari history deals broker MT5
+                    total_prof, prof1, prof2 = calculate_mrcv_cycle_profit(mrcv_state)
                     mrcv_state.cumulative_profit += total_prof
                     mrcv_state.save_to_file(symbol)
                     
-                    print(cprint(f"💰 [MRCV] Siklus Selesai! Profit siklus: {total_prof:+.2f} | Kumulatif: {mrcv_state.cumulative_profit:+.2f}", Colors.CYAN))
+                    print(cprint(f"💰 [MRCV] Siklus Selesai (OP2 Hit TP2)! Profit siklus: {total_prof:+.2f} (OP1: {prof1:+.2f}, OP2: {prof2:+.2f}) | Kumulatif: {mrcv_state.cumulative_profit:+.2f}", Colors.CYAN))
                     
                     img_url = generate_and_upload_mrcv_screenshot(symbol, mrcv_state)
                     
@@ -302,8 +348,40 @@ def run_mrcv_bot():
                         screenshot_url=img_url
                     )
                     
-                    # Hapus pending order sisa (OP2 & OP3 stop yang belum tersentuh)
+                    # Bersihkan sisa pending order & reset siklus
                     cleanup_pending_orders(mrcv_state)
+                    mrcv_state.reset_cycle()
+                    time.sleep(1)
+                    continue
+
+                # 2. KASUS: OP1 Menyentuh TP1 Normal (sebelum OP2 aktif atau jika OP2 juga tertutup)
+                if not op1_active and mrcv_state.op1_ticket:
+                    print(cprint(f"🎯 [MRCV] OP1 menyentuh TP1 ({symbol})! Menutup sisa posisi/pending order...", Colors.GREEN))
+                    # Jika OP2 masih aktif, tutup juga OP2
+                    if op2_active and mrcv_state.op2_ticket:
+                        close_position_rcs(mrcv_state.op2_ticket)
+                        
+                    # Batalkan pending order (OP2 limit belum tersentuh / OP3 stop)
+                    cleanup_pending_orders(mrcv_state)
+                    
+                    # Ambil total profit akurat dari history deals broker MT5
+                    total_prof, prof1, prof2 = calculate_mrcv_cycle_profit(mrcv_state)
+                    mrcv_state.cumulative_profit += total_prof
+                    mrcv_state.save_to_file(symbol)
+                    
+                    print(cprint(f"💰 [MRCV] Siklus Selesai (OP1 Hit TP1)! Profit siklus: {total_prof:+.2f} (OP1: {prof1:+.2f}, OP2: {prof2:+.2f}) | Kumulatif: {mrcv_state.cumulative_profit:+.2f}", Colors.CYAN))
+                    
+                    img_url = generate_and_upload_mrcv_screenshot(symbol, mrcv_state)
+                    
+                    # Kirim notifikasi siklus selesai ke grup PROFIT/LOSS + screenshot
+                    notify_mrcv_cycle_done(
+                        symbol=symbol,
+                        cycle_profit=total_prof,
+                        cumulative_profit=mrcv_state.cumulative_profit,
+                        rcs_floating=rcs_floating,
+                        is_wait_rcs=wait_for_hedge,
+                        screenshot_url=img_url
+                    )
                     
                     mrcv_state.reset_cycle()
                     time.sleep(1)
