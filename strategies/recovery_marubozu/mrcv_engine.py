@@ -19,7 +19,8 @@ from strategies.recovery_marubozu.mrcv_notifier import (
     notify_mrcv_op3_freeze,
     notify_mrcv_cycle_done,
     notify_mrcv_hanging_positions,
-    notify_mrcv_positions_cleared
+    notify_mrcv_positions_cleared,
+    notify_mrcv_max_loss_close_all
 )
 
 def get_positions_profit(symbol: str, magics: list[int]) -> float:
@@ -160,18 +161,32 @@ def run_mrcv_bot():
                 msg = f"Tuyul RCS mengalami kondisi hedging pada symbol {symbol} dengan floating saat ini: ${rcs_floating:.2f}.\n🟢 Mesin *Marubozu Recovery (MRCV)* telah diaktifkan untuk memulai proses *recovery*!"
                 send_mrcv_wa_notif(msg, "MRCV_HEDGE_DETECT")
                 
-            # --- CEK CLOSE ALL ---
+            # --- CEK CLOSE ALL (TARGET PROFIT & EMERGENCY MAX LOSS) ---
             mrcv_floating = get_positions_profit(symbol, mrcv_magics)
             total_net = mrcv_state.cumulative_profit + mrcv_floating + rcs_floating
             
-            if is_rcs_hedge and total_net >= 0.0:
-                print(cprint(f"🎉 [MRCV] Target Tercapai! Total Net: {total_net:+.2f}. Melakukan Close All.", Colors.GREEN))
+            target_profit = float(os.getenv("MRCV_TARGET_NET_PROFIT", "0.0"))
+            max_loss = float(os.getenv("MRCV_MAX_NET_LOSS", "-15.0"))
+            if max_loss > 0:
+                max_loss = -max_loss
+
+            # Cek apakah ada posisi aktif yang relevan untuk evaluasi Close ALL
+            has_active_trades = is_rcs_hedge or (mrcv_state.phase in [MRCVPhase.ACTIVE, MRCVPhase.FREEZE]) or (mrcv_floating != 0.0 or rcs_floating != 0.0)
+
+            # 1. KONDISI SUKSES: TARGET PROFIT TERCAPAI
+            if has_active_trades and total_net >= target_profit:
+                print(cprint(f"🎉 [MRCV] Target Profit Tercapai! Total Net: {total_net:+.2f} >= {target_profit:+.2f}. Melakukan Close All.", Colors.GREEN))
                 success_msg = (
                     f"🎉 *[RECOVERY SUCCESS - CLOSE ALL]*\n"
-                    f"Misi penyelamatan berhasil! Total profit dari Marubozu Recovery telah menutupi kerugian / floating minus dari Tuyul RCS.\n\n"
-                    f"Seluruh posisi (RCS & MRCV) telah dibersihkan secara paksa (Sapu Bersih).\n"
-                    f"🟢 Tuyul RCS kini di-reset dan kembali berjalan normal.\n"
-                    f"Total Net Profit: ${total_net:+.2f}"
+                    f"Misi pemulihan berhasil! Total net profit telah mencapai target pemulihan.\n\n"
+                    f"📊 *Rincian Keuangan:*\n"
+                    f"• Total Net PnL: *${total_net:+.2f}*\n"
+                    f"• Target Profit: ${target_profit:+.2f}\n"
+                    f"• Floating MRCV: ${mrcv_floating:+.2f}\n"
+                    f"• Floating RCS: ${rcs_floating:+.2f}\n"
+                    f"• Kumulatif Profit MRCV: ${mrcv_state.cumulative_profit:+.2f}\n\n"
+                    f"🧹 Seluruh posisi (RCS & MRCV) telah disapu bersih (Close ALL).\n"
+                    f"🟢 Sistem di-reset dan kembali siaga normal."
                 )
                 send_mrcv_wa_notif(success_msg, "MRCV_SUCCESS", include_header=False)
                 profit_jid = os.getenv("PROFIT_SIGNAL")
@@ -181,7 +196,27 @@ def run_mrcv_bot():
                 close_all_positions(symbol, all_magics)
                 # Reset MRCV State
                 mrcv_state.reset_all(symbol)
-                # Reset RCS State (rcs_core akan otomatis baca posisi kosong dan reset)
+                # Reset RCS State
+                rcs_state.reset(symbol)
+                time.sleep(2)
+                continue
+
+            # 2. KONDISI DARURAT: BATAS MAX LOSS TERCAPAI (EMERGENCY CUTLOSS REALTIME)
+            if has_active_trades and total_net <= max_loss:
+                print(cprint(f"🛑 [MRCV EMERGENCY CUTLOSS] Batas Max Loss Tercapai! Total Net: {total_net:+.2f} <= {max_loss:.2f}. Melakukan Close ALL.", Colors.RED))
+                notify_mrcv_max_loss_close_all(
+                    symbol=symbol,
+                    total_net=total_net,
+                    max_loss=max_loss,
+                    mrcv_floating=mrcv_floating,
+                    rcs_floating=rcs_floating,
+                    cumulative_profit=mrcv_state.cumulative_profit
+                )
+
+                close_all_positions(symbol, all_magics)
+                # Reset MRCV State
+                mrcv_state.reset_all(symbol)
+                # Reset RCS State
                 rcs_state.reset(symbol)
                 time.sleep(2)
                 continue

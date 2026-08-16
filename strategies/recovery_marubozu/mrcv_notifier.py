@@ -286,3 +286,32 @@ def notify_mrcv_positions_cleared(symbol: str):
     )
     send_mrcv_wa_notif(msg, "MRCV_POSITIONS_CLEARED", include_header=False)
 
+def notify_mrcv_max_loss_close_all(
+    symbol: str,
+    total_net: float,
+    max_loss: float,
+    mrcv_floating: float,
+    rcs_floating: float,
+    cumulative_profit: float
+):
+    """
+    Kirim notifikasi emergency cutloss close all ke MRCV_GROUP_JID dan LOSS_SIGNAL.
+    """
+    msg = (
+        f"🛑 *[MRCV EMERGENCY CLOSE ALL - MAX LOSS]*\n"
+        f"Symbol: {symbol}\n"
+        f"Batas toleransi kerugian maksimal sistem telah tercapai!\n\n"
+        f"📊 *Rincian Keuangan Realtime:*\n"
+        f"• Total Net PnL: *${total_net:+.2f}*\n"
+        f"• Batas Maksimal Loss: ${max_loss:.2f}\n"
+        f"• Floating MRCV: ${mrcv_floating:+.2f}\n"
+        f"• Floating RCS: ${rcs_floating:+.2f}\n"
+        f"• Kumulatif Profit MRCV: ${cumulative_profit:+.2f}\n\n"
+        f"🧹 Seluruh posisi aktif (RCS & MRCV) telah ditutup darurat (Sapu Bersih) untuk melindungi ekuitas modal.\n"
+        f"🟢 Sistem di-reset dan kembali siaga normal."
+    )
+    send_mrcv_wa_notif(msg, "MRCV_MAX_LOSS_CLOSE_ALL", include_header=False)
+    loss_jid = os.getenv("LOSS_SIGNAL")
+    if loss_jid:
+        send_mrcv_wa_notif(msg, "MRCV_MAX_LOSS_CLOSE_ALL", target_jid=loss_jid, include_header=False)
+
