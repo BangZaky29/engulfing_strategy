@@ -10,7 +10,7 @@ from strategies.strategy_rcs.rcs_order_manager import (
 )
 from mt5_client.connection import init_mt5
 from strategies.recovery_marubozu.mrcv_state import MRCVState, MRCVPhase
-from strategies.recovery_marubozu.mrcv_notifier import notify_mrcv_trigger
+from strategies.recovery_marubozu.mrcv_notifier import notify_mrcv_trigger, notify_mrcv_skip
 
 def calculate_ring_c1(symbol: str, candle: dict) -> float:
     """
@@ -33,14 +33,12 @@ def calculate_ring_c1(symbol: str, candle: dict) -> float:
     else:
         return 0.0
 
-def process_marubozu_trigger(symbol: str, candle: dict, state: MRCVState):
+def process_marubozu_trigger(symbol: str, candle: dict, state: MRCVState) -> bool:
     """
     Eksekusi saat trigger Marubozu muncul.
     """
-    print(cprint(f"🚀 [MRCV] Trigger Marubozu Terdeteksi pada {symbol}", Colors.YELLOW))
-    
     point = mt5.symbol_info(symbol).point
-    if not point: return
+    if not point: return False
 
     c_close = candle["close_"]
     c_open = candle["open_"]
@@ -48,10 +46,44 @@ def process_marubozu_trigger(symbol: str, candle: dict, state: MRCVState):
     # 1. Hitung Ring C1
     ring_pts = calculate_ring_c1(symbol, candle)
     if ring_pts <= 0:
-        return
+        return False
 
     # Arah eksekusi
     direction = "BUY" if c_close > c_open else "SELL"
+    
+    tf_label = os.getenv("MRCV_TIMEFRAME", "M5")
+    c_high = float(candle.get("high_", 0.0))
+    c_low = float(candle.get("low_", 0.0))
+    ts = candle.get("timestamp")
+    if hasattr(ts, 'strftime'):
+        time_str = ts.strftime("%H:%M")
+    else:
+        time_str = str(ts) if ts else "-"
+
+    pips = ring_pts / 10.0
+    min_ring_pts = float(os.getenv("MRCV_MIN_RING_POINTS", "0"))
+    max_ring_pts = float(os.getenv("MRCV_MAX_RING_POINTS", "999999"))
+
+    # Cek filter batas ukuran Ring C1
+    if ring_pts < min_ring_pts or ring_pts > max_ring_pts:
+        reason = f"Ukuran Ring C1 ({ring_pts:.1f} pts / {pips:.1f} pips) di luar batas filter ({min_ring_pts:.1f} - {max_ring_pts:.1f} pts)."
+        print(cprint(f"⏭️ [MRCV SKIPPED] Trigger Marubozu pada {symbol} di-skip. Alasan: {reason}", Colors.YELLOW))
+        notify_mrcv_skip(
+            symbol=symbol,
+            tf_label=tf_label,
+            direction=direction,
+            c_high=c_high,
+            c_low=c_low,
+            ring_pts=ring_pts,
+            pips=pips,
+            time_str=time_str,
+            min_pts=min_ring_pts,
+            max_pts=max_ring_pts,
+            reason=reason
+        )
+        return False
+
+    print(cprint(f"🚀 [MRCV] Trigger Marubozu Terdeteksi pada {symbol} (Ring: {ring_pts:.1f} pts / {pips:.1f} pips)", Colors.YELLOW))
     
     lot_op1 = float(os.getenv("MRCV_LOT_OP1", "0.01"))
     lot_op2 = round(lot_op1 * 2, 2)

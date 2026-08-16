@@ -141,6 +141,42 @@ def notify_mrcv_trigger(
     )
     send_mrcv_wa_notif(msg, "MRCV_TRIGGER", include_header=False)
 
+def notify_mrcv_skip(
+    symbol: str,
+    tf_label: str,
+    direction: str,
+    c_high: float,
+    c_low: float,
+    ring_pts: float,
+    pips: float,
+    time_str: str,
+    min_pts: float,
+    max_pts: float,
+    reason: str = ""
+):
+    """
+    Kirim notifikasi trigger yang di-skip ke MRCV_GROUP_JID.
+    """
+    notif_skip = os.getenv("MRCV_NOTIF_SKIP", "true").lower() == "true"
+    if not notif_skip:
+        return
+
+    reason_text = reason if reason else f"Ukuran Ring C1 ({ring_pts:.1f} pts) di luar batas filter ({min_pts:.1f} - {max_pts:.1f} pts)."
+
+    msg = (
+        f"⏭️ *[MRCV TRIGGER SKIPPED]*\n"
+        f"Symbol: {symbol} ({tf_label})\n"
+        f"Arah: *{direction}*\n"
+        f"Pola: Marubozu\n\n"
+        f"📊 *Detail Candle Trigger C1:*\n"
+        f"• High: {c_high:.5f} | Low: {c_low:.5f}\n"
+        f"• Range Ring C1: {ring_pts:.1f} pts ({pips:.1f} pips)\n"
+        f"• Waktu Candle:  {time_str}\n\n"
+        f"⚠️ *Alasan Skip:*\n"
+        f"{reason_text}"
+    )
+    send_mrcv_wa_notif(msg, "MRCV_SKIP", include_header=False)
+
 def notify_mrcv_op2_filled(symbol: str, direction: str, ticket: int, price: float, tp_price: float, volume: float):
     """
     Kirim notifikasi OP2 Limit terbuka/aktif ke MRCV_GROUP_JID.
