@@ -236,9 +236,16 @@ def notify_mrcv_cycle_done(
     if not profit_jid:
         return
 
+    header = (
+        "🎉 [PROFIT : MARUBOZU CANDLE SYSTEM (RECOVERY SYSTEM | MRCV)]\n\n"
+        if cycle_profit >= 0
+        else "☠️ [LOSS : MARUBOZU CANDLE SYSTEM (RECOVERY SYSTEM | MRCV)]\n\n"
+    )
+
     if not is_wait_rcs:
         # Mode Mandiri (MRCV_WAIT_FOR_RCS_HEDGE=false)
         msg = (
+            f"{header}"
             f"Putaran Marubozu sukses tertutup.\n"
             f"Profit putaran ini: ${cycle_profit:+.2f}\n\n"
             f"📊 *Status Performa MRCV:*\n"
@@ -247,6 +254,7 @@ def notify_mrcv_cycle_done(
     else:
         # Mode Recovery RCS (MRCV_WAIT_FOR_RCS_HEDGE=true)
         msg = (
+            f"{header}"
             f"Putaran recovery Marubozu sukses tertutup.\n"
             f"Profit putaran ini: ${cycle_profit:+.2f}\n\n"
             f"📊 *Status Recovery:*\n"
@@ -260,7 +268,7 @@ def notify_mrcv_cycle_done(
         "MRCV_CYCLE_DONE",
         target_jid=profit_jid,
         media_url=screenshot_url if screenshot_url else None,
-        include_header=True
+        include_header=False
     )
 
 def notify_mrcv_hanging_positions(symbol: str, positions: list):
