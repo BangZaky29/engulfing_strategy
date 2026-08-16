@@ -20,13 +20,29 @@ def calculate_cycle_profit(state: RCSState, tracker=None, symbol: str = "") -> f
     for ticket in tickets:
         if ticket is None:
             continue
-        deals = mt5.history_deals_get(position=ticket)
-        if deals:
-            for deal in deals:
-                total_profit += deal.profit
-                total_profit += deal.swap
-                total_profit += deal.commission
+        
+        # Retry mechanism untuk settlement delay broker (maks 15x / 3.75s)
+        ticket_profit = 0.0
+        for attempt in range(1, 16):
+            deals = mt5.history_deals_get(position=ticket)
+            if deals:
+                found_out = False
+                for deal in deals:
+                    if deal.entry == mt5.DEAL_ENTRY_OUT:
+                        ticket_profit += (deal.profit + deal.swap + deal.commission)
+                        found_out = True
                 
+                if found_out:
+                    if attempt > 2:
+                        print(f"⚠️ [RCS] Delay MT5 terdeteksi. Profit untuk ticket #{ticket} berhasil diambil setelah retry {attempt}x.")
+                    total_profit += ticket_profit
+                    break
+            import time
+            time.sleep(0.25)
+        
+        if ticket_profit == 0.0 and attempt == 15:
+            print(f"❌ [RCS] Gagal mengambil profit history untuk ticket #{ticket} setelah 15x retry! Mengembalikan $0.00.")
+
     if tracker and symbol:
         manual_summary = tracker.get_closed_manual_summary(symbol, since=state.freeze_start_time)
         total_profit += manual_summary.net_total

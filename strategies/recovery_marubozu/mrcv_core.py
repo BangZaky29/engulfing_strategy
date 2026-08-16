@@ -9,8 +9,8 @@ from strategies.strategy_rcs.rcs_order_manager import (
     close_position_by_ticket
 )
 from mt5_client.connection import init_mt5
-from strategies.recovery_marubozu.mrcv_state import MRCVState, MRCVPhase
-from strategies.recovery_marubozu.mrcv_notifier import notify_mrcv_trigger, notify_mrcv_skip
+from strategies.recovery_marubozu.state.mrcv_state import MRCVState, MRCVPhase
+from strategies.recovery_marubozu.notifications.wa_events import notify_mrcv_trigger, notify_mrcv_skip
 
 def calculate_ring_c1(symbol: str, candle: dict) -> float:
     """

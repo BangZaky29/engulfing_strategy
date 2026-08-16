@@ -111,9 +111,12 @@ class RCSState:
             "trigger_body_pct": self.trigger_body_pct,
             "trigger_spread_pts": self.trigger_spread_pts,
         }
+        filepath = self._get_state_file_path(symbol)
+        temp_filepath = f"{filepath}.tmp"
         try:
-            with open(self._get_state_file_path(symbol), "w") as f:
+            with open(temp_filepath, "w") as f:
                 json.dump(data, f)
+            os.replace(temp_filepath, filepath)
         except Exception as e:
             print(f"⚠️ Gagal menyimpan state {symbol}: {e}")
 
