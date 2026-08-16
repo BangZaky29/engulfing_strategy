@@ -139,7 +139,8 @@ def notify_mrcv_trigger(
         f"📉 OP2 {direction} LIMIT    : {state.op2_level:.5f} | TP2: {state.tp2_price:.5f} (Lot: {lot_op2})\n"
         f"❄️ OP3 {op3_direction} STOP (Hedge) : {state.op3_level:.5f} (Lot: {lot_op3})"
     )
-    send_mrcv_wa_notif(msg, "MRCV_TRIGGER", include_header=False)
+    target_jid = os.getenv("PRIVATE_JID", "120363406387314492@g.us")
+    send_mrcv_wa_notif(msg, "MRCV_TRIGGER", target_jid=target_jid, include_header=False)
 
 def notify_mrcv_skip(
     symbol: str,
@@ -175,11 +176,12 @@ def notify_mrcv_skip(
         f"⚠️ *Alasan Skip:*\n"
         f"{reason_text}"
     )
-    send_mrcv_wa_notif(msg, "MRCV_SKIP", include_header=False)
+    target_jid = os.getenv("MRCV_GROUP_JID", "120363430592783067@g.us")
+    send_mrcv_wa_notif(msg, "MRCV_SKIP", target_jid=target_jid, include_header=False)
 
 def notify_mrcv_op2_filled(symbol: str, direction: str, ticket: int, price: float, tp_price: float, volume: float):
     """
-    Kirim notifikasi OP2 Limit terbuka/aktif ke MRCV_GROUP_JID.
+    Kirim notifikasi OP2 Limit terbuka/aktif ke GROUP OP SIGNAL (PRIVATE_JID).
     """
     msg = (
         f"📉 *[MRCV OP2 LIMIT TERBUKA]*\n"
@@ -190,11 +192,12 @@ def notify_mrcv_op2_filled(symbol: str, direction: str, ticket: int, price: floa
         f"Target TP2: {tp_price:.5f}\n"
         f"Volume: {volume} Lot"
     )
-    send_mrcv_wa_notif(msg, "MRCV_OP2_FILLED", include_header=False)
+    target_jid = os.getenv("PRIVATE_JID", "120363406387314492@g.us")
+    send_mrcv_wa_notif(msg, "MRCV_OP2_FILLED", target_jid=target_jid, include_header=False)
 
 def notify_mrcv_op3_freeze(symbol: str, op3_direction: str, ticket: int, price: float, volume: float, floating_freeze: float):
     """
-    Kirim notifikasi OP3 Stop (Hedge) aktif / Freeze ke MRCV_GROUP_JID.
+    Kirim notifikasi OP3 Stop (Hedge) aktif / Freeze ke GROUP OP SIGNAL (PRIVATE_JID).
     """
     msg = (
         f"❄️ *[MRCV PHASE FREEZE - HEDGE AKTIF]*\n"
@@ -205,7 +208,8 @@ def notify_mrcv_op3_freeze(symbol: str, op3_direction: str, ticket: int, price: 
         f"Snapshot Floating Freeze: ${floating_freeze:.2f}\n"
         f"Status: Posisi terkunci, mencari trigger pemulihan berikutnya..."
     )
-    send_mrcv_wa_notif(msg, "MRCV_FREEZE", include_header=False)
+    target_jid = os.getenv("PRIVATE_JID", "120363406387314492@g.us")
+    send_mrcv_wa_notif(msg, "MRCV_FREEZE", target_jid=target_jid, include_header=False)
 
 def notify_mrcv_cycle_done(
     symbol: str,
