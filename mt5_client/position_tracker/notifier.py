@@ -68,36 +68,25 @@ def notify_manual_position_detected(symbol: str, positions: list[TrackedPosition
         print(cprint(f"   ⚠️ Status: OP Manual/Liar terdeteksi — Siklus baru DIBLOKIR", Colors.RED))
     print(cprint(f"{'='*50}\n", Colors.YELLOW))
 
-    # --- Pesan ke PRIVATE_JID / GRUP OP SIGNAL ---
-    msg_private = (
+    # --- Pesan hanya ke RCS_GROUP_JID ---
+    msg_group = (
         f"🔍 *OP MANUAL TERDETEKSI* [{symbol}]\n\n"
         f"Jumlah: *{total_count} posisi*\n"
         f"{details_str}\n\n"
     )
     if is_freeze:
-        msg_private += (
+        msg_group += (
             f"❄️ Status: Dalam FREEZE mode\n"
             f"Kemungkinan OP Recovery oleh Trader.\n"
             f"Sistem TIDAK akan membuka siklus baru sampai semua OP manual ditutup."
         )
     else:
-        msg_private += (
+        msg_group += (
             f"⚠️ Status: OP Manual/Liar\n"
             f"Siklus baru untuk {symbol} DIBLOKIR sampai semua OP manual ditutup."
         )
-    _send_wa(msg_private, private_jid, "PT_MANUAL_OPEN")
-
-    # --- Pesan ke RCS_GROUP_JID (recovery saat freeze) ---
-    if is_freeze and group_jid:
-        msg_group = (
-            f"🤖 *[POSITION TRACKER]*\n\n"
-            f"🔍 *OP MANUAL TERDETEKSI* [{symbol}]\n\n"
-            f"Jumlah: *{total_count} posisi*\n"
-            f"{details_str}\n\n"
-            f"❄️ Sistem mendeteksi OP recovery manual oleh Trader.\n"
-            f"Kalkulasi profit/loss akan menyertakan OP ini secara otomatis."
-        )
-        _send_wa(msg_group, group_jid, "PT_MANUAL_OPEN_FREEZE")
+    if group_jid:
+        _send_wa(msg_group, group_jid, "PT_MANUAL_OPEN")
 
 
 def notify_manual_position_closed(symbol: str, positions: list[TrackedPosition], remaining: int):
@@ -155,10 +144,9 @@ def notify_manual_position_closed(symbol: str, positions: list[TrackedPosition],
 def notify_all_manual_cleared(symbol: str):
     """
     Kirim notifikasi saat semua OP manual sudah ditutup.
-    Target: PRIVATE_JID + RCS_GROUP_JID
+    Target: RCS_GROUP_JID
     """
     group_jid = os.getenv("RCS_GROUP_JID", "")
-    private_jid = os.getenv("PRIVATE_JID", "")
 
     # Terminal log
     print(cprint(f"\n{'='*50}", Colors.GREEN))
@@ -171,7 +159,6 @@ def notify_all_manual_cleared(symbol: str):
         f"Sistem siap melanjutkan siklus normal untuk {symbol}."
     )
 
-    _send_wa(msg, private_jid, "PT_ALL_CLEARED")
     if group_jid:
         _send_wa(msg, group_jid, "PT_ALL_CLEARED")
 

@@ -370,26 +370,11 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
     if not first_config: return
 
     rcs_skip_jid = first_config.group_jid or os.getenv("RCS_GROUP_JID") or "120363409493021715@g.us"
-    private_jid = first_config.private_jid or os.getenv("PRIVATE_JID")
-    profit_jid = first_config.profit_signal_jid or os.getenv("PROFIT_SIGNAL")
-    loss_jid = first_config.loss_signal_jid or os.getenv("LOSS_SIGNAL")
-    info_jid = os.getenv("GROUP_JID")
-
-    standard_jids = set()
-    for jid in [private_jid, profit_jid, loss_jid, info_jid]:
-        if jid and jid != rcs_skip_jid:
-            standard_jids.add(jid)
 
     try:
-        sb = get_supabase()
         outbox_rows = []
 
         if status == 'START':
-            std_msg = (
-                f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
-                f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]"
-            )
-            
             skipped_msg_lines = [
                 f"🟢 SISTEM DIAKTIFKAN 🟢\n\n",
                 f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]\n\n"
@@ -412,21 +397,10 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
             skipped_msg = "\n".join(skipped_msg_lines).strip()
             
         else:
-            std_msg = (
+            skipped_msg = (
                 f"🛑 SISTEM DIMATIKAN 🛑\n\n"
                 f"🛑 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]"
             )
-            skipped_msg = std_msg
-
-        for jid in standard_jids:
-            outbox_rows.append({
-                'source_table': 'rcs_system',
-                'event_type': 'RCS_SYSTEM',
-                'group_jid': jid,
-                'message_type': 'TEXT',
-                'message': std_msg,
-                'dedupe_key': f'rcs_std_{status.lower()}_{jid[:10]}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
-            })
 
         if rcs_skip_jid:
             outbox_rows.append({
@@ -440,9 +414,9 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
 
         if outbox_rows:
             execute_supabase(lambda sb: sb.table('wa_outbox').insert(outbox_rows).execute())
-            print(cprint(f"📲 Broadcast Notifikasi RCS System ({status}) ke {len(outbox_rows)} WA (Gabungan {len(configs)} symbol)", Colors.GREEN))
+            print(cprint(f"📲 Notifikasi RCS System ({status}) terkirim ke {rcs_skip_jid} (Gabungan {len(configs)} symbol)", Colors.GREEN))
     except Exception as e:
-        print(cprint(f"⚠️ Gagal broadcast WA notif RCS System ({status}): {e}", Colors.RED))
+        print(cprint(f"⚠️ Gagal kirim WA notif RCS System ({status}): {e}", Colors.RED))
 
 
 def notify_company_target_reached_rcs(reason: str):
