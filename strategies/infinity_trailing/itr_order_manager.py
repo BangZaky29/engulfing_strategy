@@ -18,8 +18,7 @@ def send_market_order(symbol: str, action_str: str, price: float, lot_size: floa
             "price": price,
             "magic": magic_number,
             "comment": "ITR_OP1",
-            "order_role": "OP1",
-            "wa_message": f"🚀 *[ITR MULTI-EXECUTION]*\nOrder {action_str} {symbol} @ {price:.5f}"
+            "order_role": "OP1"
         }
         dispatch_multi_account_order("ITR", payload)
 

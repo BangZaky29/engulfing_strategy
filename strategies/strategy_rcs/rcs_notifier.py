@@ -171,6 +171,9 @@ def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCS
     # Label OP1 sesuai mode entry
     op1_mode_label = "Market" if config.op1_entry_mode == "INSTANT_ZERO" else f"Limit ({config.op1_entry_mode})"
 
+    from mt5_client.multi_account_dispatcher import get_account_footer_label
+    acc_footer = get_account_footer_label("RCS")
+
     msg = (
         f"🌟 SIGNAL RCS [{direction}] 🌟\n"
         f"🎯 RCS TRIGGER VALID\n\n"
@@ -182,6 +185,7 @@ def notify_trigger(symbol: str, pattern: str, direction: str, state, config: RCS
         f"* OP1 {op1_mode_label} : {state.op1_level:.5f} | TP1: {state.tp1_price:.5f}\n"
         f"* OP2 Limit  : {state.op2_level:.5f} | TP2: {state.tp2_price:.5f}\n"
         f"* OP3 SL/Hdg : {state.op3_level:.5f} | Mode: {config.op3_mode}"
+        f"{acc_footer}"
     )
     # Target: PRIVATE_JID — tanpa header (format bersih)
     send_rcs_wa_notif(config, msg, 'RCS_TRIGGER', target_jid=config.private_jid, include_header=False)
@@ -217,6 +221,9 @@ def notify_open(
     if not config.notif_open:
         return
 
+    from mt5_client.multi_account_dispatcher import get_account_footer_label
+    acc_footer = get_account_footer_label("RCS")
+
     if is_op1 and direction:
         # Format khusus OP1 Limit — bersih, tidak ada header
         msg = (
@@ -225,6 +232,7 @@ def notify_open(
             f"Ticket: {ticket}\n"
             f"Harga: {price:.5f}\n"
             f"Target TP: {target:.5f}"
+            f"{acc_footer}"
         )
     else:
         # Format standar OP2 / OP3
@@ -234,6 +242,7 @@ def notify_open(
             f"Ticket: {ticket}\n"
             f"Harga: {price:.5f}\n"
             f"Target TP: {target:.5f}"
+            f"{acc_footer}"
         )
 
     # Target: PRIVATE_JID — selalu tanpa header
@@ -241,12 +250,15 @@ def notify_open(
 
 def notify_freeze(symbol: str, floating_usd: float, config: RCSConfig):
     if not config.notif_freeze: return
+    from mt5_client.multi_account_dispatcher import get_account_footer_label
+    acc_footer = get_account_footer_label("RCS")
     msg = (
         f"❄️ *RCS PHASE FREEZE*\n\n"
         f"Symbol: {symbol}\n"
         f"Posisi telah terkunci (Hedge).\n"
         f"Snapshot Floating: *${floating_usd:.2f}*\n\n"
         f"Menunggu posisi ditutup manual oleh trader..."
+        f"{acc_footer}"
     )
     # Target: PRIVATE_JID — tanpa header
     send_rcs_wa_notif(config, msg, 'RCS_FREEZE', target_jid=config.private_jid, include_header=False)

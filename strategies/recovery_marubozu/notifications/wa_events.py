@@ -20,6 +20,9 @@ def notify_mrcv_trigger(
     """
     Kirim notifikasi trigger sinyal awal ke GROUP OP SIGNAL (PRIVATE_JID).
     """
+    from mt5_client.multi_account_dispatcher import get_account_footer_label
+    acc_footer = get_account_footer_label("MRCV")
+
     msg = (
         f"🌟 SIGNAL MRCV [{direction}] 🌟\n"
         f"Symbol: {symbol} ({tf_label})\n\n"
@@ -31,6 +34,7 @@ def notify_mrcv_trigger(
         f"🟢 OP1 {direction} (Market) : {state.op1_level:.5f} | TP1: {state.tp1_price:.5f} (Lot: {lot_op1})\n"
         f"📉 OP2 {direction} LIMIT    : {state.op2_level:.5f} | TP2: {state.tp2_price:.5f} (Lot: {lot_op2})\n"
         f"❄️ OP3 {op3_direction} STOP (Hedge) : {state.op3_level:.5f} (Lot: {lot_op3})"
+        f"{acc_footer}"
     )
     target_jid = os.getenv("PRIVATE_JID", "120363406387314492@g.us")
     send_mrcv_wa_notif(msg, "MRCV_TRIGGER", target_jid=target_jid, include_header=False)
@@ -76,6 +80,9 @@ def notify_mrcv_op2_filled(symbol: str, direction: str, ticket: int, price: floa
     """
     Kirim notifikasi OP2 Limit terbuka/aktif ke GROUP OP SIGNAL (PRIVATE_JID).
     """
+    from mt5_client.multi_account_dispatcher import get_account_footer_label
+    acc_footer = get_account_footer_label("MRCV")
+
     msg = (
         f"📉 *[MRCV OP2 LIMIT TERBUKA]*\n"
         f"Symbol: {symbol}\n"
@@ -84,6 +91,7 @@ def notify_mrcv_op2_filled(symbol: str, direction: str, ticket: int, price: floa
         f"Harga Open: {price:.5f}\n"
         f"Target TP2: {tp_price:.5f}\n"
         f"Volume: {volume} Lot"
+        f"{acc_footer}"
     )
     target_jid = os.getenv("PRIVATE_JID", "120363406387314492@g.us")
     send_mrcv_wa_notif(msg, "MRCV_OP2_FILLED", target_jid=target_jid, include_header=False)
@@ -92,6 +100,9 @@ def notify_mrcv_op3_freeze(symbol: str, op3_direction: str, ticket: int, price: 
     """
     Kirim notifikasi OP3 Stop (Hedge) aktif / Freeze ke GROUP OP SIGNAL (PRIVATE_JID).
     """
+    from mt5_client.multi_account_dispatcher import get_account_footer_label
+    acc_footer = get_account_footer_label("MRCV")
+
     msg = (
         f"❄️ *[MRCV PHASE FREEZE - HEDGE AKTIF]*\n"
         f"Symbol: {symbol}\n"
@@ -100,6 +111,7 @@ def notify_mrcv_op3_freeze(symbol: str, op3_direction: str, ticket: int, price: 
         f"Arah: {op3_direction} (Hedge) @ {price:.5f} ({volume} Lot)\n"
         f"Snapshot Floating Freeze: ${floating_freeze:.2f}\n"
         f"Status: Posisi terkunci, mencari trigger pemulihan berikutnya..."
+        f"{acc_footer}"
     )
     target_jid = os.getenv("PRIVATE_JID", "120363406387314492@g.us")
     send_mrcv_wa_notif(msg, "MRCV_FREEZE", target_jid=target_jid, include_header=False)

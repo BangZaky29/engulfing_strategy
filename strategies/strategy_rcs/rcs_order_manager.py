@@ -39,8 +39,7 @@ def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: 
             "tp": float(tp) if tp > 0 else 0.0,
             "magic": magic_number,
             "comment": comment,
-            "order_role": order_role,
-            "wa_message": f"🚀 *[RCS MULTI-EXECUTION]*\nOrder {action_str} {symbol} @ {price:.5f} ({order_role})"
+            "order_role": order_role
         }
         primary_res, all_res = dispatch_multi_account_order("RCS", payload)
         if primary_res:
@@ -125,8 +124,7 @@ def send_pending_order_rcs(symbol: str, order_type: int, price: float, lot_size:
             "tp": float(tp) if tp > 0 else 0.0,
             "magic": magic_number,
             "comment": comment,
-            "order_role": order_role,
-            "wa_message": f"🚀 *[RCS MULTI-EXECUTION]*\nPending Order {comment} {symbol} @ {price:.5f}"
+            "order_role": order_role
         }
         primary_res, all_res = dispatch_multi_account_order("RCS", payload)
         if primary_res:

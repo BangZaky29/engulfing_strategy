@@ -85,8 +85,7 @@ def send_main_order(
             "tp": float(tp_price) if tp_price > 0 else 0.0,
             "magic": exec_cfg.magic_number,
             "comment": comment,
-            "order_role": "OP1",
-            "wa_message": f"🚀 *[TUYUL MALING MULTI-EXECUTION]*\nSignal {pattern.upper()} {action_name} {symbol} @ {round(price, digits):.5f}"
+            "order_role": "OP1"
         }
         primary_res, all_res = dispatch_multi_account_order("MALING", payload)
         if primary_res and primary_res.order:

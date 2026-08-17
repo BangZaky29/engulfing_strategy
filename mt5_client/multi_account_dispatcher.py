@@ -549,28 +549,6 @@ def dispatch_multi_account_order(strategy_name: str, payload: dict) -> tuple[Mul
                     print(cprint(f"⚠️ Error eksekusi sekunder {acc['key']}: {exc}", Colors.RED))
                     results.append({"key": acc['key'], "name": acc['name'], "login": acc['login'], "success": False, "error": str(exc), "retcode": -1, "order": None})
 
-    # 3. Kirim WA Notification terpusat untuk SEMUA akun yang sukses
-    wa_message = payload.get("wa_message")
-    if wa_message:
-        dest_jid = payload.get("target_jid", os.getenv("PRIVATE_JID", os.getenv("RCS_GROUP_JID", "120363409493021715@g.us")))
-        for r in results:
-            if r.get("success") and r.get("order"):
-                footer_label = f"\n\n🏷️ *AKUN:* {r['key']} ({r.get('name', r['key'])} | {r.get('login', '-')}) | *BOT:* {strategy_name.upper()}"
-                full_wa = wa_message.strip() + footer_label
-                wa_payload = {
-                    'source_table': f'{strategy_name.lower()}_system',
-                    'event_type': f'{strategy_name.upper()}_MULTI_EXEC',
-                    'group_jid': dest_jid,
-                    'message_type': 'TEXT',
-                    'message': full_wa,
-                    'dedupe_key': f'{strategy_name.lower()}_{r["key"]}_{r["order"]}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
-                }
-                try:
-                    execute_supabase(lambda sb: sb.table('wa_outbox').insert(wa_payload).execute())
-                    print(cprint(f"📲 [{r['key']}] WA Notif terkirim dengan Label Footer Akun.", Colors.GREEN))
-                except Exception as e:
-                    print(cprint(f"⚠️ [{r['key']}] Gagal kirim WA outbox: {e}", Colors.RED))
-
     # Temukan akun pertama yang berhasil untuk return ke caller
     primary_res = None
     for r in results:
@@ -586,6 +564,25 @@ def dispatch_multi_account_order(strategy_name: str, payload: dict) -> tuple[Mul
             break
 
     return primary_res, results
+
+def get_account_footer_label(strategy_name: str) -> str:
+    """
+    Membuat label footer akun yang bersih dan terpadu untuk pesan notifikasi Signal / OP.
+    Contoh:
+    🏷️ *AKUN:* ACC1 (Headway_Demo_1 | 5034723) | *BOT:* RCS
+    atau (jika multi-akun):
+    🏷️ *AKUN:* ACC1 (5034723), ACC3 (5597691) | *BOT:* RCS
+    """
+    accounts = get_target_accounts(strategy_name)
+    if not accounts:
+        return f"\n\n🏷️ *BOT:* {strategy_name.upper()}"
+
+    if len(accounts) == 1:
+        acc = accounts[0]
+        return f"\n\n🏷️ *AKUN:* {acc['key']} ({acc['name']} | {acc['login']}) | *BOT:* {strategy_name.upper()}"
+    else:
+        acc_strs = [f"{a['key']} ({a['login']})" for a in accounts]
+        return f"\n\n🏷️ *AKUN:* {', '.join(acc_strs)} | *BOT:* {strategy_name.upper()}"
 
 def _worker_cancel_pending_orders(acc_info: dict, symbol: str, magic_numbers: list[int]) -> int:
     """Worker sub-process untuk membatalkan pending order pada akun sekunder."""
@@ -669,7 +666,7 @@ def _worker_query_account_deals_pnl(acc_info: dict, symbol: str, tickets: list[i
     """Worker sub-process untuk mengambil real PnL dari deals history broker akun sekunder."""
     import MetaTrader5 as mt5_worker
     import os
-    from datetime import datetime, timedelta
+    import time
 
     path = acc_info.get("path", "")
     if path and os.path.exists(path):
@@ -680,17 +677,45 @@ def _worker_query_account_deals_pnl(acc_info: dict, symbol: str, tickets: list[i
     if not init_ok:
         return {"key": acc_info['key'], "name": acc_info['name'], "login": acc_info['login'], "profit": 0.0, "deals_count": 0}
 
-    now = datetime.now()
-    from_time = now - timedelta(hours=24)
-    deals = mt5_worker.history_deals_get(from_time, now)
-    
     total_pnl = 0.0
     matched_deals = 0
-    if deals:
-        for d in deals:
-            if not tickets or (d.position_id in tickets or d.order in tickets or d.ticket in tickets):
-                total_pnl += (d.profit + d.swap + d.commission)
+
+    if tickets:
+        for t in tickets:
+            t_pnl = 0.0
+            found_out = False
+            for _ in range(15):
+                deals = mt5_worker.history_deals_get(position=t)
+                if deals:
+                    for d in deals:
+                        if d.entry == mt5_worker.DEAL_ENTRY_OUT or d.entry == 2:
+                            t_pnl += (d.profit + d.swap + d.commission)
+                            found_out = True
+                    if found_out:
+                        break
+                time.sleep(0.2)
+
+            if found_out:
+                total_pnl += t_pnl
                 matched_deals += 1
+            else:
+                now = time.time()
+                deals = mt5_worker.history_deals_get(now - 86400, now + 3600)
+                if deals:
+                    for d in deals:
+                        if (d.position_id == t or d.order == t) and (d.entry == mt5_worker.DEAL_ENTRY_OUT or d.entry == 2):
+                            total_pnl += (d.profit + d.swap + d.commission)
+                            matched_deals += 1
+                            break
+    else:
+        now = time.time()
+        deals = mt5_worker.history_deals_get(now - 3600, now + 3600)
+        if deals:
+            for d in reversed(deals):
+                if d.symbol == symbol and (d.entry == mt5_worker.DEAL_ENTRY_OUT or d.entry == 2):
+                    total_pnl = (d.profit + d.swap + d.commission)
+                    matched_deals = 1
+                    break
 
     actual_login = getattr(mt5_worker.account_info(), "login", acc_info['login'])
     mt5_worker.shutdown()
@@ -724,15 +749,40 @@ def get_multi_account_cycle_profit(strategy_name: str, symbol: str, tickets_per_
 
     # 1. Query ACC1 di thread utama jika ada di target
     if local_acc:
-        now = datetime.now()
-        from_time = now - timedelta(hours=24)
-        deals1 = mt5.history_deals_get(from_time, now)
         p1_pnl = 0.0
         p1_tickets = tickets_per_account.get(local_acc['key'], [])
-        if deals1:
-            for d in deals1:
-                if not p1_tickets or (d.position_id in p1_tickets or d.order in p1_tickets or d.ticket in p1_tickets):
-                    p1_pnl += (d.profit + d.swap + d.commission)
+        if p1_tickets:
+            for t in p1_tickets:
+                t_pnl = 0.0
+                found_out = False
+                for _ in range(15):
+                    deals = mt5.history_deals_get(position=t)
+                    if deals:
+                        for d in deals:
+                            if d.entry == mt5.DEAL_ENTRY_OUT or d.entry == 2:
+                                t_pnl += (d.profit + d.swap + d.commission)
+                                found_out = True
+                        if found_out:
+                            break
+                    time.sleep(0.2)
+                if found_out:
+                    p1_pnl += t_pnl
+                else:
+                    now = time.time()
+                    deals = mt5.history_deals_get(now - 86400, now + 3600)
+                    if deals:
+                        for d in deals:
+                            if (d.position_id == t or d.order == t) and (d.entry == mt5.DEAL_ENTRY_OUT or d.entry == 2):
+                                p1_pnl += (d.profit + d.swap + d.commission)
+                                break
+        else:
+            now = time.time()
+            deals = mt5.history_deals_get(now - 3600, now + 3600)
+            if deals:
+                for d in reversed(deals):
+                    if d.symbol == symbol and (d.entry == mt5.DEAL_ENTRY_OUT or d.entry == 2):
+                        p1_pnl = (d.profit + d.swap + d.commission)
+                        break
 
         results_map[local_acc['key']] = {
             "key": local_acc['key'],
@@ -759,10 +809,15 @@ def get_multi_account_cycle_profit(strategy_name: str, symbol: str, tickets_per_
                     res = fut.result()
                     results_map[acc['key']] = res
                     total_profit += res.get("profit", 0.0)
-                except Exception:
+                except Exception as e:
+                    print(cprint(f"⚠️ Error audit profit deal {acc['key']}: {e}", Colors.RED))
                     results_map[acc['key']] = {"key": acc['key'], "name": acc['name'], "login": acc['login'], "profit": 0.0}
 
+    # Urutkan berdasarkan urutan akun target
+    order_map = {acc['key']: i for i, acc in enumerate(accounts)}
+    sorted_accounts = dict(sorted(results_map.items(), key=lambda item: order_map.get(item[0], 99)))
+
     return {
-        "accounts": results_map,
+        "accounts": sorted_accounts,
         "total_profit": round(total_profit, 2)
     }

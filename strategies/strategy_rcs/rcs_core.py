@@ -235,7 +235,14 @@ class RCSEngine:
             if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
                 from mt5_client.multi_account_dispatcher import cancel_multi_account_pending_orders, get_multi_account_cycle_profit
                 cancel_multi_account_pending_orders("RCS", symbol, [rcs_cfg.magic_op2, rcs_cfg.magic_op3])
-                multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, getattr(state, 'multi_account_tickets', {}))
+                
+                tickets_dict = dict(getattr(state, 'multi_account_tickets', {}))
+                if "ACC1" not in tickets_dict and state.op1_ticket:
+                    tickets_dict["ACC1"] = [state.op1_ticket]
+                elif state.op1_ticket and state.op1_ticket not in tickets_dict.get("ACC1", []):
+                    tickets_dict.setdefault("ACC1", []).append(state.op1_ticket)
+
+                multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, tickets_dict)
                 real_profit = multi_pnl_data.get("total_profit", 0.0)
             else:
                 if state.op2_ticket: cancel_pending_order_rcs(state.op2_ticket)
@@ -289,7 +296,16 @@ class RCSEngine:
                 if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
                     from mt5_client.multi_account_dispatcher import cancel_multi_account_pending_orders, get_multi_account_cycle_profit
                     cancel_multi_account_pending_orders("RCS", symbol, [rcs_cfg.magic_op3])
-                    multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, getattr(state, 'multi_account_tickets', {}))
+                    
+                    tickets_dict = dict(getattr(state, 'multi_account_tickets', {}))
+                    if "ACC1" not in tickets_dict and state.op1_ticket:
+                        tickets_dict["ACC1"] = [state.op1_ticket]
+                    elif state.op1_ticket and state.op1_ticket not in tickets_dict.get("ACC1", []):
+                        tickets_dict.setdefault("ACC1", []).append(state.op1_ticket)
+                    if state.op2_ticket and state.op2_ticket not in tickets_dict.get("ACC1", []):
+                        tickets_dict.setdefault("ACC1", []).append(state.op2_ticket)
+
+                    multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, tickets_dict)
                     real_profit = multi_pnl_data.get("total_profit", 0.0)
                 else:
                     if state.op3_ticket: cancel_pending_order_rcs(state.op3_ticket)
@@ -327,7 +343,10 @@ class RCSEngine:
             import os
             if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
                 from mt5_client.multi_account_dispatcher import get_multi_account_cycle_profit
-                multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, getattr(state, 'multi_account_tickets', {}))
+                tickets_dict = dict(getattr(state, 'multi_account_tickets', {}))
+                if "ACC1" not in tickets_dict and state.op1_ticket:
+                    tickets_dict["ACC1"] = [state.op1_ticket]
+                multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, tickets_dict)
                 profit = multi_pnl_data.get("total_profit", profit)
             else:
                 multi_pnl_data = None
