@@ -6,7 +6,23 @@
 import MetaTrader5 as mt5
 
 def send_market_order(symbol: str, action_str: str, price: float, lot_size: float, magic_number: int):
+    import os
     order_type = mt5.ORDER_TYPE_BUY if action_str == "BUY" else mt5.ORDER_TYPE_SELL
+
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import dispatch_multi_account_order
+        payload = {
+            "symbol": symbol,
+            "action": mt5.TRADE_ACTION_DEAL,
+            "type": order_type,
+            "price": price,
+            "magic": magic_number,
+            "comment": "ITR_OP1",
+            "order_role": "OP1",
+            "wa_message": f"🚀 *[ITR MULTI-EXECUTION]*\nOrder {action_str} {symbol} @ {price:.5f}"
+        }
+        dispatch_multi_account_order("ITR", payload)
+
     req = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,

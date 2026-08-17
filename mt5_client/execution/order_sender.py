@@ -64,6 +64,23 @@ def send_main_order(
     """
     from mt5_client.money_management import get_dynamic_op1_lot
     dyn_lot, funds, src = get_dynamic_op1_lot(fallback_lot=lot_size_used)
+
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import dispatch_multi_account_order
+        action_name = "BUY" if order_type == mt5.ORDER_TYPE_BUY else "SELL"
+        payload = {
+            "symbol": symbol,
+            "action": action,
+            "type": order_type,
+            "price": price,
+            "sl": float(sl_price) if sl_price > 0 else 0.0,
+            "tp": float(tp_price) if tp_price > 0 else 0.0,
+            "magic": exec_cfg.magic_number,
+            "comment": comment,
+            "order_role": "OP1",
+            "wa_message": f"🚀 *[TUYUL MALING MULTI-EXECUTION]*\nSignal {pattern.upper()} {action_name} {symbol} @ {round(price, digits):.5f}"
+        }
+        dispatch_multi_account_order("MALING", payload)
     
     # 3. Request OP-1 (Main Order) ke MT5
     # Gunakan SL normal (bukan Hedging)

@@ -24,8 +24,26 @@ def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: 
     Kirim market order (Instant Execution).
     action_str: "BUY" atau "SELL"
     """
+    import os
     order_type = mt5.ORDER_TYPE_BUY if action_str == "BUY" else mt5.ORDER_TYPE_SELL
-    
+
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import dispatch_multi_account_order
+        order_role = "OP1" if "OP1" in comment else ("OP2" if "OP2" in comment else "OP3")
+        payload = {
+            "symbol": symbol,
+            "action": mt5.TRADE_ACTION_DEAL,
+            "type": order_type,
+            "price": price,
+            "sl": float(sl) if sl > 0 else 0.0,
+            "tp": float(tp) if tp > 0 else 0.0,
+            "magic": magic_number,
+            "comment": comment,
+            "order_role": order_role,
+            "wa_message": f"🚀 *[RCS MULTI-EXECUTION]*\nOrder {action_str} {symbol} @ {price:.5f} ({order_role})"
+        }
+        dispatch_multi_account_order("RCS", payload)
+
     req = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
