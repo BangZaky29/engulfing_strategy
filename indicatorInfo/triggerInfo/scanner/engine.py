@@ -147,9 +147,24 @@ class MultiPatternScanner:
         """Main scan loop - berjalan terus sampai di-stop."""
         # Log registered patterns
         pattern_names = [p.name for p in self.patterns]
-        print(cprint(f"🚀 MultiPatternScanner berjalan... ({len(pattern_names)} patterns: {', '.join(pattern_names)})", Colors.GREEN))
 
+        # Tampilkan Banner Akun MT5 saat Startup Scanner
+        from mt5_client.money_management import get_account_funds_info
+        funds_info = get_account_funds_info()
+        print("==================================================")
+        print(cprint(f"💰 DANA & KESEHATAN AKUN SCANNER MT5:", Colors.CYAN))
+        print(cprint(f"   • Tipe Akun      : {funds_info['account_type']} (Login: {funds_info['account_number']} | Server: {funds_info['server']})", Colors.CYAN))
+        print(cprint(f"   • Balance / Eq   : ${funds_info['balance']:.2f} / ${funds_info['equity']:.2f}", Colors.CYAN))
+        print(cprint(f"   • Free Margin    : ${funds_info['margin_free']:.2f} (Margin Level: {funds_info['health_status']})", Colors.CYAN))
+        print(cprint(f"   • Leverage Akun  : {funds_info['leverage']} | Ping: {funds_info['ping_str']} | AutoTrading: {funds_info['autotrading']}", Colors.CYAN))
+        print("==================================================")
+        print(cprint(f"🚀 MultiPatternScanner berjalan... ({len(pattern_names)} patterns: {', '.join(pattern_names)})", Colors.GREEN))
+        print(cprint(f"📊 Symbols: {', '.join(self.symbols)} | Timeframes: {', '.join(self.timeframes)}", Colors.CYAN))
+        print("--------------------------------------------------")
+
+        cycle_count = 0
         while True:
+            cycle_count += 1
             new_triggers_this_cycle = []
             self.expired_this_cycle = []
 
@@ -182,6 +197,13 @@ class MultiPatternScanner:
                         combined_triggers.append((sym, tf, pattern_name, direction, details, "active"))
 
                 self.notifier.send(combined_triggers, self.expired_this_cycle if has_expired else None)
+
+            # Live Scan Heartbeat Log di terminal (setiap cycle)
+            now_str = datetime.now().strftime("%H:%M:%S")
+            active_count = len(self.active_triggers)
+            new_count = len(new_triggers_this_cycle)
+            status_text = f"[{now_str}] 🔍 Scan #{cycle_count} Selesai ({len(self.symbols)} Simbol × {len(self.timeframes)} TF) | Baru: {new_count} | Aktif: {active_count}"
+            print(cprint(status_text, Colors.GRAY if new_count == 0 else Colors.GREEN))
 
             # Cleanup old data (> 2 hari)
             self._cleanup_old_data()

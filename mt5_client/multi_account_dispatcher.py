@@ -62,6 +62,9 @@ def get_multi_account_funds_info(strategy_name: str) -> list[dict]:
     if not accounts:
         return []
 
+    from mt5_client.terminal_launcher import ensure_all_target_terminals_running
+    ensure_all_target_terminals_running(accounts)
+
     results = []
     initial_acc = mt5.account_info()
     initial_login = initial_acc.login if initial_acc else 0
