@@ -399,9 +399,12 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
 
             skipped_msg_lines = [
                 f"🟢 SISTEM DIAKTIFKAN 🟢\n\n",
-                f"💰 *DANA AKUN MT5 REALTIME:*",
-                f"• Total Balance: *${funds_info['balance']:.2f}*",
-                f"• Total Equity: *${funds_info['equity']:.2f}*",
+                f"💰 *DANA & KESEHATAN AKUN MT5:*",
+                f"• Tipe Akun: *{funds_info['account_type']}* (Login: {funds_info['account_number']} | Server: {funds_info['server']})",
+                f"• Balance / Equity: *${funds_info['balance']:.2f}* / *${funds_info['equity']:.2f}*",
+                f"• Free Margin: *${funds_info['margin_free']:.2f}* (Margin Level: *{funds_info['health_status']}*)",
+                f"• Leverage: *{funds_info['leverage']}*",
+                f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*",
                 f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n"
             ]
             

@@ -68,9 +68,15 @@ class MRCVEngine:
         from mt5_client.money_management import get_account_funds_info
         funds_info = get_account_funds_info()
 
-        print(cprint(f"💰 DANA AKUN MT5 REALTIME:", Colors.CYAN))
-        print(cprint(f"   • Total Balance  : ${funds_info['balance']:.2f}", Colors.CYAN))
-        print(cprint(f"   • Total Equity   : ${funds_info['equity']:.2f}", Colors.CYAN))
+        print(cprint(f"💰 DANA & KESEHATAN AKUN MT5 REALTIME:", Colors.CYAN))
+        print(cprint(f"   • Tipe Akun      : {funds_info['account_type']} (Login: {funds_info['account_number']} | Server: {funds_info['server']})", Colors.CYAN))
+        print(cprint(f"   • Balance / Eq   : ${funds_info['balance']:.2f} / ${funds_info['equity']:.2f}", Colors.CYAN))
+        print(cprint(f"   • Free Margin    : ${funds_info['margin_free']:.2f} (Margin Terpakai: ${funds_info['margin_used']:.2f})", Colors.CYAN))
+        print(cprint(f"   • Margin Level   : {funds_info['health_status']}", Colors.GREEN if "SEHAT" in funds_info['health_status'] else Colors.YELLOW))
+        print(cprint(f"   • Leverage Akun  : {funds_info['leverage']}", Colors.CYAN))
+        print(cprint(f"📡 PERFORMA JARINAN BROKER:", Colors.CYAN))
+        print(cprint(f"   • Ping Server    : {funds_info['ping_str']}", Colors.CYAN))
+        print(cprint(f"   • AutoTrading    : {funds_info['autotrading']}", Colors.CYAN))
         print(cprint(f"   • Acuan Modal    : {funds_info['source_type']} (${funds_info['funds_used']:.2f})", Colors.CYAN))
         print(cprint(f"   • Dynamic Lot OP1: {funds_info['dynamic_lot']} Lot", Colors.GREEN))
 
@@ -79,9 +85,12 @@ class MRCVEngine:
         mode_text = "Menunggu RCS Hedging (Standby)" if wait_mode else "Selalu Aktif (Mandiri)"
         start_msg = (
             f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
-            f"💰 *DANA AKUN MT5 REALTIME:*\n"
-            f"• Total Balance: *${funds_info['balance']:.2f}*\n"
-            f"• Total Equity: *${funds_info['equity']:.2f}*\n"
+            f"💰 *DANA & KESEHATAN AKUN MT5:*\n"
+            f"• Tipe Akun: *{funds_info['account_type']}* (Login: {funds_info['account_number']} | Server: {funds_info['server']})\n"
+            f"• Balance / Equity: *${funds_info['balance']:.2f}* / *${funds_info['equity']:.2f}*\n"
+            f"• Free Margin: *${funds_info['margin_free']:.2f}* (Margin Level: *{funds_info['health_status']}*)\n"
+            f"• Leverage: *{funds_info['leverage']}*\n"
+            f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*\n"
             f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n\n"
             f"📊 Symbol: {self.symbol}\n"
             f"⚙️ Mode: {mode_text}"

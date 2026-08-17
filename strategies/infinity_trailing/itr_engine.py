@@ -42,8 +42,11 @@ def run_itr_bot():
 
     print(f"\n🚀 Memulai INFINITY TRAILING REVERSAL (ITR) Bot...")
     print(f"🔹 Symbol       : {symbol}")
-    print(f"🔹 Lot Size     : {funds_info['dynamic_lot']} (Acuan: {funds_info['source_type']})")
+    print(f"🔹 Tipe Akun    : {funds_info['account_type']} (Login: {funds_info['account_number']} | Server: {funds_info['server']})")
     print(f"💰 Balance/Eq   : ${funds_info['balance']:.2f} / ${funds_info['equity']:.2f}")
+    print(f"🔹 Free Margin  : ${funds_info['margin_free']:.2f} (Margin Level: {funds_info['health_status']})")
+    print(f"🔹 Ping Broker  : {funds_info['ping_str']} | AutoTrading: {funds_info['autotrading']}")
+    print(f"🔹 Dynamic Lot  : {funds_info['dynamic_lot']} (Acuan: {funds_info['source_type']})")
     print(f"🔹 Init Dir     : {itr_cfg.initial_direction}")
     print(f"🔹 Pending Dist : {itr_cfg.pending_distance_pts} Pts")
     print(f"🔹 Magic Number : {itr_cfg.magic_number}")
