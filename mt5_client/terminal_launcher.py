@@ -11,19 +11,36 @@ from utils.colors import cprint, Colors
 def get_running_mt5_executable_paths() -> list[str]:
     """Mengambil daftar seluruh path terminal64.exe yang sedang aktif berjalan di Windows."""
     running_paths = []
+
+    # Metode 1: PowerShell Get-CimInstance (Paling akurat di Windows 10/11)
     try:
-        cmd = 'wmic process where "name like \'terminal%.exe\'" get ExecutablePath /format:csv'
-        output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
-        for line in output.splitlines():
+        ps_cmd = 'powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \\"Name like \'terminal%.exe\'\\").ExecutablePath"'
+        out = subprocess.check_output(ps_cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+        for line in out.splitlines():
             line = line.strip()
-            if line and "Node,ExecutablePath" not in line and line.lower().endswith(".exe"):
-                parts = line.split(",")
-                if len(parts) >= 2:
-                    p = parts[1].strip()
-                    if p:
-                        running_paths.append(os.path.normpath(p).lower())
+            if line and line.lower().endswith(".exe"):
+                running_paths.append(os.path.normpath(line).lower())
     except Exception:
-        # Fallback via tasklist
+        pass
+
+    # Metode 2: WMIC (Fallback)
+    if not running_paths:
+        try:
+            cmd = 'wmic process where "name like \'terminal%.exe\'" get ExecutablePath /format:csv'
+            output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+            for line in output.splitlines():
+                line = line.strip()
+                if line and "Node,ExecutablePath" not in line and line.lower().endswith(".exe"):
+                    parts = line.split(",")
+                    if len(parts) >= 2:
+                        p = parts[1].strip()
+                        if p:
+                            running_paths.append(os.path.normpath(p).lower())
+        except Exception:
+            pass
+
+    # Metode 3: Tasklist (Cek apakah ada terminal64 yang aktif)
+    if not running_paths:
         try:
             cmd = 'tasklist /FI "IMAGENAME eq terminal64.exe" /NH'
             out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
@@ -39,9 +56,14 @@ def is_terminal_running(terminal_path: str, running_paths: list[str]) -> bool:
     if not terminal_path or not os.path.exists(terminal_path):
         return False
 
-    norm_target = os.path.normpath(terminal_path).lower()
-    if norm_target in running_paths:
+    # Jika generic terminal running terdeteksi
+    if "generic_terminal64_running" in running_paths:
         return True
+
+    norm_target = os.path.normpath(terminal_path).lower()
+    for rp in running_paths:
+        if norm_target in rp or rp in norm_target:
+            return True
 
     return False
 
