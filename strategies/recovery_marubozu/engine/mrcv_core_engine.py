@@ -86,7 +86,7 @@ class MRCVEngine:
             f"📊 Symbol: {self.symbol}\n"
             f"⚙️ Mode: {mode_text}"
         )
-        send_mrcv_wa_notif(start_msg, "MRCV_START", target_jid=self.mrcv_group_jid, include_header=True)
+        send_mrcv_wa_notif(start_msg, "MRCV_START", target_jid=self.mrcv_group_jid, include_header=False)
         
         # Audit Posisi Awal saat Startup
         startup_positions = mt5.positions_get(symbol=self.symbol)
@@ -113,7 +113,7 @@ class MRCVEngine:
                     f"📊 Symbol: {self.symbol}\n"
                     f"Status: Mesin telah dihentikan secara manual."
                 )
-                send_mrcv_wa_notif(stop_msg, "MRCV_STOP", target_jid=self.mrcv_group_jid, include_header=True)
+                send_mrcv_wa_notif(stop_msg, "MRCV_STOP", target_jid=self.mrcv_group_jid, include_header=False)
                 time.sleep(2)
                 print(cprint("\n🛑 MRCV Bot dihentikan oleh user.", Colors.YELLOW))
                 break

@@ -11,7 +11,7 @@ from mt5_client.visualizer import generate_screenshot
 from config.mt5_config import MT5Config, EMAConfig
 from utils.colors import cprint, Colors
 
-HEADER_TEXT = "🟢 [STRATEGI: MARUBOZU CANDLE SYSTEM (RECOVERY SYSTEM | MRCV)]\n\n"
+HEADER_TEXT = ""
 
 _last_mrcv_notif_times = {}
 _mrcv_notif_lock = threading.Lock()
@@ -26,7 +26,7 @@ def _send_wa_notif_worker(
     event_type: str,
     target_jid: str | None = None,
     media_url: str | None = None,
-    include_header: bool = True,
+    include_header: bool = False,
 ):
     mrcv_group = os.getenv("MRCV_GROUP_JID", "120363430592783067@g.us")
     dest_jid = target_jid if target_jid else mrcv_group
@@ -70,7 +70,7 @@ def send_mrcv_wa_notif(
     event_type: str,
     target_jid: str | None = None,
     media_url: str | None = None,
-    include_header: bool = True,
+    include_header: bool = False,
 ):
     """
     Kirim notifikasi WA secara asynchronous ke tabel wa_outbox.
