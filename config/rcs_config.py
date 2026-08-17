@@ -173,16 +173,16 @@ class RCSConfig:
         default_factory=lambda: os.getenv("RCS_NOTIF_FREEZE", "true").lower() == "true"
     )
     group_jid: str = field(
-        default_factory=lambda: os.getenv("RCS_GROUP_JID", "")
+        default_factory=lambda: os.getenv("RCS_GROUP_JID", os.getenv("GROUP_JID", "120363409493021715@g.us"))
     )
     private_jid: str = field(
-        default_factory=lambda: os.getenv("PRIVATE_JID", "")
+        default_factory=lambda: os.getenv("PRIVATE_JID", os.getenv("GROUP_JID", "120363409493021715@g.us"))
     )
     profit_signal_jid: str = field(
-        default_factory=lambda: os.getenv("PROFIT_SIGNAL", "")
+        default_factory=lambda: os.getenv("PROFIT_SIGNAL", os.getenv("GROUP_JID", "120363409493021715@g.us"))
     )
     loss_signal_jid: str = field(
-        default_factory=lambda: os.getenv("LOSS_SIGNAL", "")
+        default_factory=lambda: os.getenv("LOSS_SIGNAL", os.getenv("GROUP_JID", "120363409493021715@g.us"))
     )
 
     # Trading Schedule Execution Time
