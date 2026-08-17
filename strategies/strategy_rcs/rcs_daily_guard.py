@@ -36,21 +36,26 @@ def check_rcs_daily_target(config: RCSConfig) -> tuple[bool, str]:
         return True, ""
 
     today_pnl = get_rcs_today_closed_pnl(config)
+    from mt5_client.money_management import get_scaled_max_loss
+    scaled_loss_limit = abs(get_scaled_max_loss(-config.rcs_daily_loss_target_usd, config.lot_size_op1))
 
     if today_pnl >= config.rcs_daily_profit_target_usd:
         msg = f"🏆 TARGET PROFIT HARIAN TERCAPAI! PnL Hari ini (${today_pnl:.2f}) >= Target (+${config.rcs_daily_profit_target_usd:.2f})"
         return False, msg
 
-    if today_pnl <= -config.rcs_daily_loss_target_usd:
-        msg = f"🛑 LIMIT LOSS HARIAN TERSENTUH! PnL Hari ini (${today_pnl:.2f}) <= Limit (-${config.rcs_daily_loss_target_usd:.2f})"
+    if today_pnl <= -scaled_loss_limit:
+        msg = f"🛑 LIMIT LOSS HARIAN TERSENTUH! PnL Hari ini (${today_pnl:.2f}) <= Limit (-${scaled_loss_limit:.2f})"
         return False, msg
 
     return True, ""
 
 def get_rcs_daily_guard_status_text(config: RCSConfig) -> str:
     """Return status teks untuk logging startup."""
+    from mt5_client.money_management import get_scaled_max_loss
+    scaled_loss_limit = abs(get_scaled_max_loss(-config.rcs_daily_loss_target_usd, config.lot_size_op1))
+
     if not config.rcs_daily_target_enabled:
-        return f"DISABLED (Target: +${config.rcs_daily_profit_target_usd:.2f} / -${config.rcs_daily_loss_target_usd:.2f})"
+        return f"DISABLED (Target: +${config.rcs_daily_profit_target_usd:.2f} / -${scaled_loss_limit:.2f})"
     
     today_pnl = get_rcs_today_closed_pnl(config)
-    return f"ENABLED (PnL Hari ini: ${today_pnl:.2f} | Profit Target: +${config.rcs_daily_profit_target_usd:.2f} | Loss Limit: -${config.rcs_daily_loss_target_usd:.2f})"
+    return f"ENABLED (PnL Hari ini: ${today_pnl:.2f} | Profit Target: +${config.rcs_daily_profit_target_usd:.2f} | Loss Limit: -${scaled_loss_limit:.2f})"

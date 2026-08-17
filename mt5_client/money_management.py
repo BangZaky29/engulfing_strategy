@@ -162,3 +162,23 @@ def get_account_funds_info(fallback_lot: float = 0.01) -> dict:
         "dynamic_lot": final_lot,
         "is_dynamic": True
     }
+
+def get_scaled_max_loss(base_max_loss: float = -15.0, op1_lot: float = 0.01) -> float:
+    """
+    Menghitung batas Emergency Cutloss secara dinamis proporsional dengan Lot OP1.
+    Base default: -$15.00 untuk lot 0.01.
+    Contoh:
+    - op1_lot = 0.01 -> -$15.00
+    - op1_lot = 0.10 -> -$150.00
+    - op1_lot = 1.00 -> -$1,500.00
+    """
+    scaling_enabled = os.getenv("DYNAMIC_RISK_SCALING", "true").lower() == "true"
+    if not scaling_enabled or op1_lot <= 0.0:
+        if base_max_loss > 0:
+            return -base_max_loss
+        return base_max_loss
+
+    negative_base = -abs(base_max_loss)
+    multiplier = op1_lot / 0.01
+    scaled_loss = round(negative_base * multiplier, 2)
+    return scaled_loss

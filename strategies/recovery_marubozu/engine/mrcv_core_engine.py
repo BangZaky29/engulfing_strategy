@@ -181,9 +181,10 @@ class MRCVEngine:
             total_net = self.mrcv_state.cumulative_profit + mrcv_floating + rcs_floating
             
             target_profit = float(os.getenv("MRCV_TARGET_NET_PROFIT", "0.0"))
-            max_loss = float(os.getenv("MRCV_MAX_NET_LOSS", "-15.0"))
-            if max_loss > 0:
-                max_loss = -max_loss
+            base_max_loss = float(os.getenv("MRCV_MAX_NET_LOSS", "-15.0"))
+            from mt5_client.money_management import get_dynamic_op1_lot, get_scaled_max_loss
+            op1_lot, _, _ = get_dynamic_op1_lot(fallback_lot=float(os.getenv("MRCV_LOT_OP1", "0.01")))
+            max_loss = get_scaled_max_loss(base_max_loss, op1_lot)
 
             if total_net >= target_profit:
                 print(cprint(f"🎉 [MRCV] Target Profit Tercapai! Total Net: {total_net:+.2f} >= {target_profit:+.2f}. Melakukan Close All.", Colors.GREEN))
