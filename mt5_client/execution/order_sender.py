@@ -65,6 +65,14 @@ def send_main_order(
     from mt5_client.money_management import get_dynamic_op1_lot
     dyn_lot, funds, src = get_dynamic_op1_lot(fallback_lot=lot_size_used)
 
+    # 4. Log clean terminal output
+    ring_pts = round(abs(curr_high - curr_low) / point) if point > 0 else 0
+    session_str = signal.get("trading_session", "Unknown")
+    
+    active_filter = os.getenv("ACTIVE_FILTER_STRATEGY", "B")
+    print(f"⚠️ [SIGNAL] {symbol} | FILTER {active_filter} | {pattern.upper().replace('_', ' ')} | Sesi: {session_str}")
+    print(f"🚀 Eksekusi OP-1: {'MARKET' if action == mt5.TRADE_ACTION_DEAL else 'PENDING (LIMIT)'} di {round(price, digits):.2f} | SL: {round(sl_price, digits):.2f} ({ring_pts} pts) | TP: {round(tp_price, digits):.2f}")
+
     if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
         from mt5_client.multi_account_dispatcher import dispatch_multi_account_order
         action_name = "BUY" if order_type == mt5.ORDER_TYPE_BUY else "SELL"
@@ -80,10 +88,13 @@ def send_main_order(
             "order_role": "OP1",
             "wa_message": f"🚀 *[TUYUL MALING MULTI-EXECUTION]*\nSignal {pattern.upper()} {action_name} {symbol} @ {round(price, digits):.5f}"
         }
-        dispatch_multi_account_order("MALING", payload)
+        primary_res, all_res = dispatch_multi_account_order("MALING", payload)
+        if primary_res and primary_res.order:
+            return primary_res.order, None
+        else:
+            return None, "Gagal eksekusi multi-account MALING"
     
-    # 3. Request OP-1 (Main Order) ke MT5
-    # Gunakan SL normal (bukan Hedging)
+    # 3. Request OP-1 (Main Order) ke MT5 secara lokal jika multi-account disabled
     request_op1 = {
         "action":       action,
         "symbol":       symbol,
@@ -110,14 +121,6 @@ def send_main_order(
         expire_time = int(tick_time) + (exec_cfg.pending_order_expire_candles * tf_seconds)
         request_op1["expiration"] = expire_time
 
-    # 4. Log clean terminal output
-    ring_pts = round(abs(curr_high - curr_low) / point)
-    session_str = signal.get("trading_session", "Unknown")
-    
-    active_filter = os.getenv("ACTIVE_FILTER_STRATEGY", "B")
-    print(f"⚠️ [SIGNAL] {symbol} | FILTER {active_filter} | {pattern.upper().replace('_', ' ')} | Sesi: {session_str}")
-    print(f"🚀 Eksekusi OP-1: {'MARKET' if action == mt5.TRADE_ACTION_DEAL else 'PENDING (LIMIT)'} di {round(price, digits):.2f} | SL: {round(sl_price, digits):.2f} ({ring_pts} pts) | TP: {round(tp_price, digits):.2f}")
-
     # 5. Kirim order OP-1
     result_op1 = mt5.order_send(request_op1)  # type: ignore
 
@@ -132,6 +135,7 @@ def send_main_order(
         return None, err_msg
 
     print(f"✅ EKSEKUSI OP-1 SUKSES! Ticket: #{result_op1.order} | Volume: {result_op1.volume}")
+    return result_op1.order, None
 
     # Hedging OP-2 Dihapus Sesuai Permintaan User
 

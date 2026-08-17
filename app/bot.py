@@ -52,11 +52,16 @@ def run_bot():
     print(f"🛡️ Daily Guard       : {get_daily_guard_status_text()}")
     print(f"🏂 Company Guard     : {get_company_guard_status_text()}\n")
 
+    # Inisialisasi AutoTrading Guard
+    from mt5_client.autotrading_guard import init_autotrading_state, check_and_notify_autotrading_change
+    init_autotrading_state()
+
     # Kirim Notifikasi Sistem Aktif ke WA Outbox
     notify_engulfing_system_status('START')
 
     try:
         while True:
+            check_and_notify_autotrading_change("MALING")
             # A. Cek trade yang sudah closed (SL/TP)
             check_closed_trades(mt5_cfg, ema_cfg)
 

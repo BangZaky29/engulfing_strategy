@@ -89,4 +89,22 @@ def startup_checks(
     if not init_mt5(mt5_cfg):
         return False
 
+    import os
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import get_multi_account_funds_info
+        funds_list = get_multi_account_funds_info("MALING")
+        print("==================================================")
+        print(cprint("💰 INFORMASI DANA & KESEHATAN MULTI-AKUN MT5 (MALING):", Colors.CYAN))
+        for f in funds_list:
+            if not f.get('connected'):
+                print(cprint(f"⚠️ [{f['key']}] Gagal audit akun {f['name']}: {f.get('error')}", Colors.YELLOW))
+                continue
+            print(cprint(f"🔹 [{f['key']}] {f['name']} (Login: {f['login']} | Server: {f['server']})", Colors.CYAN))
+            print(cprint(f"   • Tipe Akun      : {f['account_type']}", Colors.CYAN))
+            print(cprint(f"   • Balance / Eq   : ${f['balance']:.2f} / ${f['equity']:.2f}", Colors.CYAN))
+            print(cprint(f"   • Free Margin    : ${f['margin_free']:.2f} (Margin Level: {f['health_status']})", Colors.CYAN))
+            print(cprint(f"   • Leverage Akun  : {f['leverage']} | Ping: {f['ping_str']} | AutoTrading: {f['autotrading']}", Colors.CYAN))
+            print(cprint(f"   • Dynamic Lot OP1: {f['dynamic_lot']} Lot | Dynamic Cutloss: ${f.get('scaled_max_loss', -15.0):.2f} (Base: ${f.get('base_max_loss', -15.0):.2f})", Colors.CYAN))
+        print("==================================================")
+
     return True
