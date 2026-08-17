@@ -13,6 +13,14 @@ from utils.colors import cprint, Colors
 
 HEADER_TEXT = "🟢 [STRATEGI: MARUBOZU CANDLE SYSTEM (RECOVERY SYSTEM | MRCV)]\n\n"
 
+_last_mrcv_notif_times = {}
+_mrcv_notif_lock = threading.Lock()
+COOLDOWN_EVENTS = {
+    "MRCV_MAX_LOSS_CLOSE_ALL": 60,   # Cooldown 60 detik per-JID
+    "MRCV_HANGING_PAUSED": 60,       # Cooldown 60 detik per-JID
+    "MRCV_POSITIONS_CLEARED": 30,     # Cooldown 30 detik per-JID
+}
+
 def _send_wa_notif_worker(
     message: str,
     event_type: str,
@@ -24,6 +32,17 @@ def _send_wa_notif_worker(
     dest_jid = target_jid if target_jid else mrcv_group
     if not dest_jid:
         return
+
+    # Check Rate-Limiting / Cooldown
+    key = (event_type, dest_jid)
+    cooldown = COOLDOWN_EVENTS.get(event_type, 3)
+    now = time.time()
+    with _mrcv_notif_lock:
+        last_t = _last_mrcv_notif_times.get(key, 0.0)
+        if (now - last_t) < cooldown:
+            print(cprint(f"⏳ Notifikasi WA {event_type} ke {dest_jid} di-throttle (cooldown {cooldown}s).", Colors.GRAY))
+            return
+        _last_mrcv_notif_times[key] = now
 
     full_message = (HEADER_TEXT + message) if include_header else message
     message_type = 'IMAGE' if media_url else 'TEXT'

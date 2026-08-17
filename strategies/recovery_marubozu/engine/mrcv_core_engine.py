@@ -8,7 +8,12 @@ from config.mt5_config import MT5Config
 from indicatorInfo.triggerInfo.scanner.patterns.marubozu import MarubozuPattern
 
 from strategies.strategy_rcs.rcs_state import RCSState
-from strategies.strategy_rcs.rcs_order_manager import close_position_rcs, cancel_pending_order_rcs, remove_tp_from_position
+from strategies.strategy_rcs.rcs_order_manager import (
+    close_position_rcs, 
+    close_position_by_ticket,
+    cancel_pending_order_rcs, 
+    remove_tp_from_position
+)
 from strategies.recovery_marubozu.state.mrcv_state import MRCVState, MRCVPhase
 from strategies.recovery_marubozu.mrcv_core import process_marubozu_trigger, cleanup_pending_orders
 
@@ -272,7 +277,7 @@ class MRCVEngine:
         if self.mrcv_state.op2_ticket and self.mrcv_state.op2_filled and not op2_active:
             print(cprint(f"🎯 [MRCV] OP2 menyentuh TP2 ({self.symbol})! Menutup sisa posisi OP1 & membatalkan OP3...", Colors.GREEN))
             if op1_active and self.mrcv_state.op1_ticket:
-                close_position_rcs(self.mrcv_state.op1_ticket)
+                close_position_by_ticket(self.mrcv_state.op1_ticket)
             if self.mrcv_state.op3_ticket:
                 cancel_pending_order_rcs(self.mrcv_state.op3_ticket)
                 
@@ -300,7 +305,7 @@ class MRCVEngine:
         if not op1_active and self.mrcv_state.op1_ticket:
             print(cprint(f"🎯 [MRCV] OP1 menyentuh TP1 ({self.symbol})! Menutup sisa posisi/pending order...", Colors.GREEN))
             if op2_active and self.mrcv_state.op2_ticket:
-                close_position_rcs(self.mrcv_state.op2_ticket)
+                close_position_by_ticket(self.mrcv_state.op2_ticket)
                 
             cleanup_pending_orders(self.mrcv_state)
             

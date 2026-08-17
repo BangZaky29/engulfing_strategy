@@ -20,6 +20,14 @@ from utils.colors import cprint, Colors
 
 HEADER_TEXT = ""
 
+_last_rcs_notif_times = {}
+_rcs_notif_lock = threading.Lock()
+COOLDOWN_RCS_EVENTS = {
+    "RCS_STARTUP_HANGING": 60,
+    "RCS_STARTUP_CLEAN": 30,
+    "RCS_SKIP": 5,
+}
+
 def _send_wa_notif_worker(
     config: RCSConfig,
     message: str,
@@ -31,6 +39,17 @@ def _send_wa_notif_worker(
     dest_jid = target_jid if target_jid else config.group_jid
     if not dest_jid:
         return
+
+    # Check Rate-Limiting / Cooldown
+    key = (event_type, dest_jid)
+    cooldown = COOLDOWN_RCS_EVENTS.get(event_type, 3)
+    now = time.time()
+    with _rcs_notif_lock:
+        last_t = _last_rcs_notif_times.get(key, 0.0)
+        if (now - last_t) < cooldown:
+            print(cprint(f"⏳ Notifikasi WA {event_type} ke {dest_jid} di-throttle (cooldown {cooldown}s).", Colors.GRAY))
+            return
+        _last_rcs_notif_times[key] = now
 
     full_message = (HEADER_TEXT + message) if include_header else message
     message_type = 'IMAGE' if media_url else 'TEXT'

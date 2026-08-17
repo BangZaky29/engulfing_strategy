@@ -62,12 +62,15 @@ def send_main_order(
     Build MT5 request dictionary, log ke terminal, lalu send order (OP-1).
     Returns (ticket_id, err_msg)
     """
+    from mt5_client.money_management import get_dynamic_op1_lot
+    dyn_lot, funds, src = get_dynamic_op1_lot(fallback_lot=lot_size_used)
+    
     # 3. Request OP-1 (Main Order) ke MT5
     # Gunakan SL normal (bukan Hedging)
     request_op1 = {
         "action":       action,
         "symbol":       symbol,
-        "volume":       lot_size_used,
+        "volume":       dyn_lot,
         "type":         order_type,
         "price":        round(price,    digits),
         "sl":           round(sl_price, digits),

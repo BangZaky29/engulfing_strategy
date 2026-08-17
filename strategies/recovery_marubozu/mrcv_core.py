@@ -85,7 +85,9 @@ def process_marubozu_trigger(symbol: str, candle: dict, state: MRCVState) -> boo
 
     print(cprint(f"🚀 [MRCV] Trigger Marubozu Terdeteksi pada {symbol} (Ring: {ring_pts:.1f} pts / {pips:.1f} pips)", Colors.YELLOW))
     
-    lot_op1 = float(os.getenv("MRCV_LOT_OP1", "0.01"))
+    from mt5_client.money_management import get_dynamic_op1_lot
+    fallback_mrcv_lot = float(os.getenv("MRCV_LOT_OP1", "0.01"))
+    lot_op1, funds, src = get_dynamic_op1_lot(fallback_lot=fallback_mrcv_lot)
     lot_op2 = round(lot_op1 * 2, 2)
     lot_op3 = round(lot_op1 + lot_op2, 2)
     magic = int(os.getenv("MRCV_MAGIC_NUMBER", "999000"))

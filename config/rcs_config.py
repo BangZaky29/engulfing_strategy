@@ -215,6 +215,20 @@ class RCSConfig:
         default_factory=lambda: os.getenv("RCS_CSV_PREFIX", "RCS")
     )
 
+    def update_dynamic_lots(self, symbol: str = "") -> tuple[float, float, str]:
+        """Perbarui lot_size_op1 dan lot_size_op2 secara dinamis berdasarkan modal MT5."""
+        from mt5_client.money_management import get_dynamic_op1_lot
+        dyn_op1, funds, src = get_dynamic_op1_lot(fallback_lot=self.lot_size_op1)
+        self.lot_size_op1 = dyn_op1
+        auto_lot = os.getenv(f"{symbol}_RCS_AUTO_LOT_OP2", os.getenv("RCS_AUTO_LOT_OP2", "true")).lower() == "true"
+        if auto_lot:
+            self.lot_size_op2 = round(self.lot_size_op1 * 2, 2)
+        return dyn_op1, funds, src
+
+    def __post_init__(self):
+        # Lot OP2 otomatis 2x Lot OP1 (seperti sistem MRCV)
+        self.update_dynamic_lots()
+
     @classmethod
     def from_env(cls, symbol: str | None = None) -> "RCSConfig":
         import dataclasses
@@ -246,4 +260,7 @@ class RCSConfig:
                 else:
                     setattr(config, f.name, val)
                     
+        # Rekalkulasi lot_size_op1 dinamis & lot_size_op2 = 2 * lot_size_op1
+        config.update_dynamic_lots(symbol)
+
         return config

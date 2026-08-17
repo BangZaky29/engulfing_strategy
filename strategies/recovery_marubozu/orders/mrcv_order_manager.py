@@ -19,7 +19,7 @@ def close_all_positions(symbol: str, magics: list[int]):
             for p in positions:
                 if p.magic in magics:
                     active_pos_count += 1
-                    close_position_rcs(p.ticket)
+                    close_position_rcs(p.symbol, p, p.magic, "MRCV_CLOSE_ALL")
                     
         # Hapus juga pending order
         orders = mt5.orders_get(symbol=symbol)

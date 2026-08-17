@@ -288,14 +288,16 @@ def run_itr_bot():
             if len(my_pos) == 0 and len(my_ord) == 0:
                 print("=======================================")
                 print(f"🚀 Memulai Cycle Baru: OP1 {current_direction}")
+                from mt5_client.money_management import get_dynamic_op1_lot
+                op1_lot, funds, src = get_dynamic_op1_lot(fallback_lot=itr_cfg.lot_size)
                 price = tick.ask if current_direction == "BUY" else tick.bid
-                res_op1 = send_market_order(symbol, current_direction, price, itr_cfg.lot_size, itr_cfg.magic_number)
+                res_op1 = send_market_order(symbol, current_direction, price, op1_lot, itr_cfg.magic_number)
                 if res_op1:
                     # Pasang OP2
                     op2_dir = "SELL" if current_direction == "BUY" else "BUY"
                     dist = dist_pts * point
                     op2_price = res_op1.price - dist if op2_dir == "SELL" else res_op1.price + dist
-                    send_stop_order(symbol, op2_dir, op2_price, itr_cfg.lot_size, itr_cfg.magic_number)
+                    send_stop_order(symbol, op2_dir, op2_price, op1_lot, itr_cfg.magic_number)
                     time.sleep(1.0) # BUG FIX: Sinkronisasi server
                 continue
 
