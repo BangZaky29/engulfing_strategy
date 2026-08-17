@@ -157,9 +157,18 @@ def run_rcs_bot():
     tracker.on_manual_close(_on_manual_close)
     tracker.on_all_manual_cleared(_on_all_manual_cleared)
 
+    from mt5_client.money_management import get_account_funds_info
+    funds_info = get_account_funds_info()
+
     print(f"🚀 Memulai REVERSAL CANDLE SYSTEM (RCS) Bot (OOP Mode)...")
     print(f"🔹 Symbols      : {', '.join(symbols)}")
     print(f"🔹 Known Magics : {tracker.get_known_magics_text()}")
+    print("==================================================")
+    print(cprint(f"💰 DANA AKUN MT5 REALTIME:", Colors.CYAN))
+    print(cprint(f"   • Total Balance  : ${funds_info['balance']:.2f}", Colors.CYAN))
+    print(cprint(f"   • Total Equity   : ${funds_info['equity']:.2f}", Colors.CYAN))
+    print(cprint(f"   • Acuan Modal    : {funds_info['source_type']} (${funds_info['funds_used']:.2f})", Colors.CYAN))
+    print(cprint(f"   • Dynamic Lot OP1: {funds_info['dynamic_lot']} Lot", Colors.GREEN))
     print("==================================================")
     
     for sym in symbols:

@@ -394,8 +394,15 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
         outbox_rows = []
 
         if status == 'START':
+            from mt5_client.money_management import get_account_funds_info
+            funds_info = get_account_funds_info()
+
             skipped_msg_lines = [
-                f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
+                f"🟢 SISTEM DIAKTIFKAN 🟢\n\n",
+                f"💰 *DANA AKUN MT5 REALTIME:*",
+                f"• Total Balance: *${funds_info['balance']:.2f}*",
+                f"• Total Equity: *${funds_info['equity']:.2f}*",
+                f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n"
             ]
             
             for symbol, config in configs.items():

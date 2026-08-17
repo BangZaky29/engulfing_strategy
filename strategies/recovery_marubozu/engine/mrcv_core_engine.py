@@ -65,11 +65,24 @@ class MRCVEngine:
         self.mrcv_state.load_from_file(self.symbol)
         print(cprint(f"📊 [MRCV] Status Kumulatif Profit Awal [{self.symbol}]: ${self.mrcv_state.cumulative_profit:+.2f}", Colors.CYAN))
         
+        from mt5_client.money_management import get_account_funds_info
+        funds_info = get_account_funds_info()
+
+        print(cprint(f"💰 DANA AKUN MT5 REALTIME:", Colors.CYAN))
+        print(cprint(f"   • Total Balance  : ${funds_info['balance']:.2f}", Colors.CYAN))
+        print(cprint(f"   • Total Equity   : ${funds_info['equity']:.2f}", Colors.CYAN))
+        print(cprint(f"   • Acuan Modal    : {funds_info['source_type']} (${funds_info['funds_used']:.2f})", Colors.CYAN))
+        print(cprint(f"   • Dynamic Lot OP1: {funds_info['dynamic_lot']} Lot", Colors.GREEN))
+
         print(cprint(f"🤖 Memulai Marubozu Recovery Machine (MRCV) [{self.symbol}]", Colors.MAGENTA))
         wait_mode = os.getenv("MRCV_WAIT_FOR_RCS_HEDGE", "true").lower() == "true"
         mode_text = "Menunggu RCS Hedging (Standby)" if wait_mode else "Selalu Aktif (Mandiri)"
         start_msg = (
             f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
+            f"💰 *DANA AKUN MT5 REALTIME:*\n"
+            f"• Total Balance: *${funds_info['balance']:.2f}*\n"
+            f"• Total Equity: *${funds_info['equity']:.2f}*\n"
+            f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n\n"
             f"📊 Symbol: {self.symbol}\n"
             f"⚙️ Mode: {mode_text}"
         )
