@@ -24,10 +24,29 @@ def notify_engulfing_system_status(status: str, extra_info: str = ""):
     symbols_str = ", ".join(mt5_cfg.symbols)
 
     if status == 'START':
+        acc_wa_section = ""
+        if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+            from mt5_client.multi_account_dispatcher import get_multi_account_funds_info
+            funds_list = get_multi_account_funds_info("MALING")
+            if funds_list:
+                acc_wa_section = "💰 *DANA & KESEHATAN AKUN MALING:*\n"
+                for f in funds_list:
+                    if not f.get('connected'):
+                        continue
+                    acc_wa_section += (
+                        f"🔹 *[{f['key']}] {f['name']}* ({f['login']})\n"
+                        f"   • Saldo: ${f['balance']:.2f} | Eq: ${f['equity']:.2f}\n"
+                        f"   • Margin: {f['health_status']}\n"
+                        f"   • Dynamic Lot: *{f['dynamic_lot']} Lot*\n"
+                        f"   • Dynamic Cutloss: *${f.get('scaled_max_loss', -15.0):.2f}*\n"
+                        f"   • AutoTrading: {f['autotrading']}\n\n"
+                    )
+
         # Format Lengkap Khusus Group SKIPPED Signal Engulfing
         skipped_msg = (
             f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
             f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL MALING | ENGULFING)]\n\n"
+            f"{acc_wa_section}"
             f"⚙️ INFO CONFIG LENGKAP ENGULFING:\n"
             f"• Symbols: {symbols_str}\n"
             f"• Execute TF: {mt5_cfg.timeframes[0] if mt5_cfg.timeframes else 'M5'}\n"
