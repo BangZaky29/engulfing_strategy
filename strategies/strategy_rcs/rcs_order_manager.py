@@ -42,7 +42,12 @@ def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: 
             "order_role": order_role,
             "wa_message": f"🚀 *[RCS MULTI-EXECUTION]*\nOrder {action_str} {symbol} @ {price:.5f} ({order_role})"
         }
-        dispatch_multi_account_order("RCS", payload)
+        primary_res, all_res = dispatch_multi_account_order("RCS", payload)
+        if primary_res:
+            return primary_res
+        else:
+            print(f"❌ Multi-Account Dispatcher Gagal mengeksekusi order.")
+            return None
 
     req = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -63,7 +68,6 @@ def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: 
     if res and res.retcode == mt5.TRADE_RETCODE_DONE:
         return res
     else:
-        # Jika perlu log error MT5
         print(f"❌ Order Gagal: {res.comment if res else 'Unknown'} (retcode: {res.retcode if res else 'None'})")
         return None
 
@@ -108,6 +112,29 @@ def send_pending_order_rcs(symbol: str, order_type: int, price: float, lot_size:
     """
     Kirim pending order (BUY_LIMIT, SELL_LIMIT, BUY_STOP, SELL_STOP).
     """
+    import os
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import dispatch_multi_account_order
+        order_role = "OP2" if "OP2" in comment else ("OP3" if "OP3" in comment else "PENDING")
+        payload = {
+            "symbol": symbol,
+            "action": mt5.TRADE_ACTION_PENDING,
+            "type": order_type,
+            "price": price,
+            "sl": float(sl) if sl > 0 else 0.0,
+            "tp": float(tp) if tp > 0 else 0.0,
+            "magic": magic_number,
+            "comment": comment,
+            "order_role": order_role,
+            "wa_message": f"🚀 *[RCS MULTI-EXECUTION]*\nPending Order {comment} {symbol} @ {price:.5f}"
+        }
+        primary_res, all_res = dispatch_multi_account_order("RCS", payload)
+        if primary_res:
+            return primary_res
+        else:
+            print(f"❌ Multi-Account Dispatcher Gagal memasang pending order.")
+            return None
+
     req = {
         "action": mt5.TRADE_ACTION_PENDING,
         "symbol": symbol,

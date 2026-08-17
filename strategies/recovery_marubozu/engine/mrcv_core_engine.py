@@ -69,19 +69,57 @@ class MRCVEngine:
         from mt5_client.money_management import get_account_funds_info
         funds_info = get_account_funds_info()
 
-        print(cprint(f"💰 DANA & KESEHATAN AKUN MT5 REALTIME:", Colors.CYAN))
-        print(cprint(f"   • Tipe Akun      : {funds_info['account_type']} (Login: {funds_info['account_number']} | Server: {funds_info['server']})", Colors.CYAN))
-        print(cprint(f"   • Balance / Eq   : ${funds_info['balance']:.2f} / ${funds_info['equity']:.2f}", Colors.CYAN))
-        print(cprint(f"   • Free Margin    : ${funds_info['margin_free']:.2f} (Margin Terpakai: ${funds_info['margin_used']:.2f})", Colors.CYAN))
-        print(cprint(f"   • Margin Level   : {funds_info['health_status']}", Colors.GREEN if "SEHAT" in funds_info['health_status'] else Colors.YELLOW))
-        print(cprint(f"   • Leverage Akun  : {funds_info['leverage']}", Colors.CYAN))
-        print(cprint(f"📡 PERFORMA JARINAN BROKER:", Colors.CYAN))
-        print(cprint(f"   • Ping Server    : {funds_info['ping_str']}", Colors.CYAN))
-        print(cprint(f"   • AutoTrading    : {funds_info['autotrading']}", Colors.CYAN))
-        print(cprint(f"   • Acuan Modal    : {funds_info['source_type']} (${funds_info['funds_used']:.2f})", Colors.CYAN))
+        print("==================================================")
+        multi_enabled = os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true"
+        if multi_enabled:
+            from mt5_client.multi_account_dispatcher import get_multi_account_funds_info
+            print(cprint(f"💰 INFORMASI DANA & KESEHATAN MULTI-AKUN MT5 (MRCV):", Colors.CYAN))
+            multi_funds = get_multi_account_funds_info("MRCV")
+            acc_lines = []
+            for acc_f in multi_funds:
+                if acc_f.get("connected"):
+                    print(cprint(f"🔹 [{acc_f['key']}] {acc_f['name']} (Login: {acc_f['login']} | Server: {acc_f['server']})", Colors.CYAN))
+                    print(cprint(f"   • Tipe Akun      : {acc_f['account_type']}", Colors.CYAN))
+                    print(cprint(f"   • Balance / Eq   : ${acc_f['balance']:.2f} / ${acc_f['equity']:.2f}", Colors.CYAN))
+                    print(cprint(f"   • Free Margin    : ${acc_f['margin_free']:.2f} (Margin Level: {acc_f['health_status']})", Colors.CYAN))
+                    print(cprint(f"   • Leverage Akun  : {acc_f['leverage']} | Ping: {acc_f['ping_str']} | AutoTrading: {acc_f['autotrading']}", Colors.CYAN))
+                    print(cprint(f"   • Dynamic Lot OP1: {acc_f['dynamic_lot']} Lot | Dynamic Cutloss: ${acc_f['scaled_max_loss']:.2f} (Base: ${acc_f['base_max_loss']:.2f})", Colors.GREEN))
+                    acc_lines.append(
+                        f"🔹 *{acc_f['key']}:* {acc_f['name']} (Login: {acc_f['login']})\n"
+                        f"  • Balance / Equity: *${acc_f['balance']:.2f}* / *${acc_f['equity']:.2f}*\n"
+                        f"  • Margin Level: *{acc_f['health_status']}* | Leverage: *{acc_f['leverage']}*\n"
+                        f"  • Lot OP1: *{acc_f['dynamic_lot']} Lot* | Cutloss: *${acc_f['scaled_max_loss']:.2f}*"
+                    )
+                else:
+                    print(cprint(f"🔹 [{acc_f['key']}] {acc_f['name']} (Login: {acc_f['login']}) -> Gagal Terhubung: {acc_f.get('error')}", Colors.RED))
+                    acc_lines.append(f"🔹 *{acc_f['key']}:* {acc_f['name']} -> *Offline / Disconnected*")
+            multi_block = "\n\n".join(acc_lines)
+            acc_wa_section = f"💰 *DANA & KESEHATAN MULTI-AKUN MT5 (MRCV):*\n\n{multi_block}\n"
+        else:
+            print(cprint(f"💰 DANA & KESEHATAN AKUN MT5 REALTIME:", Colors.CYAN))
+            print(cprint(f"   • Tipe Akun      : {funds_info['account_type']} (Login: {funds_info['account_number']} | Server: {funds_info['server']})", Colors.CYAN))
+            print(cprint(f"   • Balance / Eq   : ${funds_info['balance']:.2f} / ${funds_info['equity']:.2f}", Colors.CYAN))
+            print(cprint(f"   • Free Margin    : ${funds_info['margin_free']:.2f} (Margin Terpakai: ${funds_info['margin_used']:.2f})", Colors.CYAN))
+            print(cprint(f"   • Margin Level   : {funds_info['health_status']}", Colors.GREEN if "SEHAT" in funds_info['health_status'] else Colors.YELLOW))
+            print(cprint(f"   • Leverage Akun  : {funds_info['leverage']}", Colors.CYAN))
+            print(cprint(f"📡 PERFORMA JARINAN BROKER:", Colors.CYAN))
+            print(cprint(f"   • Ping Server    : {funds_info['ping_str']}", Colors.CYAN))
+            print(cprint(f"   • AutoTrading    : {funds_info['autotrading']}", Colors.CYAN))
+            print(cprint(f"   • Acuan Modal    : {funds_info['source_type']} (${funds_info['funds_used']:.2f})", Colors.CYAN))
+            print(cprint(f"   • Dynamic Lot OP1: {funds_info['dynamic_lot']} Lot", Colors.GREEN))
+            print(cprint(f"   • Dynamic Cutloss: ${funds_info.get('scaled_max_loss', -15.0):.2f} (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)", Colors.RED))
+            acc_wa_section = (
+                f"💰 *DANA & KESEHATAN AKUN MT5:*\n"
+                f"• Tipe Akun: *{funds_info['account_type']}* (Login: {funds_info['account_number']} | Server: {funds_info['server']})\n"
+                f"• Balance / Equity: *${funds_info['balance']:.2f}* / *${funds_info['equity']:.2f}*\n"
+                f"• Free Margin: *${funds_info['margin_free']:.2f}* (Margin Level: *{funds_info['health_status']}*)\n"
+                f"• Leverage: *{funds_info['leverage']}*\n"
+                f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*\n"
+                f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n"
+                f"• Dynamic Cutloss: *${funds_info.get('scaled_max_loss', -15.0):.2f}* (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)\n"
+            )
+
         mrcv_loss_lock = os.getenv("MRCV_LOSS_LOCK_ENABLED", "true").lower() == "true"
-        print(cprint(f"   • Dynamic Lot OP1: {funds_info['dynamic_lot']} Lot", Colors.GREEN))
-        print(cprint(f"   • Dynamic Cutloss: ${funds_info.get('scaled_max_loss', -15.0):.2f} (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)", Colors.RED))
         print(cprint(f"🛡️ GUARD EXECUTION LOCK : Loss Lock: {'ON 🔒' if mrcv_loss_lock else 'OFF 🔓'}", Colors.CYAN))
         print("==================================================")
 
@@ -90,14 +128,7 @@ class MRCVEngine:
         mode_text = "Menunggu RCS Hedging (Standby)" if wait_mode else "Selalu Aktif (Mandiri)"
         start_msg = (
             f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
-            f"💰 *DANA & KESEHATAN AKUN MT5:*\n"
-            f"• Tipe Akun: *{funds_info['account_type']}* (Login: {funds_info['account_number']} | Server: {funds_info['server']})\n"
-            f"• Balance / Equity: *${funds_info['balance']:.2f}* / *${funds_info['equity']:.2f}*\n"
-            f"• Free Margin: *${funds_info['margin_free']:.2f}* (Margin Level: *{funds_info['health_status']}*)\n"
-            f"• Leverage: *{funds_info['leverage']}*\n"
-            f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*\n"
-            f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n"
-            f"• Dynamic Cutloss: *${funds_info.get('scaled_max_loss', -15.0):.2f}* (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)\n"
+            f"{acc_wa_section}"
             f"🛡️ *GUARD EXECUTION:* Loss Lock: *{'ON 🔒' if mrcv_loss_lock else 'OFF 🔓'}*\n\n"
             f"📊 Symbol: {self.symbol}\n"
             f"⚙️ Mode: {mode_text}"

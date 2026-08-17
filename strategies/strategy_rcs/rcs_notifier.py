@@ -400,18 +400,40 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
             loss_lock = os.getenv("RCS_DAILY_LOSS_LOCK_ENABLED", "true").lower() == "true"
             profit_lock = os.getenv("RCS_DAILY_PROFIT_LOCK_ENABLED", "false").lower() == "true"
 
-            skipped_msg_lines = [
-                f"🟢 SISTEM DIAKTIFKAN 🟢\n\n",
-                f"💰 *DANA & KESEHATAN AKUN MT5:*",
-                f"• Tipe Akun: *{funds_info['account_type']}* (Login: {funds_info['account_number']} | Server: {funds_info['server']})",
-                f"• Balance / Equity: *${funds_info['balance']:.2f}* / *${funds_info['equity']:.2f}*",
-                f"• Free Margin: *${funds_info['margin_free']:.2f}* (Margin Level: *{funds_info['health_status']}*)",
-                f"• Leverage: *{funds_info['leverage']}*",
-                f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*",
-                f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})",
-                f"• Dynamic Cutloss: *${funds_info.get('scaled_max_loss', -15.0):.2f}* (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)",
-                f"🛡️ *GUARD EXECUTION:* Loss Lock: *{'ON 🔒' if loss_lock else 'OFF 🔓'}* | Profit Lock: *{'ON 🔒' if profit_lock else 'OFF 🔓'}*\n"
-            ]
+            multi_enabled = os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true"
+            if multi_enabled:
+                from mt5_client.multi_account_dispatcher import get_multi_account_funds_info
+                multi_funds = get_multi_account_funds_info("RCS")
+                acc_lines = []
+                for acc_f in multi_funds:
+                    if acc_f.get("connected"):
+                        acc_lines.append(
+                            f"🔹 *{acc_f['key']}:* {acc_f['name']} (Login: {acc_f['login']})\n"
+                            f"  • Balance / Equity: *${acc_f['balance']:.2f}* / *${acc_f['equity']:.2f}*\n"
+                            f"  • Margin Level: *{acc_f['health_status']}* | Leverage: *{acc_f['leverage']}*\n"
+                            f"  • Lot OP1: *{acc_f['dynamic_lot']} Lot* | Cutloss: *${acc_f['scaled_max_loss']:.2f}*"
+                        )
+                    else:
+                        acc_lines.append(f"🔹 *{acc_f['key']}:* {acc_f['name']} -> *Offline / Disconnected*")
+                multi_block = "\n\n".join(acc_lines)
+                skipped_msg_lines = [
+                    f"🟢 SISTEM DIAKTIFKAN 🟢\n\n",
+                    f"💰 *DANA & KESEHATAN MULTI-AKUN MT5 (RCS):*\n\n{multi_block}\n",
+                    f"🛡️ *GUARD EXECUTION:* Loss Lock: *{'ON 🔒' if loss_lock else 'OFF 🔓'}* | Profit Lock: *{'ON 🔒' if profit_lock else 'OFF 🔓'}*\n"
+                ]
+            else:
+                skipped_msg_lines = [
+                    f"🟢 SISTEM DIAKTIFKAN 🟢\n\n",
+                    f"💰 *DANA & KESEHATAN AKUN MT5:*",
+                    f"• Tipe Akun: *{funds_info['account_type']}* (Login: {funds_info['account_number']} | Server: {funds_info['server']})",
+                    f"• Balance / Equity: *${funds_info['balance']:.2f}* / *${funds_info['equity']:.2f}*",
+                    f"• Free Margin: *${funds_info['margin_free']:.2f}* (Margin Level: *{funds_info['health_status']}*)",
+                    f"• Leverage: *{funds_info['leverage']}*",
+                    f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*",
+                    f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})",
+                    f"• Dynamic Cutloss: *${funds_info.get('scaled_max_loss', -15.0):.2f}* (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)",
+                    f"🛡️ *GUARD EXECUTION:* Loss Lock: *{'ON 🔒' if loss_lock else 'OFF 🔓'}* | Profit Lock: *{'ON 🔒' if profit_lock else 'OFF 🔓'}*\n"
+                ]
             
             for symbol, config in configs.items():
                 op1_info = config.op1_entry_mode
