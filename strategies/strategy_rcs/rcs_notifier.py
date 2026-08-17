@@ -18,7 +18,7 @@ from config.mt5_config import MT5Config, EMAConfig
 from config.rcs_config import RCSConfig
 from utils.colors import cprint, Colors
 
-HEADER_TEXT = "🤖 *[STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]*\n\n"
+HEADER_TEXT = ""
 
 def _send_wa_notif_worker(
     config: RCSConfig,
@@ -26,7 +26,7 @@ def _send_wa_notif_worker(
     event_type: str,
     target_jid: str | None = None,
     media_url: str | None = None,
-    include_header: bool = True,
+    include_header: bool = False,
 ):
     dest_jid = target_jid if target_jid else config.group_jid
     if not dest_jid:
@@ -59,7 +59,7 @@ def send_rcs_wa_notif(
     event_type: str,
     target_jid: str | None = None,
     media_url: str | None = None,
-    include_header: bool = True,
+    include_header: bool = False,
 ):
     """
     Fungsi helper untuk kirim pesan ke Supabase WA Outbox dengan routing JID secara asynchronous.
@@ -263,7 +263,7 @@ def notify_startup_hanging_positions(symbol: str, snapshot, config: RCSConfig):
 
     # Send ONLY to RCS_GROUP_JID (GROUP SKIPPED RCS), NOT to PRIVATE_JID (GROUP OP SIGNAL)
     if rcs_skip_jid:
-        send_rcs_wa_notif(config, msg, 'RCS_STARTUP_HANGING', target_jid=rcs_skip_jid, include_header=True)
+        send_rcs_wa_notif(config, msg, 'RCS_STARTUP_HANGING', target_jid=rcs_skip_jid, include_header=False)
 
 def notify_startup_clean_positions(symbols: list[str], config: RCSConfig):
     """
@@ -283,7 +283,7 @@ def notify_startup_clean_positions(symbols: list[str], config: RCSConfig):
     )
 
     if rcs_skip_jid:
-        send_rcs_wa_notif(config, msg, 'RCS_STARTUP_CLEAN', target_jid=rcs_skip_jid, include_header=True)
+        send_rcs_wa_notif(config, msg, 'RCS_STARTUP_CLEAN', target_jid=rcs_skip_jid, include_header=False)
 
 def _async_notify_result_worker(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
     # 1. Generate & Upload Screenshot if state is provided
@@ -376,8 +376,7 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
 
         if status == 'START':
             skipped_msg_lines = [
-                f"🟢 SISTEM DIAKTIFKAN 🟢\n\n",
-                f"🟢 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]\n\n"
+                f"🟢 SISTEM DIAKTIFKAN 🟢\n\n"
             ]
             
             for symbol, config in configs.items():
@@ -397,10 +396,7 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
             skipped_msg = "\n".join(skipped_msg_lines).strip()
             
         else:
-            skipped_msg = (
-                f"🛑 SISTEM DIMATIKAN 🛑\n\n"
-                f"🛑 [STRATEGI: REVERSAL CANDLE SYSTEM (TUYUL COPET | RCS)]"
-            )
+            skipped_msg = f"🛑 SISTEM DIMATIKAN 🛑"
 
         if rcs_skip_jid:
             outbox_rows.append({
