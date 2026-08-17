@@ -195,6 +195,7 @@ class RCSEngine:
         
         current_price = tick.ask if direction == "BUY" else tick.bid
         if place_op1_order(symbol, current_price, state, rcs_cfg):
+            state.op1_filled = True
             if state.op1_ticket:
                 self.tracker.register_system_ticket(symbol, state.op1_ticket, "RCS", rcs_cfg.magic_op1, direction, rcs_cfg.lot_size_op1, state.op1_open_price)
 
@@ -247,6 +248,7 @@ class RCSEngine:
 
             if pos2 and not ord2:
                 state.op2_notified = True
+                state.op2_filled = True
                 op2_open_price = pos2[0].price_open
                 
                 if rcs_cfg.op2_mode == "HEDGE":
@@ -290,6 +292,7 @@ class RCSEngine:
                 if err and err[0] != 4753: return
 
             if pos3 and not ord3:
+                state.op3_filled = True
                 if state.op1_ticket: remove_tp_from_position(state.op1_ticket)
                 if state.op2_ticket: remove_tp_from_position(state.op2_ticket)
                 print(cprint(f"❄️ HEDGE (OP3) Terbuka ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))

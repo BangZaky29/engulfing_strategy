@@ -79,17 +79,20 @@ def perform_startup_position_audit(symbols: list, rcs_configs: dict, states: dic
         for pos in snapshot.system_positions:
             if pos.magic_number == rcs_cfg.magic_op1:
                 state.op1_ticket = pos.ticket
+                state.op1_filled = True
                 state.op1_open_price = pos.open_price
                 if state.phase == RCSPhase.IDLE:
                     state.phase = RCSPhase.OP1
             elif pos.magic_number == rcs_cfg.magic_op2:
                 state.op2_ticket = pos.ticket
+                state.op2_filled = True
                 state.op2_notified = True
                 if rcs_cfg.op2_mode == "HEDGE":
                     state.phase = RCSPhase.FREEZE
                     state.freeze_is_hedge = True
             elif pos.magic_number == rcs_cfg.magic_op3:
                 state.op3_ticket = pos.ticket
+                state.op3_filled = True
                 state.phase = RCSPhase.FREEZE
                 state.freeze_is_hedge = True
 

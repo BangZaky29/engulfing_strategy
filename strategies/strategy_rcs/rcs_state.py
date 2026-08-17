@@ -39,10 +39,14 @@ class RCSState:
     tp1_price: float = 0.0
     tp2_price: float = 0.0
     
-    # Open Tickets
+    # Open Tickets & Execution Flags
     op1_ticket: Optional[int] = None
     op2_ticket: Optional[int] = None
     op3_ticket: Optional[int] = None
+    
+    op1_filled: bool = False
+    op2_filled: bool = False
+    op3_filled: bool = False
     
     op1_open_price: float = 0.0
     
@@ -84,6 +88,9 @@ class RCSState:
         self.op1_ticket = None
         self.op2_ticket = None
         self.op3_ticket = None
+        self.op1_filled = False
+        self.op2_filled = False
+        self.op3_filled = False
         self.op1_open_price = 0.0
         
         self.freeze_start_floating_usd = 0.0
