@@ -216,11 +216,15 @@ def run_rcs_bot():
         print(f"🏂 Company Guard: {get_company_guard_status_text()}")
         print("--------------------------------------------------")
     
+    from mt5_client.autotrading_guard import init_autotrading_state, check_and_notify_autotrading_change
+    init_autotrading_state()
+
     notify_system_status('START', rcs_configs)
     perform_startup_position_audit(symbols, rcs_configs, engine.states, tracker)
     
     try:
         while True:
+            check_and_notify_autotrading_change("RCS")
             for symbol in symbols:
                 try:
                     engine.process_tick(symbol)

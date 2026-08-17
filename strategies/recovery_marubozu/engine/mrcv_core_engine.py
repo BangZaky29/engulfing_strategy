@@ -144,14 +144,18 @@ class MRCVEngine:
         else:
             print(cprint(f"✅ [MRCV] Audit Posisi: CLEAN (0 posisi pada {self.symbol}).", Colors.GREEN))
             
+        from mt5_client.autotrading_guard import init_autotrading_state
+        init_autotrading_state()
         return True
 
     def run(self):
         if not self.setup():
             return
             
+        from mt5_client.autotrading_guard import check_and_notify_autotrading_change
         while True:
             try:
+                check_and_notify_autotrading_change("MRCV")
                 self.process_tick()
                 time.sleep(1)
             except KeyboardInterrupt:

@@ -198,13 +198,6 @@ class MultiPatternScanner:
 
                 self.notifier.send(combined_triggers, self.expired_this_cycle if has_expired else None)
 
-            # Live Scan Heartbeat Log di terminal (setiap cycle)
-            now_str = datetime.now().strftime("%H:%M:%S")
-            active_count = len(self.active_triggers)
-            new_count = len(new_triggers_this_cycle)
-            status_text = f"[{now_str}] 🔍 Scan #{cycle_count} Selesai ({len(self.symbols)} Simbol × {len(self.timeframes)} TF) | Baru: {new_count} | Aktif: {active_count}"
-            print(cprint(status_text, Colors.GRAY if new_count == 0 else Colors.GREEN))
-
             # Cleanup old data (> 2 hari)
             self._cleanup_old_data()
 
