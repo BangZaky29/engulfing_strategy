@@ -143,6 +143,9 @@ def get_account_funds_info(fallback_lot: float = 0.01) -> dict:
         calculated_lot = round(int(funds // 100) * 0.01, 2)
 
     final_lot = max(0.01, calculated_lot)
+    base_loss_usd = float(os.getenv("MRCV_MAX_NET_LOSS", os.getenv("RCS_DAILY_LOSS_TARGET_USD", "-15.0")))
+    scaled_max_loss = get_scaled_max_loss(base_loss_usd, final_lot)
+
     return {
         "account_type": account_type,
         "account_type_raw": account_type_raw,
@@ -160,6 +163,8 @@ def get_account_funds_info(fallback_lot: float = 0.01) -> dict:
         "autotrading": autotrading,
         "source_type": source_type,
         "dynamic_lot": final_lot,
+        "scaled_max_loss": scaled_max_loss,
+        "base_max_loss": -abs(base_loss_usd),
         "is_dynamic": True
     }
 

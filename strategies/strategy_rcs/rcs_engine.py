@@ -175,6 +175,10 @@ def run_rcs_bot():
     print(cprint(f"   • AutoTrading    : {funds_info['autotrading']}", Colors.CYAN))
     print(cprint(f"   • Acuan Modal    : {funds_info['source_type']} (${funds_info['funds_used']:.2f})", Colors.CYAN))
     print(cprint(f"   • Dynamic Lot OP1: {funds_info['dynamic_lot']} Lot", Colors.GREEN))
+    print(cprint(f"   • Dynamic Cutloss: ${funds_info.get('scaled_max_loss', -15.0):.2f} (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)", Colors.RED))
+    loss_lock = os.getenv("RCS_DAILY_LOSS_LOCK_ENABLED", "true").lower() == "true"
+    profit_lock = os.getenv("RCS_DAILY_PROFIT_LOCK_ENABLED", "false").lower() == "true"
+    print(cprint(f"🛡️ GUARD EXECUTION LOCK: Loss Lock: {'ON 🔒' if loss_lock else 'OFF 🔓'} | Profit Lock: {'ON 🔒' if profit_lock else 'OFF 🔓'}", Colors.CYAN))
     print("==================================================")
     
     for sym in symbols:

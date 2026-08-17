@@ -81,6 +81,7 @@ class MRCVEngine:
         print(cprint(f"   • Acuan Modal    : {funds_info['source_type']} (${funds_info['funds_used']:.2f})", Colors.CYAN))
         mrcv_loss_lock = os.getenv("MRCV_LOSS_LOCK_ENABLED", "true").lower() == "true"
         print(cprint(f"   • Dynamic Lot OP1: {funds_info['dynamic_lot']} Lot", Colors.GREEN))
+        print(cprint(f"   • Dynamic Cutloss: ${funds_info.get('scaled_max_loss', -15.0):.2f} (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)", Colors.RED))
         print(cprint(f"🛡️ GUARD EXECUTION LOCK : Loss Lock: {'ON 🔒' if mrcv_loss_lock else 'OFF 🔓'}", Colors.CYAN))
         print("==================================================")
 
@@ -96,6 +97,7 @@ class MRCVEngine:
             f"• Leverage: *{funds_info['leverage']}*\n"
             f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*\n"
             f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n"
+            f"• Dynamic Cutloss: *${funds_info.get('scaled_max_loss', -15.0):.2f}* (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)\n"
             f"🛡️ *GUARD EXECUTION:* Loss Lock: *{'ON 🔒' if mrcv_loss_lock else 'OFF 🔓'}*\n\n"
             f"📊 Symbol: {self.symbol}\n"
             f"⚙️ Mode: {mode_text}"

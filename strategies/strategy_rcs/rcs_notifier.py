@@ -409,6 +409,7 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
                 f"• Leverage: *{funds_info['leverage']}*",
                 f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*",
                 f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})",
+                f"• Dynamic Cutloss: *${funds_info.get('scaled_max_loss', -15.0):.2f}* (Base: ${funds_info.get('base_max_loss', -15.0):.2f} / 0.01 Lot)",
                 f"🛡️ *GUARD EXECUTION:* Loss Lock: *{'ON 🔒' if loss_lock else 'OFF 🔓'}* | Profit Lock: *{'ON 🔒' if profit_lock else 'OFF 🔓'}*\n"
             ]
             
