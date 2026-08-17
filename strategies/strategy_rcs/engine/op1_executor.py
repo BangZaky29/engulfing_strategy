@@ -71,6 +71,21 @@ def place_op1_order(symbol: str, current_price: float, state: RCSState, config: 
     if res:
         state.op1_ticket = res.order
         state.op1_open_price = res.price if config.op1_entry_mode == "INSTANT_ZERO" else state.op1_level
+        
+        # Simpan tiket per akun untuk audit multi-akun
+        all_results = getattr(res, "all_results", [])
+        if all_results:
+            for r in all_results:
+                if r.get("success") and r.get("order"):
+                    k = r.get("key")
+                    if k not in state.multi_account_tickets:
+                        state.multi_account_tickets[k] = []
+                    state.multi_account_tickets[k].append(r.get("order"))
+        elif res.order:
+            if "ACC1" not in state.multi_account_tickets:
+                state.multi_account_tickets["ACC1"] = []
+            state.multi_account_tickets["ACC1"].append(res.order)
+
         print(cprint(f"✅ OP1 Berhasil Terpasang! Tkt: {res.order}, Prc: {state.op1_open_price:.5f}, TP: {tp:.5f}, SL: {sl:.5f}", Colors.GREEN))
         return True
         

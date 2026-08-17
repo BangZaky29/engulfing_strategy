@@ -304,7 +304,7 @@ def notify_startup_clean_positions(symbols: list[str], config: RCSConfig):
     if rcs_skip_jid:
         send_rcs_wa_notif(config, msg, 'RCS_STARTUP_CLEAN', target_jid=rcs_skip_jid, include_header=False)
 
-def _async_notify_result_worker(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
+def _async_notify_result_worker(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None, multi_pnl_data=None):
     # 1. Generate & Upload Screenshot if state is provided
     media_url = ""
     if state is not None:
@@ -347,22 +347,37 @@ def _async_notify_result_worker(symbol: str, event_desc: str, profit: float, rec
             f"(Syarat: <= {config.max_spread_points} pts)\n\n"
         )
 
-    # 5. Body pesan
+    # 5. Blok rincian multi-akun
+    acc_pnl_str = ""
+    if multi_pnl_data and multi_pnl_data.get("accounts"):
+        acc_pnl_str = "💰 *RINCIAN PROFIT PER AKUN:*\n"
+        for acc_k, acc_v in multi_pnl_data["accounts"].items():
+            p = acc_v.get("profit", 0.0)
+            p_icon = "🟢" if p >= 0 else "🔴"
+            p_prefix = "+$" if p >= 0 else "-$"
+            acc_pnl_str += f"🔹 *[{acc_k}] {acc_v.get('name', acc_k)}* ({acc_v.get('login', '-')}): *{p_prefix}{abs(p):.2f}* {p_icon}\n"
+        acc_pnl_str += "\n"
+
+    # 6. Body pesan
     op_count_str = f"Total OP Ditutup: *{total_op_closed} posisi*\n" if total_op_closed > 0 else ""
+    title_header = "📊 *RCS RESULT (MULTI-AKUN)*" if acc_pnl_str else "📊 RCS RESULT"
+    pnl_prefix = "+$" if profit >= 0 else "-$"
+    
     msg = (
         f"{header}\n"
-        f"📊 RCS RESULT\n"
+        f"{title_header}\n"
         f"{metrics_str}"
         f"Symbol: {symbol}\n"
         f"{op_count_str}"
         f"Info: {event_desc}\n"
-        f"Closed Net PnL: *${profit:.2f}*\n"
+        f"{acc_pnl_str}"
+        f"Closed Net PnL: *{pnl_prefix}{abs(profit):.2f}*\n"
     )
     if recovery != 0.0:
         msg += f"Hasil Recovery: *${recovery:.2f}*"
         
-    # 6. Kirim ke grup profit atau loss — tanpa HEADER_TEXT karena sudah ada di body
-    target_group = config.profit_signal_jid if profit > 0 else config.loss_signal_jid
+    # 7. Kirim ke grup profit atau loss — tanpa HEADER_TEXT karena sudah ada di body
+    target_group = config.profit_signal_jid if profit >= 0 else config.loss_signal_jid
     
     send_rcs_wa_notif(
         config, msg, 'RCS_RESULT',
@@ -371,12 +386,12 @@ def _async_notify_result_worker(symbol: str, event_desc: str, profit: float, rec
         include_header=False,
     )
 
-def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None):
+def notify_result(symbol: str, event_desc: str, profit: float, recovery: float, config: RCSConfig, state=None, multi_pnl_data=None):
     if not config.notif_result: return
     state_snapshot = copy.copy(state) if state is not None else None
     t = threading.Thread(
         target=_async_notify_result_worker,
-        args=(symbol, event_desc, profit, recovery, config, state_snapshot),
+        args=(symbol, event_desc, profit, recovery, config, state_snapshot, multi_pnl_data),
         daemon=True
     )
     t.start()

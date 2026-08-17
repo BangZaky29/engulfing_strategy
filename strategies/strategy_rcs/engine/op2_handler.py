@@ -70,6 +70,21 @@ def place_op2_order(symbol: str, state: RCSState, config: RCSConfig) -> bool:
     
     if res:
         state.op2_ticket = res.order
+        
+        # Simpan tiket OP2 per akun
+        all_results = getattr(res, "all_results", [])
+        if all_results:
+            for r in all_results:
+                if r.get("success") and r.get("order"):
+                    k = r.get("key")
+                    if k not in state.multi_account_tickets:
+                        state.multi_account_tickets[k] = []
+                    state.multi_account_tickets[k].append(r.get("order"))
+        elif res.order:
+            if "ACC1" not in state.multi_account_tickets:
+                state.multi_account_tickets["ACC1"] = []
+            state.multi_account_tickets["ACC1"].append(res.order)
+
         print(cprint(f"✅ OP2 Berhasil Terpasang! Tkt: {res.order}, Prc: {state.op2_level:.5f}, TP: {tp:.5f}, SL: {sl:.5f}", Colors.GREEN))
         return True
         

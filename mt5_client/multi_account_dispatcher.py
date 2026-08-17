@@ -7,13 +7,14 @@
 import os
 import time
 import uuid
+from datetime import datetime, timedelta
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import MetaTrader5 as mt5
 from database.supabase_client import execute_supabase
 from utils.colors import cprint, Colors
 
-MultiOrderResult = namedtuple("MultiOrderResult", ["retcode", "order", "price", "volume", "comment"])
+MultiOrderResult = namedtuple("MultiOrderResult", ["retcode", "order", "price", "volume", "comment", "all_results"], defaults=[None, None, 0.0, 0.0, "", []])
 
 def get_target_accounts(strategy_name: str) -> list[dict]:
     """Mengambil daftar akun target dari .env untuk strategi tertentu."""
@@ -247,12 +248,10 @@ def get_multi_account_funds_info(strategy_name: str) -> list[dict]:
 
     for idx, acc in enumerate(accounts):
         if idx == 0:
-            # Akun primer dibaca langsung dari sesi aktif
             results.append(_read_local_account_funds(acc))
         else:
             secondary_accounts.append(acc)
 
-    # Akun sekunder dibaca via sub-process terisolasi
     if secondary_accounts:
         with ProcessPoolExecutor(max_workers=len(secondary_accounts)) as executor:
             futures = {executor.submit(_worker_audit_account, acc): acc for acc in secondary_accounts}
@@ -271,7 +270,6 @@ def get_multi_account_funds_info(strategy_name: str) -> list[dict]:
                         "error": str(e)
                     })
 
-    # Urutkan hasil sesuai urutan di ACCOUNTS_LIST (ACC1, ACC2, ACC3)
     order_map = {acc['key']: i for i, acc in enumerate(accounts)}
     results.sort(key=lambda x: order_map.get(x.get('key', ''), 99))
     return results
@@ -280,9 +278,6 @@ def _worker_execute_account_order(acc_info: dict, strategy_name: str, payload: d
     """Worker sub-process untuk mengeksekusi order pada terminal akun tertentu via portable path."""
     import MetaTrader5 as mt5_worker
     import os
-    import time
-    import uuid
-    from database.supabase_client import execute_supabase
 
     path = acc_info.get("path", "")
     if path and os.path.exists(path):
@@ -369,26 +364,6 @@ def _worker_execute_account_order(acc_info: dict, strategy_name: str, payload: d
         req.pop("sl", None)
         req.pop("tp", None)
         res = mt5_worker.order_send(req)
-
-    # Kirim WA Notification dengan Footer Label Identitas Akun & Bot
-    wa_message = payload.get("wa_message")
-    if wa_message and res and res.retcode == mt5_worker.TRADE_RETCODE_DONE:
-        dest_jid = payload.get("target_jid", os.getenv("PRIVATE_JID", os.getenv("RCS_GROUP_JID", "120363409493021715@g.us")))
-        footer_label = f"\n\n🏷️ *AKUN:* {acc_info['key']} ({acc_info['name']} | {acc_info['login']}) | *BOT:* {strategy_name.upper()}"
-        full_wa_message = wa_message.strip() + footer_label
-
-        wa_payload = {
-            'source_table': f'{strategy_name.lower()}_system',
-            'event_type': f'{strategy_name.upper()}_MULTI_EXEC',
-            'group_jid': dest_jid,
-            'message_type': 'TEXT',
-            'message': full_wa_message,
-            'dedupe_key': f'{strategy_name.lower()}_{acc_info["key"]}_{int(time.time())}_{uuid.uuid4().hex[:6]}'
-        }
-        try:
-            execute_supabase(lambda sb: sb.table('wa_outbox').insert(wa_payload).execute())
-        except Exception:
-            pass
 
     actual_login = acc.login if acc else acc_info['login']
     mt5_worker.shutdown()
@@ -491,26 +466,6 @@ def _execute_local_account_order(acc_info: dict, strategy_name: str, payload: di
         req.pop("tp", None)
         res = mt5.order_send(req)
 
-    wa_message = payload.get("wa_message")
-    if wa_message and res and res.retcode == mt5.TRADE_RETCODE_DONE:
-        dest_jid = payload.get("target_jid", os.getenv("PRIVATE_JID", os.getenv("RCS_GROUP_JID", "120363409493021715@g.us")))
-        footer_label = f"\n\n🏷️ *AKUN:* {acc_info['key']} ({acc_info['name']} | {acc_info['login']}) | *BOT:* {strategy_name.upper()}"
-        full_wa_message = wa_message.strip() + footer_label
-
-        wa_payload = {
-            'source_table': f'{strategy_name.lower()}_system',
-            'event_type': f'{strategy_name.upper()}_MULTI_EXEC',
-            'group_jid': dest_jid,
-            'message_type': 'TEXT',
-            'message': full_wa_message,
-            'dedupe_key': f'{strategy_name.lower()}_{acc_info["key"]}_{int(time.time())}_{uuid.uuid4().hex[:6]}'
-        }
-        try:
-            execute_supabase(lambda sb: sb.table('wa_outbox').insert(wa_payload).execute())
-            print(cprint(f"📲 [{acc_info['key']}] WA Notif terkirim dengan Label Footer Akun.", Colors.GREEN))
-        except Exception as e:
-            print(cprint(f"⚠️ [{acc_info['key']}] Gagal insert WA outbox: {e}", Colors.RED))
-
     if res and res.retcode == mt5.TRADE_RETCODE_DONE:
         msg = f"[{acc_info['key']}] ✅ Order Sukses! Ticket: #{res.order} | Vol: {res.volume} | Price: {res.price} | Akun: {acc_info['name']}"
         print(cprint(msg, Colors.GREEN))
@@ -545,6 +500,7 @@ def dispatch_multi_account_order(strategy_name: str, payload: dict) -> tuple[Mul
     """
     Fungsi penembak utama: Mengeksekusi order ke seluruh akun target secara instan & simultan.
     Tanpa memanggil mt5.login() sehingga AutoTrading tetap ALLOWED 🟢.
+    Mengirim notifikasi WhatsApp ke setiap akun yang berhasil dieksekusi.
     Returns: (primary_order_result, all_results_list)
     """
     accounts = get_target_accounts(strategy_name)
@@ -564,7 +520,7 @@ def dispatch_multi_account_order(strategy_name: str, payload: dict) -> tuple[Mul
         results.append(primary_res_dict)
     except Exception as exc:
         print(cprint(f"⚠️ Error eksekusi primer {primary_acc['key']}: {exc}", Colors.RED))
-        results.append({"key": primary_acc['key'], "name": primary_acc['name'], "success": False, "error": str(exc), "retcode": -1, "order": None})
+        results.append({"key": primary_acc['key'], "name": primary_acc['name'], "login": primary_acc['login'], "success": False, "error": str(exc), "retcode": -1, "order": None})
 
     # 2. Eksekusi akun sekunder (ACC2, ACC3) secara paralel via sub-process
     if secondary_accounts:
@@ -581,7 +537,29 @@ def dispatch_multi_account_order(strategy_name: str, payload: dict) -> tuple[Mul
                         print(cprint(f"[{acc['key']}] ❌ Order Gagal! Retcode: {res_dict.get('retcode')} ({res_dict.get('error')}) | Akun: {acc['name']}", Colors.RED))
                 except Exception as exc:
                     print(cprint(f"⚠️ Error eksekusi sekunder {acc['key']}: {exc}", Colors.RED))
-                    results.append({"key": acc['key'], "name": acc['name'], "success": False, "error": str(exc), "retcode": -1, "order": None})
+                    results.append({"key": acc['key'], "name": acc['name'], "login": acc['login'], "success": False, "error": str(exc), "retcode": -1, "order": None})
+
+    # 3. Kirim WA Notification terpusat untuk SEMUA akun yang sukses
+    wa_message = payload.get("wa_message")
+    if wa_message:
+        dest_jid = payload.get("target_jid", os.getenv("PRIVATE_JID", os.getenv("RCS_GROUP_JID", "120363409493021715@g.us")))
+        for r in results:
+            if r.get("success") and r.get("order"):
+                footer_label = f"\n\n🏷️ *AKUN:* {r['key']} ({r.get('name', r['key'])} | {r.get('login', '-')}) | *BOT:* {strategy_name.upper()}"
+                full_wa = wa_message.strip() + footer_label
+                wa_payload = {
+                    'source_table': f'{strategy_name.lower()}_system',
+                    'event_type': f'{strategy_name.upper()}_MULTI_EXEC',
+                    'group_jid': dest_jid,
+                    'message_type': 'TEXT',
+                    'message': full_wa,
+                    'dedupe_key': f'{strategy_name.lower()}_{r["key"]}_{r["order"]}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
+                }
+                try:
+                    execute_supabase(lambda sb: sb.table('wa_outbox').insert(wa_payload).execute())
+                    print(cprint(f"📲 [{r['key']}] WA Notif terkirim dengan Label Footer Akun.", Colors.GREEN))
+                except Exception as e:
+                    print(cprint(f"⚠️ [{r['key']}] Gagal kirim WA outbox: {e}", Colors.RED))
 
     # Temukan akun primer pertama yang berhasil untuk return ke caller
     primary_res = None
@@ -592,7 +570,8 @@ def dispatch_multi_account_order(strategy_name: str, payload: dict) -> tuple[Mul
                 order=r.get("order"),
                 price=r.get("price", payload.get("price", 0.0)),
                 volume=r.get("volume", 0.01),
-                comment=r.get("comment", "")
+                comment=r.get("comment", ""),
+                all_results=results
             )
             break
 
@@ -605,8 +584,175 @@ def dispatch_multi_account_order(strategy_name: str, payload: dict) -> tuple[Mul
                     order=r.get("order"),
                     price=r.get("price", payload.get("price", 0.0)),
                     volume=r.get("volume", 0.01),
-                    comment=r.get("comment", "")
+                    comment=r.get("comment", ""),
+                    all_results=results
                 )
                 break
 
     return primary_res, results
+
+def _worker_cancel_pending_orders(acc_info: dict, symbol: str, magic_numbers: list[int]) -> int:
+    """Worker sub-process untuk membatalkan pending order pada akun sekunder."""
+    import MetaTrader5 as mt5_worker
+    import os
+
+    path = acc_info.get("path", "")
+    if path and os.path.exists(path):
+        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
+    else:
+        init_ok = mt5_worker.initialize(timeout=15000)
+
+    if not init_ok:
+        return 0
+
+    orders = mt5_worker.orders_get(symbol=symbol)
+    canceled = 0
+    if orders:
+        for ord_item in orders:
+            if not magic_numbers or ord_item.magic in magic_numbers:
+                req = {
+                    "action": mt5_worker.TRADE_ACTION_REMOVE,
+                    "order": ord_item.ticket
+                }
+                res = mt5_worker.order_send(req)
+                if res and res.retcode == mt5_worker.TRADE_RETCODE_DONE:
+                    canceled += 1
+
+    mt5_worker.shutdown()
+    return canceled
+
+def cancel_multi_account_pending_orders(strategy_name: str, symbol: str, magic_numbers: list[int] | None = None) -> int:
+    """Membatalkan seluruh pending order dari semua akun target (ACC1, ACC2, ACC3)."""
+    accounts = get_target_accounts(strategy_name)
+    if not accounts:
+        orders = mt5.orders_get(symbol=symbol)
+        cnt = 0
+        if orders:
+            for ord_item in orders:
+                if not magic_numbers or ord_item.magic in magic_numbers:
+                    req = {"action": mt5.TRADE_ACTION_REMOVE, "order": ord_item.ticket}
+                    res = mt5.order_send(req)
+                    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                        cnt += 1
+        return cnt
+
+    primary_acc = accounts[0]
+    secondary_accounts = accounts[1:]
+    total_canceled = 0
+
+    # 1. Cancel akun primer di thread utama
+    orders1 = mt5.orders_get(symbol=symbol)
+    if orders1:
+        for ord_item in orders1:
+            if not magic_numbers or ord_item.magic in magic_numbers:
+                req = {"action": mt5.TRADE_ACTION_REMOVE, "order": ord_item.ticket}
+                res = mt5.order_send(req)
+                if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                    total_canceled += 1
+
+    # 2. Cancel akun sekunder via sub-process
+    if secondary_accounts:
+        with ProcessPoolExecutor(max_workers=len(secondary_accounts)) as executor:
+            futures = [executor.submit(_worker_cancel_pending_orders, acc, symbol, magic_numbers or []) for acc in secondary_accounts]
+            for fut in as_completed(futures):
+                try:
+                    total_canceled += fut.result()
+                except Exception:
+                    pass
+
+    return total_canceled
+
+def _worker_query_account_deals_pnl(acc_info: dict, symbol: str, tickets: list[int]) -> dict:
+    """Worker sub-process untuk mengambil real PnL dari deals history broker akun sekunder."""
+    import MetaTrader5 as mt5_worker
+    import os
+    from datetime import datetime, timedelta
+
+    path = acc_info.get("path", "")
+    if path and os.path.exists(path):
+        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
+    else:
+        init_ok = mt5_worker.initialize(timeout=15000)
+
+    if not init_ok:
+        return {"key": acc_info['key'], "name": acc_info['name'], "login": acc_info['login'], "profit": 0.0, "deals_count": 0}
+
+    now = datetime.now()
+    from_time = now - timedelta(hours=24)
+    deals = mt5_worker.history_deals_get(from_time, now)
+    
+    total_pnl = 0.0
+    matched_deals = 0
+    if deals:
+        for d in deals:
+            if not tickets or (d.position_id in tickets or d.order in tickets or d.ticket in tickets):
+                total_pnl += (d.profit + d.swap + d.commission)
+                matched_deals += 1
+
+    actual_login = getattr(mt5_worker.account_info(), "login", acc_info['login'])
+    mt5_worker.shutdown()
+    return {
+        "key": acc_info['key'],
+        "name": acc_info['name'],
+        "login": actual_login,
+        "profit": round(total_pnl, 2),
+        "deals_count": matched_deals
+    }
+
+def get_multi_account_cycle_profit(strategy_name: str, symbol: str, tickets_per_account: dict) -> dict:
+    """
+    Mengambil real profit tertutup dari SELURUH akun target untuk siklus yang baru saja selesai.
+    tickets_per_account: dict misal {"ACC1": [999120865], "ACC3": [999121747]}
+    """
+    accounts = get_target_accounts(strategy_name)
+    if not accounts:
+        return {"accounts": {}, "total_profit": 0.0}
+
+    primary_acc = accounts[0]
+    secondary_accounts = accounts[1:]
+    results_map = {}
+    total_profit = 0.0
+
+    # 1. Query ACC1 di thread utama
+    now = datetime.now()
+    from_time = now - timedelta(hours=24)
+    deals1 = mt5.history_deals_get(from_time, now)
+    p1_pnl = 0.0
+    p1_tickets = tickets_per_account.get(primary_acc['key'], [])
+    if deals1:
+        for d in deals1:
+            if not p1_tickets or (d.position_id in p1_tickets or d.order in p1_tickets or d.ticket in p1_tickets):
+                p1_pnl += (d.profit + d.swap + d.commission)
+
+    results_map[primary_acc['key']] = {
+        "key": primary_acc['key'],
+        "name": primary_acc['name'],
+        "login": getattr(mt5.account_info(), "login", primary_acc['login']),
+        "profit": round(p1_pnl, 2)
+    }
+    total_profit += p1_pnl
+
+    # 2. Query akun sekunder via sub-process
+    if secondary_accounts:
+        with ProcessPoolExecutor(max_workers=len(secondary_accounts)) as executor:
+            future_to_acc = {
+                executor.submit(
+                    _worker_query_account_deals_pnl, 
+                    acc, 
+                    symbol, 
+                    tickets_per_account.get(acc['key'], [])
+                ): acc for acc in secondary_accounts
+            }
+            for fut in as_completed(future_to_acc):
+                acc = future_to_acc[fut]
+                try:
+                    res = fut.result()
+                    results_map[acc['key']] = res
+                    total_profit += res.get("profit", 0.0)
+                except Exception:
+                    results_map[acc['key']] = {"key": acc['key'], "name": acc['name'], "login": acc['login'], "profit": 0.0}
+
+    return {
+        "accounts": results_map,
+        "total_profit": round(total_profit, 2)
+    }

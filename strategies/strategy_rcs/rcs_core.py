@@ -229,11 +229,21 @@ class RCSEngine:
         
         if not pos1 and not ord1:
             print(cprint(f"👻 OP1 (Tkt:{state.op1_ticket}) hilang dari market {symbol} (TP/SL Hit atau Cancel).", Colors.YELLOW))
-            if state.op2_ticket: cancel_pending_order_rcs(state.op2_ticket)
-            if state.op3_ticket: cancel_pending_order_rcs(state.op3_ticket)
             
-            real_profit = calculate_cycle_profit(state, tracker=self.tracker, symbol=symbol)
-            notify_result(symbol, "Siklus Selesai", real_profit, 0.0, rcs_cfg, state=state)
+            # 1. Batalkan seluruh pending order OP2 & OP3 di SEMUA akun target (ACC1, ACC2, ACC3)
+            import os
+            if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+                from mt5_client.multi_account_dispatcher import cancel_multi_account_pending_orders, get_multi_account_cycle_profit
+                cancel_multi_account_pending_orders("RCS", symbol, [rcs_cfg.magic_op2, rcs_cfg.magic_op3])
+                multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, getattr(state, 'multi_account_tickets', {}))
+                real_profit = multi_pnl_data.get("total_profit", 0.0)
+            else:
+                if state.op2_ticket: cancel_pending_order_rcs(state.op2_ticket)
+                if state.op3_ticket: cancel_pending_order_rcs(state.op3_ticket)
+                real_profit = calculate_cycle_profit(state, tracker=self.tracker, symbol=symbol)
+                multi_pnl_data = None
+            
+            notify_result(symbol, "Siklus Selesai", real_profit, 0.0, rcs_cfg, state=state, multi_pnl_data=multi_pnl_data)
             state.reset(symbol)
             self.tracker.clear_closed_manual(symbol)
             return
@@ -274,11 +284,19 @@ class RCSEngine:
                 if state.op1_ticket:
                     pos1_check = mt5.positions_get(ticket=state.op1_ticket)
                     if pos1_check: close_position_by_ticket(state.op1_ticket)
-                if state.op3_ticket:
-                    cancel_pending_order_rcs(state.op3_ticket)
                     
-                real_profit = calculate_cycle_profit(state, tracker=self.tracker, symbol=symbol)
-                notify_result(symbol, "Siklus Selesai (OP2 Menyentuh TP2)", real_profit, 0.0, rcs_cfg, state=state)
+                import os
+                if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+                    from mt5_client.multi_account_dispatcher import cancel_multi_account_pending_orders, get_multi_account_cycle_profit
+                    cancel_multi_account_pending_orders("RCS", symbol, [rcs_cfg.magic_op3])
+                    multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, getattr(state, 'multi_account_tickets', {}))
+                    real_profit = multi_pnl_data.get("total_profit", 0.0)
+                else:
+                    if state.op3_ticket: cancel_pending_order_rcs(state.op3_ticket)
+                    real_profit = calculate_cycle_profit(state, tracker=self.tracker, symbol=symbol)
+                    multi_pnl_data = None
+                    
+                notify_result(symbol, "Siklus Selesai (OP2 Menyentuh TP2)", real_profit, 0.0, rcs_cfg, state=state, multi_pnl_data=multi_pnl_data)
                 state.reset(symbol)
                 self.tracker.clear_closed_manual(symbol)
                 return
@@ -305,6 +323,15 @@ class RCSEngine:
         if check_unfreeze(symbol, state, rcs_cfg, tracker=self.tracker):
             profit, recovery = calculate_recovery(symbol, state, rcs_cfg, tracker=self.tracker)
             print(cprint(f"☀️ UNFREEZE! Semua posisi telah ditutup ({symbol}). Recovery: ${recovery:.2f}", Colors.GREEN))
-            notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg, state=state)
+            
+            import os
+            if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+                from mt5_client.multi_account_dispatcher import get_multi_account_cycle_profit
+                multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, getattr(state, 'multi_account_tickets', {}))
+                profit = multi_pnl_data.get("total_profit", profit)
+            else:
+                multi_pnl_data = None
+
+            notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg, state=state, multi_pnl_data=multi_pnl_data)
             state.reset(symbol)
             self.tracker.clear_closed_manual(symbol)

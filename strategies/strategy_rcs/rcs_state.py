@@ -61,6 +61,9 @@ class RCSState:
     manual_positions_profit: float = 0.0                    # Total floating OP manual
     manual_detected_time: Optional[datetime.datetime] = None  # Kapan pertama kali OP manual terdeteksi
     is_paused_by_manual: bool = False                       # Flag: siklus baru di-block karena OP manual
+
+    # Multi-Account Order & Position Tracking
+    multi_account_tickets: dict = field(default_factory=dict) # {"ACC1": [ticket1, ticket2], "ACC3": [ticket3]}
     
     def reset(self, symbol: str = None):
         """Kembalikan ke state IDLE dan bersihkan file state jika symbol diberikan."""
@@ -100,6 +103,7 @@ class RCSState:
         # Reset manual tracking
         self.manual_positions_count = 0
         self.manual_positions_profit = 0.0
+        self.multi_account_tickets = {}
         self.manual_detected_time = None
         self.is_paused_by_manual = False
         

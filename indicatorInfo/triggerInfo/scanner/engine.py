@@ -149,15 +149,31 @@ class MultiPatternScanner:
         pattern_names = [p.name for p in self.patterns]
 
         # Tampilkan Banner Akun MT5 saat Startup Scanner
-        from mt5_client.money_management import get_account_funds_info
-        funds_info = get_account_funds_info()
-        print("==================================================")
-        print(cprint(f"💰 DANA & KESEHATAN AKUN SCANNER MT5:", Colors.CYAN))
-        print(cprint(f"   • Tipe Akun      : {funds_info['account_type']} (Login: {funds_info['account_number']} | Server: {funds_info['server']})", Colors.CYAN))
-        print(cprint(f"   • Balance / Eq   : ${funds_info['balance']:.2f} / ${funds_info['equity']:.2f}", Colors.CYAN))
-        print(cprint(f"   • Free Margin    : ${funds_info['margin_free']:.2f} (Margin Level: {funds_info['health_status']})", Colors.CYAN))
-        print(cprint(f"   • Leverage Akun  : {funds_info['leverage']} | Ping: {funds_info['ping_str']} | AutoTrading: {funds_info['autotrading']}", Colors.CYAN))
-        print("==================================================")
+        if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+            from mt5_client.multi_account_dispatcher import get_multi_account_funds_info
+            funds_list = get_multi_account_funds_info("SCANNER")
+            print("==================================================")
+            print(cprint(f"💰 INFORMASI DANA & KESEHATAN AKUN SCANNER MT5:", Colors.CYAN))
+            for f in funds_list:
+                if not f.get('connected'):
+                    print(cprint(f"⚠️ [{f['key']}] Gagal audit akun {f['name']}: {f.get('error')}", Colors.YELLOW))
+                    continue
+                print(cprint(f"🔹 [{f['key']}] {f['name']} (Login: {f['login']} | Server: {f['server']})", Colors.CYAN))
+                print(cprint(f"   • Tipe Akun      : {f['account_type']}", Colors.CYAN))
+                print(cprint(f"   • Balance / Eq   : ${f['balance']:.2f} / ${f['equity']:.2f}", Colors.CYAN))
+                print(cprint(f"   • Free Margin    : ${f['margin_free']:.2f} (Margin Level: {f['health_status']})", Colors.CYAN))
+                print(cprint(f"   • Leverage Akun  : {f['leverage']} | Ping: {f['ping_str']} | AutoTrading: {f['autotrading']}", Colors.CYAN))
+            print("==================================================")
+        else:
+            from mt5_client.money_management import get_account_funds_info
+            funds_info = get_account_funds_info()
+            print("==================================================")
+            print(cprint(f"💰 DANA & KESEHATAN AKUN SCANNER MT5:", Colors.CYAN))
+            print(cprint(f"   • Tipe Akun      : {funds_info['account_type']} (Login: {funds_info['account_number']} | Server: {funds_info['server']})", Colors.CYAN))
+            print(cprint(f"   • Balance / Eq   : ${funds_info['balance']:.2f} / ${funds_info['equity']:.2f}", Colors.CYAN))
+            print(cprint(f"   • Free Margin    : ${funds_info['margin_free']:.2f} (Margin Level: {funds_info['health_status']})", Colors.CYAN))
+            print(cprint(f"   • Leverage Akun  : {funds_info['leverage']} | Ping: {funds_info['ping_str']} | AutoTrading: {funds_info['autotrading']}", Colors.CYAN))
+            print("==================================================")
         print(cprint(f"🚀 MultiPatternScanner berjalan... ({len(pattern_names)} patterns: {', '.join(pattern_names)})", Colors.GREEN))
         print(cprint(f"📊 Symbols: {', '.join(self.symbols)} | Timeframes: {', '.join(self.timeframes)}", Colors.CYAN))
         print("--------------------------------------------------")
