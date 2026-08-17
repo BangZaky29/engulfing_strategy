@@ -4,6 +4,7 @@
 # Terintegrasi dengan PositionTracker untuk membedakan OP Sistem vs Manual
 # =====================================================
 
+import os
 import time
 import datetime
 import MetaTrader5 as mt5

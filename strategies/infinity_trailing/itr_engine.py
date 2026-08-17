@@ -3,6 +3,7 @@
 # Logika utama untuk Infinity Trailing Reversal (Tick-by-tick)
 # =====================================================
 
+import os
 import time
 import datetime
 import uuid
