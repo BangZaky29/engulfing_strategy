@@ -79,7 +79,10 @@ class MRCVEngine:
         print(cprint(f"   • Ping Server    : {funds_info['ping_str']}", Colors.CYAN))
         print(cprint(f"   • AutoTrading    : {funds_info['autotrading']}", Colors.CYAN))
         print(cprint(f"   • Acuan Modal    : {funds_info['source_type']} (${funds_info['funds_used']:.2f})", Colors.CYAN))
+        mrcv_loss_lock = os.getenv("MRCV_LOSS_LOCK_ENABLED", "true").lower() == "true"
         print(cprint(f"   • Dynamic Lot OP1: {funds_info['dynamic_lot']} Lot", Colors.GREEN))
+        print(cprint(f"🛡️ GUARD EXECUTION LOCK : Loss Lock: {'ON 🔒' if mrcv_loss_lock else 'OFF 🔓'}", Colors.CYAN))
+        print("==================================================")
 
         print(cprint(f"🤖 Memulai Marubozu Recovery Machine (MRCV) [{self.symbol}]", Colors.MAGENTA))
         wait_mode = os.getenv("MRCV_WAIT_FOR_RCS_HEDGE", "true").lower() == "true"
@@ -92,7 +95,8 @@ class MRCVEngine:
             f"• Free Margin: *${funds_info['margin_free']:.2f}* (Margin Level: *{funds_info['health_status']}*)\n"
             f"• Leverage: *{funds_info['leverage']}*\n"
             f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*\n"
-            f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n\n"
+            f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n"
+            f"🛡️ *GUARD EXECUTION:* Loss Lock: *{'ON 🔒' if mrcv_loss_lock else 'OFF 🔓'}*\n\n"
             f"📊 Symbol: {self.symbol}\n"
             f"⚙️ Mode: {mode_text}"
         )

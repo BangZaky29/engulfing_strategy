@@ -397,6 +397,9 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
             from mt5_client.money_management import get_account_funds_info
             funds_info = get_account_funds_info()
 
+            loss_lock = os.getenv("RCS_DAILY_LOSS_LOCK_ENABLED", "true").lower() == "true"
+            profit_lock = os.getenv("RCS_DAILY_PROFIT_LOCK_ENABLED", "false").lower() == "true"
+
             skipped_msg_lines = [
                 f"🟢 SISTEM DIAKTIFKAN 🟢\n\n",
                 f"💰 *DANA & KESEHATAN AKUN MT5:*",
@@ -405,7 +408,8 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
                 f"• Free Margin: *${funds_info['margin_free']:.2f}* (Margin Level: *{funds_info['health_status']}*)",
                 f"• Leverage: *{funds_info['leverage']}*",
                 f"📡 *KONEKSI BROKER:* Ping *{funds_info['ping_str']}* | AutoTrading *{funds_info['autotrading']}*",
-                f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})\n"
+                f"• Dynamic Lot OP1: *{funds_info['dynamic_lot']} Lot* (Acuan: {funds_info['source_type']})",
+                f"🛡️ *GUARD EXECUTION:* Loss Lock: *{'ON 🔒' if loss_lock else 'OFF 🔓'}* | Profit Lock: *{'ON 🔒' if profit_lock else 'OFF 🔓'}*\n"
             ]
             
             for symbol, config in configs.items():

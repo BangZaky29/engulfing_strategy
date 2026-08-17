@@ -49,13 +49,20 @@ def check_rcs_daily_target(config: RCSConfig) -> tuple[bool, str]:
 
     return True, ""
 
+import os
+
 def get_rcs_daily_guard_status_text(config: RCSConfig) -> str:
-    """Return status teks untuk logging startup."""
+    """Return status teks untuk logging startup & notifikasi WA."""
     from mt5_client.money_management import get_scaled_max_loss
     scaled_loss_limit = abs(get_scaled_max_loss(-config.rcs_daily_loss_target_usd, config.lot_size_op1))
 
+    loss_lock = os.getenv("RCS_DAILY_LOSS_LOCK_ENABLED", "true").lower() == "true"
+    profit_lock = os.getenv("RCS_DAILY_PROFIT_LOCK_ENABLED", "false").lower() == "true"
+
     if not config.rcs_daily_target_enabled:
-        return f"DISABLED (Target: +${config.rcs_daily_profit_target_usd:.2f} / -${scaled_loss_limit:.2f})"
-    
+        return f"DISABLED (Loss Lock: {'ON 🔒' if loss_lock else 'OFF 🔓'} | Profit Lock: {'ON 🔒' if profit_lock else 'OFF 🔓'})"
+
     today_pnl = get_rcs_today_closed_pnl(config)
-    return f"ENABLED (PnL Hari ini: ${today_pnl:.2f} | Profit Target: +${config.rcs_daily_profit_target_usd:.2f} | Loss Limit: -${scaled_loss_limit:.2f})"
+    loss_str = f"Loss Lock: -${scaled_loss_limit:.2f} ({'ON 🔒' if loss_lock else 'OFF 🔓'})"
+    profit_str = f"Profit Lock: +${config.rcs_daily_profit_target_usd:.2f} ({'ON 🔒' if profit_lock else 'OFF 🔓'})"
+    return f"ENABLED (PnL Hari ini: ${today_pnl:.2f} | {loss_str} | {profit_str})"
