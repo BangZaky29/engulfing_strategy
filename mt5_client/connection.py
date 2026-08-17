@@ -16,7 +16,14 @@ def init_mt5(cfg: MT5Config | None = None) -> bool:
     if cfg is None:
         cfg = MT5Config()
 
-    if not mt5.initialize():  # type: ignore
+    import os
+    path = os.getenv("ACC1_PATH", "")
+    if path and os.path.exists(path):
+        init_ok = mt5.initialize(path=path, portable=True)
+    else:
+        init_ok = mt5.initialize()
+
+    if not init_ok:
         print(f"❌ Gagal inisialisasi MT5: {get_last_error()}")
         return False
     print("✅ MT5 terhubung.")

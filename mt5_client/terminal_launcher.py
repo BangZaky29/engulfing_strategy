@@ -47,32 +47,20 @@ def is_terminal_running(terminal_path: str, running_paths: list[str]) -> bool:
 
 def ensure_all_target_terminals_running(accounts: list[dict]):
     """
-    Mendeteksi apakah aplikasi GUI MT5 untuk masing-masing akun target sudah terbuka di Windows.
-    Jika belum terbuka, buka secara otomatis.
+    Memverifikasi apakah aplikasi GUI MT5 untuk masing-masing akun target sudah terbuka di Windows.
+    Memberikan reminder jika ada terminal yang belum dibuka manual oleh user via shortcut /portable.
     """
     if not accounts:
         return
 
     running_paths = get_running_mt5_executable_paths()
-    newly_launched = False
 
     for acc in accounts:
         path = acc.get("path", "")
         if not path or not os.path.exists(path):
             continue
 
-        if not is_terminal_running(path, running_paths):
-            print(cprint(f"🚀 [AUTO-LAUNCHER] Membuka jendela MT5 untuk {acc['name']} ({acc['key']})...", Colors.YELLOW))
-            try:
-                # Buka executable MT5
-                subprocess.Popen([path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                newly_launched = True
-            except Exception as e:
-                print(cprint(f"❌ Gagal meluncurkan {path}: {e}", Colors.RED))
+        if is_terminal_running(path, running_paths):
+            print(cprint(f"✅ [TERMINAL READY] {acc['name']} ({acc['key']}) aktif & terhubung di Windows.", Colors.GREEN))
         else:
-            print(cprint(f"✅ [AUTO-LAUNCHER] Terminal {acc['name']} ({acc['key']}) sudah aktif di Windows.", Colors.GREEN))
-
-    # Jika ada terminal yang baru dibuka, beri jeda agar aplikasi loading sempurna
-    if newly_launched:
-        print(cprint("⏳ Menunggu 4 detik agar jendela MT5 yang baru dibuka selesai inisialisasi...", Colors.CYAN))
-        time.sleep(4)
+            print(cprint(f"ℹ️ [INFO] Terminal {acc['name']} ({acc['key']}) belum dibuka. Harap buka shortcut Desktop /portable agar selalu standby.", Colors.YELLOW))
