@@ -6,8 +6,6 @@ from datetime import datetime
 import MetaTrader5 as mt5
 
 from database.supabase_client import execute_supabase
-from database.supabase_storage import upload_screenshot
-from mt5_client.visualizer import generate_screenshot
 from config.mt5_config import MT5Config, EMAConfig
 from utils.colors import cprint, Colors
 
@@ -83,8 +81,11 @@ def send_mrcv_wa_notif(
     t.start()
 
 def generate_and_upload_mrcv_screenshot(symbol: str, state) -> str:
-    """Generates screenshot menggunakan TF M5 dan mengunggah ke Supabase Storage."""
+    """Generates screenshot menggunakan TF M5 dan mengunggah ke Supabase Storage (Lazy Load)."""
     try:
+        from mt5_client.visualizer import generate_screenshot
+        from database.supabase_storage import upload_screenshot
+
         tf_label = os.getenv("MRCV_TIMEFRAME", "M5")
         mt5_cfg = MT5Config()
         tf_const = mt5_cfg.get_mt5_timeframe(tf_label)

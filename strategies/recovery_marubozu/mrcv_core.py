@@ -1,6 +1,5 @@
 import os
 import MetaTrader5 as mt5
-from indicatorInfo.triggerInfo.scanner.patterns.marubozu import MarubozuPattern
 from utils.colors import Colors, cprint
 from strategies.strategy_rcs.rcs_order_manager import (
     send_market_order_rcs, 

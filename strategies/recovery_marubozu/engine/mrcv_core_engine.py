@@ -1,11 +1,11 @@
 import os
 import time
+import gc
 import MetaTrader5 as mt5
 
 from utils.colors import Colors, cprint
 from mt5_client import init_mt5, get_closed_candles
 from config.mt5_config import MT5Config
-from indicatorInfo.triggerInfo.scanner.patterns.marubozu import MarubozuPattern
 
 from strategies.strategy_rcs.rcs_state import RCSState
 from strategies.strategy_rcs.rcs_order_manager import (
@@ -30,6 +30,27 @@ from strategies.recovery_marubozu.notifications.wa_events import (
     notify_mrcv_max_loss_close_all
 )
 
+class LightweightMarubozuDetector:
+    """Deteksi Marubozu candle pattern (candle dengan body besar, shadow kecil) tanpa load library berat."""
+    @property
+    def min_body_pct(self) -> float:
+        return float(os.getenv("SCANNER_MARUBOZU_MIN_BODY_PCT", "90"))
+
+    def detect(self, candle_data: dict, rates: list = None, point: float = 0.0) -> list:
+        body_pct = candle_data.get("body_pct", 0)
+        if body_pct < self.min_body_pct:
+            return []
+
+        c1_close, c1_open = candle_data["close_"], candle_data["open_"]
+
+        if c1_close > c1_open:
+            c1_pips = int(round((c1_close - candle_data["low_"]) / point)) if point > 0 else 0
+            return [("BUY", {"body_pct": round(body_pct, 1), "c1_pips": c1_pips})]
+        if c1_close < c1_open:
+            c1_pips = int(round((candle_data["high_"] - c1_close) / point)) if point > 0 else 0
+            return [("SELL", {"body_pct": round(body_pct, 1), "c1_pips": c1_pips})]
+        return []
+
 class MRCVEngine:
     def __init__(self):
         self.symbol = os.getenv("MRCV_SYMBOL", "BTC")
@@ -46,12 +67,13 @@ class MRCVEngine:
         
         self.mrcv_state = MRCVState()
         self.rcs_state = RCSState()
-        self.pattern_detector = MarubozuPattern()
+        self.pattern_detector = LightweightMarubozuDetector()
         
         self.last_hedge_status = False
         self.is_paused_by_hanging = False
         self.is_cutloss_locked = False
         self.mrcv_group_jid = os.getenv("MRCV_GROUP_JID", "120363430592783067@g.us")
+        self._last_rcs_mtime = 0.0
         
     def setup(self):
         mt5_cfg = MT5Config()
@@ -153,10 +175,15 @@ class MRCVEngine:
             return
             
         from mt5_client.autotrading_guard import check_and_notify_autotrading_change
+        gc_counter = 0
         while True:
             try:
                 check_and_notify_autotrading_change("MRCV")
                 self.process_tick()
+                gc_counter += 1
+                if gc_counter >= 60:
+                    gc.collect()
+                    gc_counter = 0
                 time.sleep(1)
             except KeyboardInterrupt:
                 stop_msg = (
@@ -172,6 +199,20 @@ class MRCVEngine:
                 print(cprint(f"⚠️ Error di MRCV loop: {e}", Colors.RED))
                 time.sleep(5)
 
+    def _reload_rcs_state_if_modified(self):
+        """Memuat state rcs dari file hanya jika file di-update/berubah (hemat I/O & RAM)."""
+        filename = f"rcs_state_{self.symbol}.json"
+        if os.path.exists(filename):
+            try:
+                mtime = os.path.getmtime(filename)
+                if mtime != self._last_rcs_mtime:
+                    self._last_rcs_mtime = mtime
+                    self.rcs_state.load_from_file(self.symbol)
+            except Exception:
+                pass
+        else:
+            self.rcs_state.load_from_file(self.symbol)
+
     def process_tick(self):
         is_enabled = os.getenv("MRCV_ENABLED", "true").lower() == "true"
         wait_for_hedge = os.getenv("MRCV_WAIT_FOR_RCS_HEDGE", "true").lower() == "true"
@@ -182,7 +223,7 @@ class MRCVEngine:
             time.sleep(4)
             return
             
-        self.rcs_state.load_from_file(self.symbol)
+        self._reload_rcs_state_if_modified()
         rcs_positions = mt5.positions_get(symbol=self.symbol)
         is_rcs_hedge = False
         rcs_floating = 0.0
