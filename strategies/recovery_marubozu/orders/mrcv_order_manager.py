@@ -9,6 +9,13 @@ def close_all_positions(symbol: str, magics: list[int]):
     Fungsi ini ditangani secara eksklusif oleh MRCV agar tidak terjadi bentrok
     dengan siklus harian RCS.
     """
+    import os
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import close_multi_account_all_positions
+        cnt = close_multi_account_all_positions("MRCV", symbol, magics)
+        print(cprint(f"✅ [MRCV Multi-Account] Close ALL selesai. Total order/posisi ditutup: {cnt}", Colors.GREEN))
+        return
+
     print(cprint(f"🧹 [MRCV] Memulai eksekusi CLOSE ALL untuk symbol {symbol}...", Colors.YELLOW))
     max_retries = 3
     

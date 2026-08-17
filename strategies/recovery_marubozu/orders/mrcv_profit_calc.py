@@ -4,6 +4,11 @@ from utils.colors import Colors, cprint
 from strategies.recovery_marubozu.state.mrcv_state import MRCVState
 
 def get_positions_profit(symbol: str, magics: list[int]) -> float:
+    import os
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import get_multi_account_positions_profit
+        return get_multi_account_positions_profit("MRCV", symbol, magics)
+
     positions = mt5.positions_get(symbol=symbol)
     if not positions:
         return 0.0
@@ -51,13 +56,32 @@ def get_closed_profit(ticket: int) -> float:
     print(cprint(f"❌ [CRITICAL WARNING] Gagal mengambil profit history untuk ticket #{ticket} setelah 15x retry! MT5 Lagging parah. Mengembalikan $0.00.", Colors.RED))
     return 0.0
 
-def calculate_mrcv_cycle_profit(state: MRCVState) -> tuple[float, float, float]:
+def calculate_mrcv_cycle_profit(state: MRCVState, symbol: str = "BTC") -> tuple[float, float, float]:
     """
     Hitung total profit aktual dari seluruh ticket OP MRCV (OP1, OP2, OP3) pada siklus ini.
     Returns: (total_profit, prof_op1, prof_op2)
     """
     time.sleep(0.3) # Tunggu settlement MT5
     
+    import os
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import get_multi_account_cycle_profit
+        tickets_dict = dict(getattr(state, 'multi_account_tickets', {}))
+        if "ACC1" not in tickets_dict and state.op1_ticket:
+            tickets_dict["ACC1"] = [state.op1_ticket]
+        elif state.op1_ticket and state.op1_ticket not in tickets_dict.get("ACC1", []):
+            tickets_dict.setdefault("ACC1", []).append(state.op1_ticket)
+        if state.op2_ticket:
+            for k in list(tickets_dict.keys()):
+                if state.op2_ticket not in tickets_dict[k]: tickets_dict[k].append(state.op2_ticket)
+        if state.op3_ticket:
+            for k in list(tickets_dict.keys()):
+                if state.op3_ticket not in tickets_dict[k]: tickets_dict[k].append(state.op3_ticket)
+
+        multi_pnl = get_multi_account_cycle_profit("MRCV", symbol, tickets_dict)
+        tot = multi_pnl.get("total_profit", 0.0)
+        return tot, tot, 0.0
+
     prof1 = get_closed_profit(state.op1_ticket) if state.op1_ticket else 0.0
     prof2 = get_closed_profit(state.op2_ticket) if state.op2_ticket and state.op2_filled else 0.0
     prof3 = get_closed_profit(state.op3_ticket) if state.op3_ticket and state.op3_filled else 0.0

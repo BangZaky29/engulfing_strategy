@@ -821,3 +821,355 @@ def get_multi_account_cycle_profit(strategy_name: str, symbol: str, tickets_per_
         "accounts": sorted_accounts,
         "total_profit": round(total_profit, 2)
     }
+
+def _worker_check_account_tickets_active(acc_info: dict, symbol: str, tickets: list[int]) -> dict:
+    """Worker sub-process untuk memeriksa apakah ada tiket dari list yang masih aktif (posisi/order) di terminal sekunder."""
+    import MetaTrader5 as mt5_worker
+    import os
+
+    path = acc_info.get("path", "")
+    if path and os.path.exists(path):
+        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
+    else:
+        init_ok = mt5_worker.initialize(timeout=15000)
+
+    if not init_ok:
+        return {
+            "key": acc_info['key'],
+            "connected": False,
+            "active_tickets": tickets,
+            "has_active": len(tickets) > 0,
+            "positions_map": {},
+            "orders_map": {}
+        }
+
+    positions = mt5_worker.positions_get(symbol=symbol)
+    orders = mt5_worker.orders_get(symbol=symbol)
+
+    active_tickets = []
+    pos_map = {}
+    ord_map = {}
+
+    tkt_set = set(tickets) if tickets else set()
+    if positions:
+        for p in positions:
+            if not tkt_set or p.ticket in tkt_set:
+                active_tickets.append(p.ticket)
+                pos_map[p.ticket] = {
+                    "ticket": p.ticket,
+                    "price_open": p.price_open,
+                    "profit": p.profit,
+                    "type": p.type,
+                    "volume": p.volume
+                }
+    if orders:
+        for o in orders:
+            if not tkt_set or o.ticket in tkt_set:
+                if o.ticket not in active_tickets:
+                    active_tickets.append(o.ticket)
+                ord_map[o.ticket] = {
+                    "ticket": o.ticket,
+                    "price_open": o.price_open,
+                    "state": o.state,
+                    "type": o.type,
+                    "volume": o.volume
+                }
+
+    mt5_worker.shutdown()
+    return {
+        "key": acc_info['key'],
+        "connected": True,
+        "active_tickets": active_tickets,
+        "has_active": len(active_tickets) > 0,
+        "positions_map": pos_map,
+        "orders_map": ord_map
+    }
+
+def check_multi_account_tickets_active(strategy_name: str, symbol: str, tickets_per_account: dict) -> dict:
+    """
+    Memeriksa status aktif (posisi/order) dari tiket-tiket di seluruh akun target.
+    tickets_per_account: dict misal {"ACC2": [1000730011, 1000730133]}
+    """
+    accounts = get_target_accounts(strategy_name)
+    if not accounts:
+        local_pos = mt5.positions_get(symbol=symbol)
+        local_ord = mt5.orders_get(symbol=symbol)
+        all_tkt = []
+        for t_list in tickets_per_account.values():
+            all_tkt.extend(t_list)
+        tkt_set = set(all_tkt) if all_tkt else set()
+        active = []
+        pos_map = {}
+        ord_map = {}
+        if local_pos:
+            for p in local_pos:
+                if not tkt_set or p.ticket in tkt_set:
+                    active.append(p.ticket)
+                    pos_map[p.ticket] = {"ticket": p.ticket, "price_open": p.price_open, "profit": p.profit, "type": p.type, "volume": p.volume}
+        if local_ord:
+            for o in local_ord:
+                if not tkt_set or o.ticket in tkt_set:
+                    if o.ticket not in active: active.append(o.ticket)
+                    ord_map[o.ticket] = {"ticket": o.ticket, "price_open": o.price_open, "state": o.state, "type": o.type, "volume": o.volume}
+        return {
+            "has_active": len(active) > 0,
+            "accounts": {"ACC1": {"active_tickets": active, "positions_map": pos_map, "orders_map": ord_map}}
+        }
+
+    local_acc = None
+    worker_accounts = []
+    for acc in accounts:
+        if acc['key'] == 'ACC1':
+            local_acc = acc
+        else:
+            worker_accounts.append(acc)
+
+    results_map = {}
+    overall_has_active = False
+
+    # 1. Check local ACC1 if targeted
+    if local_acc:
+        tkts = tickets_per_account.get('ACC1', [])
+        tkt_set = set(tkts) if tkts else set()
+        local_pos = mt5.positions_get(symbol=symbol)
+        local_ord = mt5.orders_get(symbol=symbol)
+        active = []
+        pos_map = {}
+        ord_map = {}
+        if local_pos:
+            for p in local_pos:
+                if not tkt_set or p.ticket in tkt_set:
+                    active.append(p.ticket)
+                    pos_map[p.ticket] = {"ticket": p.ticket, "price_open": p.price_open, "profit": p.profit, "type": p.type, "volume": p.volume}
+        if local_ord:
+            for o in local_ord:
+                if not tkt_set or o.ticket in tkt_set:
+                    if o.ticket not in active: active.append(o.ticket)
+                    ord_map[o.ticket] = {"ticket": o.ticket, "price_open": o.price_open, "state": o.state, "type": o.type, "volume": o.volume}
+        
+        has_act = len(active) > 0
+        if has_act: overall_has_active = True
+        results_map['ACC1'] = {
+            "key": 'ACC1',
+            "connected": True,
+            "active_tickets": active,
+            "has_active": has_act,
+            "positions_map": pos_map,
+            "orders_map": ord_map
+        }
+
+    # 2. Check worker accounts
+    if worker_accounts:
+        with ProcessPoolExecutor(max_workers=len(worker_accounts)) as executor:
+            future_to_acc = {
+                executor.submit(
+                    _worker_check_account_tickets_active,
+                    acc,
+                    symbol,
+                    tickets_per_account.get(acc['key'], [])
+                ): acc for acc in worker_accounts
+            }
+            for fut in as_completed(future_to_acc):
+                acc = future_to_acc[fut]
+                try:
+                    res = fut.result()
+                    results_map[acc['key']] = res
+                    if res.get("has_active"):
+                        overall_has_active = True
+                except Exception as exc:
+                    print(cprint(f"⚠️ Error check worker tickets {acc['key']}: {exc}", Colors.RED))
+                    overall_has_active = True
+                    results_map[acc['key']] = {
+                        "key": acc['key'],
+                        "connected": False,
+                        "active_tickets": tickets_per_account.get(acc['key'], []),
+                        "has_active": True,
+                        "positions_map": {},
+                        "orders_map": {}
+                    }
+
+    return {
+        "has_active": overall_has_active,
+        "accounts": results_map
+    }
+
+def _worker_close_all_positions(acc_info: dict, symbol: str, magic_numbers: list[int]) -> int:
+    """Worker sub-process untuk mengeksekusi CLOSE ALL posisi & pending order pada terminal sekunder."""
+    import MetaTrader5 as mt5_worker
+    import os
+
+    path = acc_info.get("path", "")
+    if path and os.path.exists(path):
+        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
+    else:
+        init_ok = mt5_worker.initialize(timeout=15000)
+
+    if not init_ok:
+        return 0
+
+    canceled = 0
+    # 1. Close positions
+    positions = mt5_worker.positions_get(symbol=symbol)
+    if positions:
+        for p in positions:
+            if not magic_numbers or p.magic in magic_numbers:
+                action_type = mt5_worker.ORDER_TYPE_SELL if p.type == mt5_worker.ORDER_TYPE_BUY else mt5_worker.ORDER_TYPE_BUY
+                tick = mt5_worker.symbol_info_tick(symbol)
+                price = tick.bid if action_type == mt5_worker.ORDER_TYPE_SELL else tick.ask if tick else p.price_open
+                req = {
+                    "action": mt5_worker.TRADE_ACTION_DEAL,
+                    "position": p.ticket,
+                    "symbol": symbol,
+                    "volume": p.volume,
+                    "type": action_type,
+                    "price": price,
+                    "deviation": 20,
+                    "magic": p.magic,
+                    "comment": "MRCV_CLOSE_ALL",
+                    "type_time": mt5_worker.ORDER_TIME_GTC,
+                    "type_filling": mt5_worker.ORDER_FILLING_IOC
+                }
+                res = mt5_worker.order_send(req)
+                if res and res.retcode == mt5_worker.TRADE_RETCODE_DONE:
+                    canceled += 1
+
+    # 2. Cancel pending orders
+    orders = mt5_worker.orders_get(symbol=symbol)
+    if orders:
+        for o in orders:
+            if not magic_numbers or o.magic in magic_numbers:
+                req = {"action": mt5_worker.TRADE_ACTION_REMOVE, "order": o.ticket}
+                res = mt5_worker.order_send(req)
+                if res and res.retcode == mt5_worker.TRADE_RETCODE_DONE:
+                    canceled += 1
+
+    mt5_worker.shutdown()
+    return canceled
+
+def close_multi_account_all_positions(strategy_name: str, symbol: str, magic_numbers: list[int]) -> int:
+    """Mengeksekusi Close ALL posisi & pending order di seluruh akun target strategy (ACC1, ACC2, ACC3)."""
+    accounts = get_target_accounts(strategy_name)
+    if not accounts:
+        from strategies.recovery_marubozu.orders.mrcv_order_manager import close_all_positions as local_close
+        local_close(symbol, magic_numbers)
+        return 0
+
+    local_acc = None
+    worker_accounts = []
+    for acc in accounts:
+        if acc['key'] == 'ACC1':
+            local_acc = acc
+        else:
+            worker_accounts.append(acc)
+
+    total_closed = 0
+
+    # 1. Close local ACC1
+    if local_acc:
+        positions = mt5.positions_get(symbol=symbol)
+        if positions:
+            for p in positions:
+                if not magic_numbers or p.magic in magic_numbers:
+                    action_type = mt5.ORDER_TYPE_SELL if p.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
+                    tick = mt5.symbol_info_tick(symbol)
+                    price = tick.bid if action_type == mt5.ORDER_TYPE_SELL else tick.ask if tick else p.price_open
+                    req = {
+                        "action": mt5.TRADE_ACTION_DEAL,
+                        "position": p.ticket,
+                        "symbol": symbol,
+                        "volume": p.volume,
+                        "type": action_type,
+                        "price": price,
+                        "deviation": 20,
+                        "magic": p.magic,
+                        "comment": "MRCV_CLOSE_ALL",
+                        "type_time": mt5.ORDER_TIME_GTC,
+                        "type_filling": mt5.ORDER_FILLING_IOC
+                    }
+                    res = mt5.order_send(req)
+                    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                        total_closed += 1
+        orders = mt5.orders_get(symbol=symbol)
+        if orders:
+            for o in orders:
+                if not magic_numbers or o.magic in magic_numbers:
+                    req = {"action": mt5.TRADE_ACTION_REMOVE, "order": o.ticket}
+                    res = mt5.order_send(req)
+                    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                        total_closed += 1
+
+    # 2. Close worker accounts
+    if worker_accounts:
+        with ProcessPoolExecutor(max_workers=len(worker_accounts)) as executor:
+            futures = [executor.submit(_worker_close_all_positions, acc, symbol, magic_numbers) for acc in worker_accounts]
+            for fut in as_completed(futures):
+                try:
+                    total_closed += fut.result()
+                except Exception:
+                    pass
+
+    return total_closed
+
+def _worker_get_account_positions_profit(acc_info: dict, symbol: str, magic_numbers: list[int]) -> float:
+    """Worker sub-process untuk menghitung total floating profit posisi aktif pada terminal sekunder."""
+    import MetaTrader5 as mt5_worker
+    import os
+
+    path = acc_info.get("path", "")
+    if path and os.path.exists(path):
+        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
+    else:
+        init_ok = mt5_worker.initialize(timeout=15000)
+
+    if not init_ok:
+        return 0.0
+
+    positions = mt5_worker.positions_get(symbol=symbol)
+    profit = 0.0
+    if positions:
+        for p in positions:
+            if not magic_numbers or p.magic in magic_numbers:
+                profit += (p.profit + p.swap + getattr(p, 'commission', 0.0))
+
+    mt5_worker.shutdown()
+    return profit
+
+def get_multi_account_positions_profit(strategy_name: str, symbol: str, magic_numbers: list[int]) -> float:
+    """Menghitung total floating profit posisi aktif dari seluruh akun target."""
+    accounts = get_target_accounts(strategy_name)
+    if not accounts:
+        positions = mt5.positions_get(symbol=symbol)
+        if not positions: return 0.0
+        return sum(p.profit + p.swap + getattr(p, 'commission', 0.0) for p in positions if not magic_numbers or p.magic in magic_numbers)
+
+    local_acc = None
+    worker_accounts = []
+    for acc in accounts:
+        if acc['key'] == 'ACC1':
+            local_acc = acc
+        else:
+            worker_accounts.append(acc)
+
+    total_floating = 0.0
+
+    # 1. Local ACC1
+    if local_acc:
+        positions = mt5.positions_get(symbol=symbol)
+        if positions:
+            for p in positions:
+                if not magic_numbers or p.magic in magic_numbers:
+                    total_floating += (p.profit + p.swap + getattr(p, 'commission', 0.0))
+
+    # 2. Worker accounts
+    if worker_accounts:
+        with ProcessPoolExecutor(max_workers=len(worker_accounts)) as executor:
+            futures = [executor.submit(_worker_get_account_positions_profit, acc, symbol, magic_numbers) for acc in worker_accounts]
+            for fut in as_completed(futures):
+                try:
+                    total_floating += fut.result()
+                except Exception:
+                    pass
+
+    return round(total_floating, 2)
+
+

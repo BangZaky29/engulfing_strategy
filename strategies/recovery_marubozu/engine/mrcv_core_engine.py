@@ -216,6 +216,7 @@ class MRCVEngine:
     def process_tick(self):
         is_enabled = os.getenv("MRCV_ENABLED", "true").lower() == "true"
         wait_for_hedge = os.getenv("MRCV_WAIT_FOR_RCS_HEDGE", "true").lower() == "true"
+        is_multi = os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true"
         
         if not is_enabled:
             if self.last_hedge_status:
@@ -224,24 +225,40 @@ class MRCVEngine:
             return
             
         self._reload_rcs_state_if_modified()
-        rcs_positions = mt5.positions_get(symbol=self.symbol)
+        
         is_rcs_hedge = False
         rcs_floating = 0.0
         rcs_total_positions = 0
-        
-        if rcs_positions:
+
+        if is_multi:
+            from mt5_client.multi_account_dispatcher import get_multi_account_positions_profit, check_multi_account_tickets_active
+            rcs_floating = get_multi_account_positions_profit("RCS", self.symbol, self.rcs_magics)
+            ma_status = check_multi_account_tickets_active("RCS", self.symbol, {})
             rcs_buy = 0
             rcs_sell = 0
-            for p in rcs_positions:
-                if p.magic in self.rcs_magics:
-                    rcs_floating += p.profit
+            for acc_k, acc_v in ma_status.get("accounts", {}).items():
+                for p_id, p_info in acc_v.get("positions_map", {}).items():
                     rcs_total_positions += 1
-                    if p.type == mt5.ORDER_TYPE_BUY:
-                        rcs_buy += 1
-                    elif p.type == mt5.ORDER_TYPE_SELL:
-                        rcs_sell += 1
+                    p_type = p_info.get("type")
+                    if p_type == mt5.ORDER_TYPE_BUY or p_type == 0: rcs_buy += 1
+                    elif p_type == mt5.ORDER_TYPE_SELL or p_type == 1: rcs_sell += 1
             if rcs_buy > 0 and rcs_sell > 0:
                 is_rcs_hedge = True
+        else:
+            rcs_positions = mt5.positions_get(symbol=self.symbol)
+            if rcs_positions:
+                rcs_buy = 0
+                rcs_sell = 0
+                for p in rcs_positions:
+                    if p.magic in self.rcs_magics:
+                        rcs_floating += p.profit
+                        rcs_total_positions += 1
+                        if p.type == mt5.ORDER_TYPE_BUY:
+                            rcs_buy += 1
+                        elif p.type == mt5.ORDER_TYPE_SELL:
+                            rcs_sell += 1
+                if rcs_buy > 0 and rcs_sell > 0:
+                    is_rcs_hedge = True
                 
         if wait_for_hedge:
             if not self.last_hedge_status and is_rcs_hedge:
@@ -329,36 +346,69 @@ class MRCVEngine:
             self.handle_idle_phase(wait_for_hedge)
 
     def handle_active_phase(self, rcs_floating: float, wait_for_hedge: bool):
-        positions = mt5.positions_get(symbol=self.symbol)
+        is_multi = os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true"
         op1_active = False
         op2_active = False
         op3_active = False
         op2_pos = None
         op3_pos = None
         
-        if positions:
-            for p in positions:
-                if p.ticket == self.mrcv_state.op1_ticket:
-                    op1_active = True
-                if p.ticket == self.mrcv_state.op2_ticket:
-                    op2_active = True
-                    op2_pos = p
-                if p.ticket == self.mrcv_state.op3_ticket:
-                    op3_active = True
-                    op3_pos = p
+        if is_multi:
+            from mt5_client.multi_account_dispatcher import check_multi_account_tickets_active
+            tickets_dict = dict(getattr(self.mrcv_state, 'multi_account_tickets', {}))
+            if "ACC1" not in tickets_dict and self.mrcv_state.op1_ticket:
+                tickets_dict["ACC1"] = [self.mrcv_state.op1_ticket]
+            elif self.mrcv_state.op1_ticket and self.mrcv_state.op1_ticket not in tickets_dict.get("ACC1", []):
+                tickets_dict.setdefault("ACC1", []).append(self.mrcv_state.op1_ticket)
+            if self.mrcv_state.op2_ticket:
+                for k in list(tickets_dict.keys()):
+                    if self.mrcv_state.op2_ticket not in tickets_dict[k]: tickets_dict[k].append(self.mrcv_state.op2_ticket)
+            if self.mrcv_state.op3_ticket:
+                for k in list(tickets_dict.keys()):
+                    if self.mrcv_state.op3_ticket not in tickets_dict[k]: tickets_dict[k].append(self.mrcv_state.op3_ticket)
+
+            ma_status = check_multi_account_tickets_active("MRCV", self.symbol, tickets_dict)
+            all_pos_map = {}
+            all_ord_map = {}
+            for acc_k, acc_v in ma_status.get("accounts", {}).items():
+                all_pos_map.update(acc_v.get("positions_map", {}))
+                all_ord_map.update(acc_v.get("orders_map", {}))
+
+            op1_active = self.mrcv_state.op1_ticket in all_pos_map if self.mrcv_state.op1_ticket else False
+            op2_active = self.mrcv_state.op2_ticket in all_pos_map if self.mrcv_state.op2_ticket else False
+            op3_active = self.mrcv_state.op3_ticket in all_pos_map if self.mrcv_state.op3_ticket else False
+            
+            raw_pos2 = all_pos_map.get(self.mrcv_state.op2_ticket)
+            if raw_pos2:
+                op2_pos = type('PosMock', (), raw_pos2)()
+            raw_pos3 = all_pos_map.get(self.mrcv_state.op3_ticket)
+            if raw_pos3:
+                op3_pos = type('PosMock', (), raw_pos3)()
+        else:
+            positions = mt5.positions_get(symbol=self.symbol)
+            if positions:
+                for p in positions:
+                    if p.ticket == self.mrcv_state.op1_ticket:
+                        op1_active = True
+                    if p.ticket == self.mrcv_state.op2_ticket:
+                        op2_active = True
+                        op2_pos = p
+                    if p.ticket == self.mrcv_state.op3_ticket:
+                        op3_active = True
+                        op3_pos = p
                     
         # OP2 Limit Terbuka
         if op2_active and not self.mrcv_state.op2_filled and op2_pos:
             self.mrcv_state.op2_filled = True
             self.mrcv_state.save_to_file(self.symbol)
-            print(cprint(f"📉 [MRCV] OP2 LIMIT TERBUKA! Ticket #{op2_pos.ticket} di {op2_pos.price_open:.5f}", Colors.CYAN))
+            print(cprint(f"📉 [MRCV] OP2 LIMIT TERBUKA! Ticket #{op2_pos.ticket} di {getattr(op2_pos, 'price_open', 0.0):.5f}", Colors.CYAN))
             notify_mrcv_op2_filled(
                 symbol=self.symbol,
                 direction=self.mrcv_state.trigger_direction or "BUY",
                 ticket=op2_pos.ticket,
-                price=op2_pos.price_open,
+                price=getattr(op2_pos, "price_open", 0.0),
                 tp_price=self.mrcv_state.tp2_price,
-                volume=op2_pos.volume
+                volume=getattr(op2_pos, "volume", 0.01)
             )
 
         # OP3 Stop Terbuka (Hedge)
@@ -382,8 +432,8 @@ class MRCVEngine:
                 symbol=self.symbol,
                 op3_direction=op3_direction,
                 ticket=op3_pos.ticket,
-                price=op3_pos.price_open,
-                volume=op3_pos.volume,
+                price=getattr(op3_pos, "price_open", 0.0),
+                volume=getattr(op3_pos, "volume", 0.01),
                 floating_freeze=total_freeze_floating
             )
             return
@@ -396,7 +446,7 @@ class MRCVEngine:
             if self.mrcv_state.op3_ticket:
                 cancel_pending_order_rcs(self.mrcv_state.op3_ticket)
                 
-            total_prof, prof1, prof2 = calculate_mrcv_cycle_profit(self.mrcv_state)
+            total_prof, prof1, prof2 = calculate_mrcv_cycle_profit(self.mrcv_state, self.symbol)
             self.mrcv_state.cumulative_profit += total_prof
             self.mrcv_state.save_to_file(self.symbol)
             
@@ -424,7 +474,7 @@ class MRCVEngine:
                 
             cleanup_pending_orders(self.mrcv_state)
             
-            total_prof, prof1, prof2 = calculate_mrcv_cycle_profit(self.mrcv_state)
+            total_prof, prof1, prof2 = calculate_mrcv_cycle_profit(self.mrcv_state, self.symbol)
             self.mrcv_state.cumulative_profit += total_prof
             self.mrcv_state.save_to_file(self.symbol)
             
@@ -443,12 +493,19 @@ class MRCVEngine:
             self.mrcv_state.reset_cycle()
 
     def handle_freeze_phase(self):
-        positions = mt5.positions_get(symbol=self.symbol)
+        is_multi = os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true"
         mrcv_pos_count = 0
-        if positions:
-            for p in positions:
-                if p.magic in self.mrcv_magics:
-                    mrcv_pos_count += 1
+        if is_multi:
+            from mt5_client.multi_account_dispatcher import check_multi_account_tickets_active
+            ma_status = check_multi_account_tickets_active("MRCV", self.symbol, {})
+            for acc_k, acc_v in ma_status.get("accounts", {}).items():
+                mrcv_pos_count += len(acc_v.get("positions_map", {}))
+        else:
+            positions = mt5.positions_get(symbol=self.symbol)
+            if positions:
+                for p in positions:
+                    if p.magic in self.mrcv_magics:
+                        mrcv_pos_count += 1
         
         if mrcv_pos_count == 0:
             print(cprint(f"☀️ [MRCV] UNFREEZE! Seluruh posisi MRCV telah ditutup ({self.symbol}). Kembali ke IDLE.", Colors.GREEN))

@@ -218,21 +218,63 @@ class RCSEngine:
         if state.op1_ticket is None:
             return
             
-        pos1 = mt5.positions_get(ticket=state.op1_ticket)
-        ord1 = mt5.orders_get(ticket=state.op1_ticket)
-        
-        # Guard terhadap koneksi putus
-        if pos1 is None or ord1 is None:
-            err = mt5.last_error()
-            if err and err[0] != 4753:
-                return # Error koneksi, jangan lakukan aksi apa-apa
+        import os
+        is_multi = os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true"
+
+        def _get_price_open(item):
+            if isinstance(item, dict):
+                return item.get("price_open", 0.0)
+            elif hasattr(item, "price_open"):
+                return item.price_open
+            return 0.0
+
+        if is_multi:
+            from mt5_client.multi_account_dispatcher import check_multi_account_tickets_active
+            tickets_dict = dict(getattr(state, 'multi_account_tickets', {}))
+            if "ACC1" not in tickets_dict and state.op1_ticket:
+                tickets_dict["ACC1"] = [state.op1_ticket]
+            elif state.op1_ticket and state.op1_ticket not in tickets_dict.get("ACC1", []):
+                tickets_dict.setdefault("ACC1", []).append(state.op1_ticket)
+            if state.op2_ticket:
+                for k in list(tickets_dict.keys()):
+                    if state.op2_ticket not in tickets_dict[k]: tickets_dict[k].append(state.op2_ticket)
+            if state.op3_ticket:
+                for k in list(tickets_dict.keys()):
+                    if state.op3_ticket not in tickets_dict[k]: tickets_dict[k].append(state.op3_ticket)
+
+            ma_status = check_multi_account_tickets_active("RCS", symbol, tickets_dict)
+            all_pos_map = {}
+            all_ord_map = {}
+            for acc_k, acc_v in ma_status.get("accounts", {}).items():
+                all_pos_map.update(acc_v.get("positions_map", {}))
+                all_ord_map.update(acc_v.get("orders_map", {}))
+
+            pos1 = [all_pos_map[state.op1_ticket]] if state.op1_ticket in all_pos_map else []
+            ord1 = [all_ord_map[state.op1_ticket]] if state.op1_ticket in all_ord_map else []
+            pos2 = [all_pos_map[state.op2_ticket]] if state.op2_ticket and state.op2_ticket in all_pos_map else []
+            ord2 = [all_ord_map[state.op2_ticket]] if state.op2_ticket and state.op2_ticket in all_ord_map else []
+            pos3 = [all_pos_map[state.op3_ticket]] if state.op3_ticket and state.op3_ticket in all_pos_map else []
+            ord3 = [all_ord_map[state.op3_ticket]] if state.op3_ticket and state.op3_ticket in all_ord_map else []
+        else:
+            pos1 = mt5.positions_get(ticket=state.op1_ticket)
+            ord1 = mt5.orders_get(ticket=state.op1_ticket)
+            
+            # Guard terhadap koneksi putus
+            if pos1 is None or ord1 is None:
+                err = mt5.last_error()
+                if err and err[0] != 4753:
+                    return # Error koneksi, jangan lakukan aksi apa-apa
+            
+            pos2 = mt5.positions_get(ticket=state.op2_ticket) if state.op2_ticket else []
+            ord2 = mt5.orders_get(ticket=state.op2_ticket) if state.op2_ticket else []
+            pos3 = mt5.positions_get(ticket=state.op3_ticket) if state.op3_ticket else []
+            ord3 = mt5.orders_get(ticket=state.op3_ticket) if state.op3_ticket else []
         
         if not pos1 and not ord1:
             print(cprint(f"👻 OP1 (Tkt:{state.op1_ticket}) hilang dari market {symbol} (TP/SL Hit atau Cancel).", Colors.YELLOW))
             
             # 1. Batalkan seluruh pending order OP2 & OP3 di SEMUA akun target (ACC1, ACC2, ACC3)
-            import os
-            if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+            if is_multi:
                 from mt5_client.multi_account_dispatcher import cancel_multi_account_pending_orders, get_multi_account_cycle_profit
                 cancel_multi_account_pending_orders("RCS", symbol, [rcs_cfg.magic_op2, rcs_cfg.magic_op3])
                 
@@ -257,16 +299,10 @@ class RCSEngine:
             
         # Cek transisi OP2 dari Order menjadi Position
         if state.op2_ticket and not state.op2_notified:
-            pos2 = mt5.positions_get(ticket=state.op2_ticket)
-            ord2 = mt5.orders_get(ticket=state.op2_ticket)
-            if pos2 is None or ord2 is None:
-                err = mt5.last_error()
-                if err and err[0] != 4753: return
-
             if pos2 and not ord2:
                 state.op2_notified = True
                 state.op2_filled = True
-                op2_open_price = pos2[0].price_open
+                op2_open_price = _get_price_open(pos2[0])
                 
                 if rcs_cfg.op2_mode == "HEDGE":
                     if state.op1_ticket: remove_tp_from_position(state.op1_ticket)
@@ -281,19 +317,16 @@ class RCSEngine:
                     
         # Cek jika OP2 pernah aktif lalu menyentuh TP2
         if state.op2_ticket and state.op2_notified and state.phase != RCSPhase.FREEZE:
-            pos2 = mt5.positions_get(ticket=state.op2_ticket)
-            if pos2 is None:
-                err = mt5.last_error()
-                if err and err[0] != 4753: return
-
             if not pos2:
                 print(cprint(f"🎯 OP2 menyentuh TP2 ({symbol})! Menutup sisa posisi OP1...", Colors.GREEN))
                 if state.op1_ticket:
-                    pos1_check = mt5.positions_get(ticket=state.op1_ticket)
-                    if pos1_check: close_position_by_ticket(state.op1_ticket)
+                    if is_multi:
+                        pass # Sisa posisi OP1 akan diproses di multi-account / broker side
+                    else:
+                        pos1_check = mt5.positions_get(ticket=state.op1_ticket)
+                        if pos1_check: close_position_by_ticket(state.op1_ticket)
                     
-                import os
-                if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+                if is_multi:
                     from mt5_client.multi_account_dispatcher import cancel_multi_account_pending_orders, get_multi_account_cycle_profit
                     cancel_multi_account_pending_orders("RCS", symbol, [rcs_cfg.magic_op3])
                     
@@ -319,12 +352,6 @@ class RCSEngine:
 
         # Cek transisi OP3 dari Order menjadi Position
         if state.op3_ticket and state.phase != RCSPhase.FREEZE:
-            pos3 = mt5.positions_get(ticket=state.op3_ticket)
-            ord3 = mt5.orders_get(ticket=state.op3_ticket)
-            if pos3 is None or ord3 is None:
-                err = mt5.last_error()
-                if err and err[0] != 4753: return
-
             if pos3 and not ord3:
                 state.op3_filled = True
                 if state.op1_ticket: remove_tp_from_position(state.op1_ticket)
