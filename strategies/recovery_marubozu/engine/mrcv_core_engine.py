@@ -50,6 +50,7 @@ class MRCVEngine:
         
         self.last_hedge_status = False
         self.is_paused_by_hanging = False
+        self.is_cutloss_locked = False
         self.mrcv_group_jid = os.getenv("MRCV_GROUP_JID", "120363430592783067@g.us")
         
     def setup(self):
@@ -225,8 +226,17 @@ class MRCVEngine:
                 close_all_positions(self.symbol, self.all_magics)
                 self.mrcv_state.reset_all(self.symbol)
                 self.rcs_state.reset(self.symbol)
+
+                mrcv_loss_lock = os.getenv("MRCV_LOSS_LOCK_ENABLED", "true").lower() == "true"
+                if mrcv_loss_lock:
+                    self.is_cutloss_locked = True
+                    print(cprint(f"🔒 [MRCV LOCKOUT] Eksekusi OP dikunci (Standby monitoring).", Colors.YELLOW))
                 time.sleep(1)
                 return
+
+        if self.is_cutloss_locked:
+            # Info & monitoring tetap jalan, namun eksekusi OP baru diblokir
+            return
 
         # CEK SIKLUS MRCV
         if self.mrcv_state.phase == MRCVPhase.ACTIVE:

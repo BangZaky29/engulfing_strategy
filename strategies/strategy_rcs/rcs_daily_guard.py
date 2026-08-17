@@ -29,21 +29,21 @@ def get_rcs_today_closed_pnl(config: RCSConfig) -> float:
 
 def check_rcs_daily_target(config: RCSConfig) -> tuple[bool, str]:
     """
-    Cek apakah target profit/loss harian RCS sudah tersentuh.
+    Cek apakah limit loss harian RCS sudah tersentuh.
+    Catatan: HANYA Limit Loss Harian yang mematikan/mengunci eksekusi OP.
+    Target Profit tidak mematikan eksekusi OP.
     Return (is_allowed, reason).
     """
     if not config.rcs_daily_target_enabled:
         return True, ""
 
-    today_pnl = get_rcs_today_closed_pnl(config)
-    from mt5_client.money_management import get_scaled_max_loss
-    scaled_loss_limit = abs(get_scaled_max_loss(-config.rcs_daily_loss_target_usd, config.lot_size_op1))
-
-    if today_pnl >= config.rcs_daily_profit_target_usd:
+    profit_lock_enabled = os.getenv("RCS_DAILY_PROFIT_LOCK_ENABLED", "false").lower() == "true"
+    if profit_lock_enabled and today_pnl >= config.rcs_daily_profit_target_usd:
         msg = f"🏆 TARGET PROFIT HARIAN TERCAPAI! PnL Hari ini (${today_pnl:.2f}) >= Target (+${config.rcs_daily_profit_target_usd:.2f})"
         return False, msg
 
-    if today_pnl <= -scaled_loss_limit:
+    loss_lock_enabled = os.getenv("RCS_DAILY_LOSS_LOCK_ENABLED", "true").lower() == "true"
+    if loss_lock_enabled and today_pnl <= -scaled_loss_limit:
         msg = f"🛑 LIMIT LOSS HARIAN TERSENTUH! PnL Hari ini (${today_pnl:.2f}) <= Limit (-${scaled_loss_limit:.2f})"
         return False, msg
 
