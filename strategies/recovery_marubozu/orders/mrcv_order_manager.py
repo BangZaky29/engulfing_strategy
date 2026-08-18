@@ -24,7 +24,7 @@ def close_all_positions(symbol: str, magics: list[int]):
         active_pos_count = 0
         if positions:
             for p in positions:
-                if p.magic in magics:
+                if not magics or p.magic in magics:
                     active_pos_count += 1
                     close_position_rcs(p.symbol, p, p.magic, "MRCV_CLOSE_ALL")
                     
@@ -33,7 +33,7 @@ def close_all_positions(symbol: str, magics: list[int]):
         active_order_count = 0
         if orders:
             for o in orders:
-                if o.magic in magics:
+                if not magics or o.magic in magics:
                     active_order_count += 1
                     cancel_pending_order_rcs(o.ticket)
                     
@@ -50,8 +50,8 @@ def close_all_positions(symbol: str, magics: list[int]):
         positions_now = mt5.positions_get(symbol=symbol)
         orders_now = mt5.orders_get(symbol=symbol)
         
-        remaining_pos = [p for p in positions_now if p.magic in magics] if positions_now else []
-        remaining_ord = [o for o in orders_now if o.magic in magics] if orders_now else []
+        remaining_pos = [p for p in positions_now if not magics or p.magic in magics] if positions_now else []
+        remaining_ord = [o for o in orders_now if not magics or o.magic in magics] if orders_now else []
         
         if len(remaining_pos) == 0 and len(remaining_ord) == 0:
             return

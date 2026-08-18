@@ -57,7 +57,7 @@ class MRCVEngine:
         self.tf_str = os.getenv("MRCV_TIMEFRAME", "M5")
         
         self.mrcv_magic = int(os.getenv("MRCV_MAGIC_NUMBER", "999000"))
-        self.mrcv_magics = [self.mrcv_magic]
+        self.mrcv_magics = [self.mrcv_magic, self.mrcv_magic + 1, self.mrcv_magic + 2]
         
         self.rcs_magics = [901001, 901002, 901003]
         if self.symbol == "NASDAQ-100":
@@ -305,13 +305,14 @@ class MRCVEngine:
                 if profit_jid:
                     send_mrcv_wa_notif(success_msg, "MRCV_SUCCESS", target_jid=profit_jid, include_header=False)
 
-                close_all_positions(self.symbol, self.all_magics)
+                close_all_positions(self.symbol, None)
                 self.mrcv_state.reset_all(self.symbol)
                 self.rcs_state.reset(self.symbol)
                 time.sleep(1)
                 return
 
-            if total_net <= max_loss:
+            is_cutloss_enabled = os.getenv("MRCV_CUTLOSS_ENABLED", "true").lower() == "true"
+            if is_cutloss_enabled and total_net <= max_loss:
                 print(cprint(f"🛑 [MRCV EMERGENCY CUTLOSS] Batas Max Loss Tercapai! Total Net: {total_net:+.2f} <= {max_loss:.2f}. Melakukan Close ALL.", Colors.RED))
                 notify_mrcv_max_loss_close_all(
                     symbol=self.symbol,
@@ -322,7 +323,7 @@ class MRCVEngine:
                     cumulative_profit=self.mrcv_state.cumulative_profit
                 )
 
-                close_all_positions(self.symbol, self.all_magics)
+                close_all_positions(self.symbol, None)
                 self.mrcv_state.reset_all(self.symbol)
                 self.rcs_state.reset(self.symbol)
 
