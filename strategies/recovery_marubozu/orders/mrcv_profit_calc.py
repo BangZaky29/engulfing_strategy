@@ -40,7 +40,7 @@ def get_closed_profit(ticket: int) -> float:
         time.sleep(0.25)
 
     # Fallback ke time-based history query jika position=ticket masih belum terindeks
-    now = time.time()
+    now = int(time.time())
     deals = mt5.history_deals_get(now - 86400, now + 3600)
     if deals:
         total_net = 0.0
@@ -67,16 +67,6 @@ def calculate_mrcv_cycle_profit(state: MRCVState, symbol: str = "BTC") -> tuple[
     if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
         from mt5_client.multi_account_dispatcher import get_multi_account_cycle_profit
         tickets_dict = dict(getattr(state, 'multi_account_tickets', {}))
-        if "ACC1" not in tickets_dict and state.op1_ticket:
-            tickets_dict["ACC1"] = [state.op1_ticket]
-        elif state.op1_ticket and state.op1_ticket not in tickets_dict.get("ACC1", []):
-            tickets_dict.setdefault("ACC1", []).append(state.op1_ticket)
-        if state.op2_ticket:
-            for k in list(tickets_dict.keys()):
-                if state.op2_ticket not in tickets_dict[k]: tickets_dict[k].append(state.op2_ticket)
-        if state.op3_ticket:
-            for k in list(tickets_dict.keys()):
-                if state.op3_ticket not in tickets_dict[k]: tickets_dict[k].append(state.op3_ticket)
 
         multi_pnl = get_multi_account_cycle_profit("MRCV", symbol, tickets_dict)
         tot = multi_pnl.get("total_profit", 0.0)

@@ -17,9 +17,34 @@ def init_mt5(cfg: MT5Config | None = None) -> bool:
         cfg = MT5Config()
 
     import os
+    from utils.colors import cprint, Colors
+    
     path = os.getenv("ACC1_PATH", "")
+    is_portable = True
+
+    # --- Dynamic Single-Account Optimization ---
+    is_multi = os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true"
+    if is_multi:
+        accounts_str = os.getenv("ACCOUNTS_LIST", "ACC1")
+        rcs_targets = os.getenv("RCS_TARGET_ACCOUNTS", accounts_str)
+        mrcv_targets = os.getenv("MRCV_TARGET_ACCOUNTS", accounts_str)
+        
+        rcs_list = [x.strip() for x in rcs_targets.split(",") if x.strip()]
+        mrcv_list = [x.strip() for x in mrcv_targets.split(",") if x.strip()]
+        
+        unique_targets = set(rcs_list + mrcv_list)
+        
+        if len(unique_targets) == 1:
+            target_acc = list(unique_targets)[0]
+            target_path = os.getenv(f"{target_acc}_PATH", "")
+            if target_path and os.path.exists(target_path):
+                path = target_path
+                print(cprint(f"⚡ [OPTIMASI] Deteksi single-account target ({target_acc}). Dispatcher dimatikan, koneksi beralih langsung (Zero-Delay Mode)!", Colors.GREEN))
+                os.environ["MULTI_ACCOUNT_ENABLED"] = "false"
+    # -------------------------------------------
+
     if path and os.path.exists(path):
-        init_ok = mt5.initialize(path=path, portable=True)
+        init_ok = mt5.initialize(path=path, portable=is_portable)
     else:
         init_ok = mt5.initialize()
 

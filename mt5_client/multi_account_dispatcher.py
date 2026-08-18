@@ -699,7 +699,7 @@ def _worker_query_account_deals_pnl(acc_info: dict, symbol: str, tickets: list[i
                 total_pnl += t_pnl
                 matched_deals += 1
             else:
-                now = time.time()
+                now = int(time.time())
                 deals = mt5_worker.history_deals_get(now - 86400, now + 3600)
                 if deals:
                     for d in deals:
@@ -708,7 +708,7 @@ def _worker_query_account_deals_pnl(acc_info: dict, symbol: str, tickets: list[i
                             matched_deals += 1
                             break
     else:
-        now = time.time()
+        now = int(time.time())
         deals = mt5_worker.history_deals_get(now - 3600, now + 3600)
         if deals:
             for d in reversed(deals):
@@ -768,7 +768,7 @@ def get_multi_account_cycle_profit(strategy_name: str, symbol: str, tickets_per_
                 if found_out:
                     p1_pnl += t_pnl
                 else:
-                    now = time.time()
+                    now = int(time.time())
                     deals = mt5.history_deals_get(now - 86400, now + 3600)
                     if deals:
                         for d in deals:
@@ -776,7 +776,7 @@ def get_multi_account_cycle_profit(strategy_name: str, symbol: str, tickets_per_
                                 p1_pnl += (d.profit + d.swap + d.commission)
                                 break
         else:
-            now = time.time()
+            now = int(time.time())
             deals = mt5.history_deals_get(now - 3600, now + 3600)
             if deals:
                 for d in reversed(deals):
@@ -872,7 +872,7 @@ def _worker_check_account_tickets_active(acc_info: dict, symbol: str, tickets: l
                     "price_open": o.price_open,
                     "state": o.state,
                     "type": o.type,
-                    "volume": o.volume
+                    "volume": getattr(o, 'volume_initial', 0.0)
                 }
 
     mt5_worker.shutdown()
@@ -910,7 +910,7 @@ def check_multi_account_tickets_active(strategy_name: str, symbol: str, tickets_
             for o in local_ord:
                 if not tkt_set or o.ticket in tkt_set:
                     if o.ticket not in active: active.append(o.ticket)
-                    ord_map[o.ticket] = {"ticket": o.ticket, "price_open": o.price_open, "state": o.state, "type": o.type, "volume": o.volume}
+                    ord_map[o.ticket] = {"ticket": o.ticket, "price_open": o.price_open, "state": o.state, "type": o.type, "volume": getattr(o, 'volume_initial', 0.0)}
         return {
             "has_active": len(active) > 0,
             "accounts": {"ACC1": {"active_tickets": active, "positions_map": pos_map, "orders_map": ord_map}}
@@ -945,7 +945,7 @@ def check_multi_account_tickets_active(strategy_name: str, symbol: str, tickets_
             for o in local_ord:
                 if not tkt_set or o.ticket in tkt_set:
                     if o.ticket not in active: active.append(o.ticket)
-                    ord_map[o.ticket] = {"ticket": o.ticket, "price_open": o.price_open, "state": o.state, "type": o.type, "volume": o.volume}
+                    ord_map[o.ticket] = {"ticket": o.ticket, "price_open": o.price_open, "state": o.state, "type": o.type, "volume": getattr(o, 'volume_initial', 0.0)}
         
         has_act = len(active) > 0
         if has_act: overall_has_active = True

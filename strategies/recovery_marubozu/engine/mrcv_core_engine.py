@@ -356,16 +356,6 @@ class MRCVEngine:
         if is_multi:
             from mt5_client.multi_account_dispatcher import check_multi_account_tickets_active
             tickets_dict = dict(getattr(self.mrcv_state, 'multi_account_tickets', {}))
-            if "ACC1" not in tickets_dict and self.mrcv_state.op1_ticket:
-                tickets_dict["ACC1"] = [self.mrcv_state.op1_ticket]
-            elif self.mrcv_state.op1_ticket and self.mrcv_state.op1_ticket not in tickets_dict.get("ACC1", []):
-                tickets_dict.setdefault("ACC1", []).append(self.mrcv_state.op1_ticket)
-            if self.mrcv_state.op2_ticket:
-                for k in list(tickets_dict.keys()):
-                    if self.mrcv_state.op2_ticket not in tickets_dict[k]: tickets_dict[k].append(self.mrcv_state.op2_ticket)
-            if self.mrcv_state.op3_ticket:
-                for k in list(tickets_dict.keys()):
-                    if self.mrcv_state.op3_ticket not in tickets_dict[k]: tickets_dict[k].append(self.mrcv_state.op3_ticket)
 
             ma_status = check_multi_account_tickets_active("MRCV", self.symbol, tickets_dict)
             all_pos_map = {}

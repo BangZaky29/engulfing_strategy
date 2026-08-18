@@ -43,7 +43,7 @@ def get_closed_profit_rcs(ticket: int) -> float:
         time.sleep(0.25)
 
     # 3. Fallback: query time-based / order-based jika position_id belum terindeks oleh broker
-    now = time.time()
+    now = int(time.time())
     deals = mt5.history_deals_get(now - 86400, now + 3600)
     if deals:
         total_net = 0.0
