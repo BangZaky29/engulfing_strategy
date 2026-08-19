@@ -132,7 +132,7 @@ class RCSEngine:
             if not rcs_schedule_ok:
                 if getattr(state, '_last_sched_pause_time', None) != current_time:
                     state._last_sched_pause_time = current_time
-                    print(cprint(f"⏸️ [{symbol}] Di luar jam kerja Copet ({rcs_cfg.rcs_trading_active_start}→{rcs_cfg.rcs_trading_active_end})", Colors.GRAY))
+                    print(cprint(f"⏸️ [{symbol}] Di luar jam kerja Copet ({rcs_cfg.rcs_trading_active_start}→{rcs_cfg.rcs_trading_active_end} WIB) - Sistem TIDAK AKAN melakukan eksekusi OP.", Colors.GRAY))
             return
 
         # --- Deteksi Pola ---

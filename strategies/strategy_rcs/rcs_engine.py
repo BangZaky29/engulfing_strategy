@@ -27,7 +27,7 @@ from strategies.strategy_rcs.trigger import detect_engulfing, detect_ict, apply_
 from strategies.strategy_rcs.trigger import skip_reasons as sr
 from strategies.strategy_rcs.engine import place_op1_order, place_op2_order, place_op3_order
 from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs, close_position_by_ticket, remove_tp_from_position
-from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text
+from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active, get_rcs_trading_status_text, check_and_notify_rcs_schedule_transition
 from strategies.strategy_rcs.rcs_daily_guard import check_rcs_daily_target, get_rcs_daily_guard_status_text
 from strategies.strategy_rcs.freeze import enter_freeze, check_unfreeze, calculate_recovery, calculate_cycle_profit
 from strategies.strategy_rcs.rcs_notifier import (
@@ -66,7 +66,10 @@ def perform_startup_position_audit(symbols: list, rcs_configs: dict, states: dic
         snapshot = tracker.poll_positions(symbol)
         if snapshot.total_count == 0:
             clean_symbols.append(symbol)
-            print(cprint(f"✅ [{symbol}] AUDIT STARTUP: Tidak ada OP manual atau sistem tertinggal. Siklus trading dijalankan NORMAL.", Colors.GREEN))
+            if not rcs_cfg.rcs_trading_active_enabled or is_rcs_trading_active(rcs_cfg):
+                print(cprint(f"✅ [{symbol}] AUDIT STARTUP: Bersih (0 OP tertinggal). Siklus trading AKTIF & SIAP EKSEKUSI.", Colors.GREEN))
+            else:
+                print(cprint(f"⏸️ [{symbol}] AUDIT STARTUP: Bersih (0 OP tertinggal). Sistem STANDBY di luar jam kerja ({rcs_cfg.rcs_trading_active_start}→{rcs_cfg.rcs_trading_active_end} WIB) - Sistem TIDAK AKAN melakukan eksekusi.", Colors.YELLOW))
             continue
 
         # Ada posisi tertinggal!
@@ -225,6 +228,7 @@ def run_rcs_bot():
     try:
         while True:
             check_and_notify_autotrading_change("RCS")
+            check_and_notify_rcs_schedule_transition(rcs_configs)
             for symbol in symbols:
                 try:
                     engine.process_tick(symbol)

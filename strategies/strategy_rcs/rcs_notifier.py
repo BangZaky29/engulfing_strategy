@@ -304,13 +304,27 @@ def notify_startup_clean_positions(symbols: list[str], config: RCSConfig):
     rcs_skip_jid = config.group_jid or os.getenv("RCS_GROUP_JID") or "120363409493021715@g.us"
     sym_str = ", ".join(symbols)
 
+    from strategies.strategy_rcs.rcs_schedule import is_rcs_trading_active
+    is_active = is_rcs_trading_active(config)
+
+    if not config.rcs_trading_active_enabled:
+        status_siklus = f"🚀 *STATUS SIKLUS:* Siklus trading pada [{sym_str}] *SELALU AKTIF* (24 Jam Nonstop)."
+    elif is_active:
+        status_siklus = f"🚀 *STATUS SIKLUS:* Siklus trading pada [{sym_str}] *AKTIF & SIAP EKSEKUSI* (Jam Operasional {config.rcs_trading_active_start} – {config.rcs_trading_active_end} WIB)."
+    else:
+        status_siklus = (
+            f"⏸️ *STATUS SIKLUS:* Sistem dalam mode *STANDBY / PAUSED*.\n"
+            f"⚠️ *KETERANGAN:* Sistem *TIDAK AKAN* melakukan eksekusi karena berada di luar jam operasional ({config.rcs_trading_active_start} – {config.rcs_trading_active_end} WIB). "
+            f"Eksekusi akan otomatis aktif saat jam {config.rcs_trading_active_start} WIB."
+        )
+
     msg = (
         f"✅ *AUDIT STARTUP POSISI: CLEAN* [{sym_str}]\n\n"
         f"Sistem telah selesai melakukan pemindaian broker MT5:\n"
         f"• Status: *TIDAK ADA POSISI TERTINGGAL*\n"
         f"• OP Manual: 0 posisi\n"
         f"• OP Sistem: 0 posisi\n\n"
-        f"🚀 *STATUS SIKLUS:* Siklus trading pada [{sym_str}] siap dijalankan secara *NORMAL*."
+        f"{status_siklus}"
     )
 
     if rcs_skip_jid:
@@ -462,6 +476,7 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
                     f"🛡️ *GUARD EXECUTION:* Loss Lock: *{'ON 🔒' if loss_lock else 'OFF 🔓'}* | Profit Lock: *{'ON 🔒' if profit_lock else 'OFF 🔓'}*\n"
                 ]
             
+            from strategies.strategy_rcs.rcs_schedule import get_rcs_schedule_wa_summary
             for symbol, config in configs.items():
                 op1_info = config.op1_entry_mode
                 if config.op1_entry_mode == "PERCENT":
@@ -469,7 +484,7 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
                     
                 skipped_msg_lines.append(f"⚙️ INFO CONFIG RCS [{symbol}]:")
                 skipped_msg_lines.append(f"• Signal TF: {config.signal_timeframe}")
-                skipped_msg_lines.append(f"• Schedule: {get_rcs_trading_status_text(config)}")
+                skipped_msg_lines.append(f"• Schedule: {get_rcs_schedule_wa_summary(config)}")
                 skipped_msg_lines.append(f"• Daily Guard: {get_rcs_daily_guard_status_text(config)}")
                 skipped_msg_lines.append(f"• OP1 Setup: {op1_info} ({config.lot_size_op1} Lot | TP: {config.tp_percent}%)")
                 skipped_msg_lines.append(f"• OP2 Setup: {config.op2_mode} {config.op2_percent}% ({config.lot_size_op2} Lot | TP: {config.tp2_percent}%)")
@@ -496,6 +511,49 @@ def notify_system_status(status: str, configs: dict[str, RCSConfig], extra_info:
             print(cprint(f"📲 Notifikasi RCS System ({status}) terkirim ke {rcs_skip_jid} (Gabungan {len(configs)} symbol)", Colors.GREEN))
     except Exception as e:
         print(cprint(f"⚠️ Gagal kirim WA notif RCS System ({status}): {e}", Colors.RED))
+
+
+def notify_rcs_schedule_change(event_type: str, config: RCSConfig, now_time_str: str = ""):
+    """Kirim notifikasi siaran transisi jam operasional ke RCS_GROUP_JID."""
+    rcs_skip_jid = config.group_jid or os.getenv("RCS_GROUP_JID") or "120363409493021715@g.us"
+    if not rcs_skip_jid:
+        return
+
+    from datetime import datetime
+    if not now_time_str:
+        now_time_str = datetime.now().strftime("%H:%M")
+
+    if event_type == "SCHEDULE_OPEN":
+        msg = (
+            f"⏰ *[RCS JADWAL OPERASIONAL DIBUKA]* 🟢\n\n"
+            f"Waktu saat ini telah memasuki jam operasional trading Tuyul Copet!\n"
+            f"• Jendela Eksekusi : *{config.rcs_trading_active_start} – {config.rcs_trading_active_end} WIB*\n"
+            f"• Status Eksekusi  : *AKTIF (Mencari Trigger & Eksekusi OP1)* 🟢\n"
+            f"• Waktu Sistem     : *{now_time_str} WIB*"
+        )
+    else:
+        msg = (
+            f"⏰ *[RCS JADWAL OPERASIONAL SELESAI]* ⏸️\n\n"
+            f"Waktu trading sesi ini telah berakhir!\n"
+            f"• Jendela Eksekusi : *{config.rcs_trading_active_start} – {config.rcs_trading_active_end} WIB*\n"
+            f"• Status Eksekusi  : *PAUSED / STANDBY (Sistem TIDAK AKAN melakukan eksekusi)* ⏸️\n"
+            f"• Keterangan       : Tidak membuka OP1 baru karena di luar jam kerja. Posisi aktif (jika ada) tetap dikawal sampai tuntas.\n"
+            f"• Waktu Sistem     : *{now_time_str} WIB*"
+        )
+
+    try:
+        outbox_row = {
+            'source_table': 'rcs_schedule',
+            'event_type': 'RCS_SCHEDULE',
+            'group_jid': rcs_skip_jid,
+            'message_type': 'TEXT',
+            'message': msg,
+            'dedupe_key': f'rcs_sched_{event_type.lower()}_{int(time.time())}_{uuid.uuid4().hex[:4]}'
+        }
+        execute_supabase(lambda sb: sb.table('wa_outbox').insert([outbox_row]).execute())
+        print(cprint(f"📲 Notifikasi RCS Schedule ({event_type}) terkirim ke {rcs_skip_jid}", Colors.GREEN))
+    except Exception as e:
+        print(cprint(f"⚠️ Gagal kirim WA notif RCS Schedule ({event_type}): {e}", Colors.RED))
 
 
 def notify_company_target_reached_rcs(reason: str):
