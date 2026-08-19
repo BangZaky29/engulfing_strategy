@@ -190,10 +190,10 @@ class RCSConfig:
         default_factory=lambda: os.getenv("RCS_TRADING_ACTIVE_ENABLED", "false").lower() == "true"
     )
     rcs_trading_active_start: str = field(
-        default_factory=lambda: os.getenv("RCS_TRADING_ACTIVE_START", "05:00")
+        default_factory=lambda: os.getenv("RCS_TRADING_ACTIVE_START", "06:00")
     )
     rcs_trading_active_end: str = field(
-        default_factory=lambda: os.getenv("RCS_TRADING_ACTIVE_END", "15:00")
+        default_factory=lambda: os.getenv("RCS_TRADING_ACTIVE_END", "12:00")
     )
 
     # Daily Money Management Guard

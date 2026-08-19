@@ -9,8 +9,8 @@ from config.rcs_config import RCSConfig
 def is_rcs_trading_active(config: RCSConfig) -> bool:
     """
     Cek apakah waktu sekarang berada di dalam jam eksekusi RCS.
-    Jika rcs_trading_active_enabled == False, selalu return True (selalu boleh trade).
-    Default window: 05:00 -> 15:00 WIB.
+    Jika rcs_trading_active_enabled == False, selalu return True (selalu boleh trade / 24 Jam).
+    Default window: 06:00 -> 12:00 WIB.
     """
     if not config.rcs_trading_active_enabled:
         return True
