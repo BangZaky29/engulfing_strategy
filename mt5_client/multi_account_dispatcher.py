@@ -662,6 +662,109 @@ def cancel_multi_account_pending_orders(strategy_name: str, symbol: str, magic_n
 
     return total_canceled
 
+def _worker_remove_position_tp(acc_info: dict, symbol: str, tickets: list[int] | None = None, magic_numbers: list[int] | None = None) -> int:
+    """Worker sub-process untuk menghapus TP (set TP = 0.0) pada posisi aktif di akun target."""
+    import MetaTrader5 as mt5_worker
+    import os
+
+    path = acc_info.get("path", "")
+    if path and os.path.exists(path):
+        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
+    else:
+        init_ok = mt5_worker.initialize(timeout=15000)
+
+    if not init_ok:
+        return 0
+
+    positions = mt5_worker.positions_get(symbol=symbol)
+    removed_count = 0
+    if positions:
+        for p in positions:
+            match_ticket = (not tickets) or (p.ticket in tickets)
+            match_magic = (not magic_numbers) or (p.magic in magic_numbers)
+            if match_ticket and match_magic and getattr(p, 'tp', 0.0) > 0:
+                req = {
+                    "action": mt5_worker.TRADE_ACTION_SLTP,
+                    "position": p.ticket,
+                    "symbol": symbol,
+                    "sl": p.sl,
+                    "tp": 0.0,
+                }
+                res = mt5_worker.order_send(req)
+                if res and res.retcode == mt5_worker.TRADE_RETCODE_DONE:
+                    removed_count += 1
+                else:
+                    print(f"⚠️ [{acc_info['key']}] Gagal hapus TP Tkt #{p.ticket}: {res.comment if res else 'Unknown'}")
+
+    mt5_worker.shutdown()
+    return removed_count
+
+def remove_multi_account_tp(strategy_name: str, symbol: str, tickets_per_account: dict | None = None, magic_numbers: list[int] | None = None) -> int:
+    """Menghapus TP (set TP=0.0) untuk posisi aktif di seluruh akun target strategy (ACC1, ACC2, ACC3)."""
+    accounts = get_target_accounts(strategy_name)
+    if not accounts:
+        positions = mt5.positions_get(symbol=symbol)
+        cnt = 0
+        if positions:
+            for p in positions:
+                if (not magic_numbers or p.magic in magic_numbers) and getattr(p, 'tp', 0.0) > 0:
+                    req = {
+                        "action": mt5.TRADE_ACTION_SLTP,
+                        "position": p.ticket,
+                        "symbol": symbol,
+                        "sl": p.sl,
+                        "tp": 0.0,
+                    }
+                    res = mt5.order_send(req)
+                    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                        cnt += 1
+        return cnt
+
+    local_acc = None
+    worker_accounts = []
+    for acc in accounts:
+        if acc['key'] == 'ACC1':
+            local_acc = acc
+        else:
+            worker_accounts.append(acc)
+
+    total_removed = 0
+
+    # 1. Local ACC1
+    if local_acc:
+        positions = mt5.positions_get(symbol=symbol)
+        if positions:
+            acc_tickets = tickets_per_account.get('ACC1', []) if tickets_per_account else None
+            for p in positions:
+                match_ticket = (not acc_tickets) or (p.ticket in acc_tickets)
+                match_magic = (not magic_numbers) or (p.magic in magic_numbers)
+                if match_ticket and match_magic and getattr(p, 'tp', 0.0) > 0:
+                    req = {
+                        "action": mt5.TRADE_ACTION_SLTP,
+                        "position": p.ticket,
+                        "symbol": symbol,
+                        "sl": p.sl,
+                        "tp": 0.0,
+                    }
+                    res = mt5.order_send(req)
+                    if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                        total_removed += 1
+
+    # 2. Worker accounts
+    if worker_accounts:
+        with ProcessPoolExecutor(max_workers=len(worker_accounts)) as executor:
+            futures = []
+            for acc in worker_accounts:
+                acc_tickets = tickets_per_account.get(acc['key'], []) if tickets_per_account else None
+                futures.append(executor.submit(_worker_remove_position_tp, acc, symbol, acc_tickets, magic_numbers))
+            for fut in as_completed(futures):
+                try:
+                    total_removed += fut.result()
+                except Exception:
+                    pass
+
+    return total_removed
+
 def _worker_query_account_deals_pnl(acc_info: dict, symbol: str, tickets: list[int]) -> dict:
     """Worker sub-process untuk mengambil real PnL dari deals history broker akun sekunder."""
     import MetaTrader5 as mt5_worker

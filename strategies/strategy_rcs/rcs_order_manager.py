@@ -185,14 +185,19 @@ def close_position_by_ticket(ticket: int) -> bool:
     pos = positions[0]
     return close_position_rcs(pos.symbol, pos, pos.magic, f"Close Ticket {ticket}")
 
-def remove_tp_from_position(ticket: int) -> bool:
+def remove_tp_from_position(ticket: int, strategy_name: str = "RCS", symbol: str = "") -> bool:
     """
     Hapus Take Profit dari posisi aktif (set TP = 0.0).
     SL tetap dipertahankan apa adanya.
-
-    Dipakai saat masuk PHASE_FREEZE (hedge) agar broker tidak
-    auto-close posisi yang sedang di-hedge oleh OP3.
+    Mendukung Multi-Account MT5 (ACC1, ACC2, ACC3).
     """
+    import os
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import remove_multi_account_tp
+        tickets_map = {"ACC1": [ticket], "ACC2": [ticket], "ACC3": [ticket]} if ticket else None
+        cnt = remove_multi_account_tp(strategy_name, symbol, tickets_per_account=tickets_map)
+        return cnt > 0
+
     positions = mt5.positions_get(ticket=ticket)
     if not positions:
         return False

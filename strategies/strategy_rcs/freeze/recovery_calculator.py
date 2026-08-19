@@ -69,7 +69,19 @@ def calculate_cycle_profit(state: RCSState, tracker=None, symbol: str = "") -> f
     Mengambil total profit/loss aktual dari histori transaksi broker untuk siklus ini berdasarkan tiket posisi.
     Hanya memeriksa tiket OP2 & OP3 jika tiket tersebut pernah tereksekusi (op2_filled / op3_filled = True).
     Juga menghitung profit dari OP manual yang dibuka/ditutup selama siklus jika tracker tersedia.
+    Mendukung Multi-Account MT5 (ACC1, ACC2, ACC3).
     """
+    import os
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import get_multi_account_cycle_profit
+        tickets_dict = dict(getattr(state, 'multi_account_tickets', {}))
+        multi_pnl_data = get_multi_account_cycle_profit("RCS", symbol, tickets_dict)
+        total_profit = multi_pnl_data.get("total_profit", 0.0)
+        if tracker and symbol:
+            manual_summary = tracker.get_closed_manual_summary(symbol, since=state.freeze_start_time)
+            total_profit += manual_summary.net_total
+        return total_profit
+
     total_profit = 0.0
     
     # OP1: jika ada ticket (OP1 selalu market order jika terpasang)

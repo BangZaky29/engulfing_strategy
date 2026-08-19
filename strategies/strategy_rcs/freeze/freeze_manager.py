@@ -14,12 +14,18 @@ def get_total_floating_rcs(state: RCSState, tracker=None, symbol: str = "") -> f
     """
     Hitung total floating profit/loss dari semua posisi aktif RCS.
     Termasuk OP manual jika PositionTracker tersedia.
-    
-    Args:
-        state: RCS state dengan ticket OP1/OP2/OP3
-        tracker: PositionTracker instance (opsional, untuk include OP manual)
-        symbol: Symbol pair (wajib jika tracker diberikan)
+    Mendukung Multi-Account MT5 (ACC1, ACC2, ACC3).
     """
+    import os
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import get_multi_account_positions_profit
+        rcs_magics = [901001, 901002, 901003, 221160935, 221160936, 221160937]
+        total = get_multi_account_positions_profit("RCS", symbol, rcs_magics)
+        if tracker and symbol:
+            manual_floating = tracker.get_manual_floating(symbol)
+            total += manual_floating
+        return total
+
     def get_pos(ticket):
         if not ticket: return None
         pos = mt5.positions_get(ticket=ticket)
@@ -67,26 +73,32 @@ def enter_freeze(state: RCSState, config: RCSConfig, tracker=None, symbol: str =
 def check_unfreeze(symbol: str, state: RCSState, config: RCSConfig, tracker=None) -> bool:
     """
     Cek apakah semua posisi sudah ditutup sehingga bisa unfreeze.
-    
-    PENTING: Sekarang juga memeriksa OP manual!
-    Unfreeze baru terjadi jika:
-    1. OP1, OP2, OP3 sudah tidak ada di posisi aktif (seperti sebelumnya)
-    2. Semua OP manual di symbol ini juga sudah ditutup (BARU)
-    
-    Ini mencegah sistem melanjutkan siklus baru saat trader
-    masih punya OP recovery manual yang terbuka.
+    Mendukung Multi-Account MT5 (ACC1, ACC2, ACC3).
     """
-    def check_pos(ticket):
-        if not ticket: return True # Clear
-        pos = mt5.positions_get(ticket=ticket)
-        if pos is None:
-            err = mt5.last_error()
-            if err and err[0] == 4753: return True # Benar-benar clear
-            print(f"⚠️ FreezeManager: Gagal baca posisi MT5 untuk tiket {ticket}. Error: {err}")
-            return False # Error, jangan anggap clear
-        return len(pos) == 0
+    import os
+    if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
+        from mt5_client.multi_account_dispatcher import check_multi_account_tickets_active
+        tickets_dict = dict(getattr(state, 'multi_account_tickets', {}))
+        ma_status = check_multi_account_tickets_active("RCS", symbol, tickets_dict)
+        
+        # Cek apakah ada posisi sistem yang masih aktif di akun target
+        active_pos_count = 0
+        for acc_k, acc_v in ma_status.get("accounts", {}).items():
+            active_pos_count += len(acc_v.get("positions_map", {}))
+            
+        system_clear = (active_pos_count == 0)
+    else:
+        def check_pos(ticket):
+            if not ticket: return True # Clear
+            pos = mt5.positions_get(ticket=ticket)
+            if pos is None:
+                err = mt5.last_error()
+                if err and err[0] == 4753: return True # Benar-benar clear
+                print(f"⚠️ FreezeManager: Gagal baca posisi MT5 untuk tiket {ticket}. Error: {err}")
+                return False # Error, jangan anggap clear
+            return len(pos) == 0
 
-    system_clear = check_pos(state.op1_ticket) and check_pos(state.op2_ticket) and check_pos(state.op3_ticket)
+        system_clear = check_pos(state.op1_ticket) and check_pos(state.op2_ticket) and check_pos(state.op3_ticket)
 
     # 2. Cek posisi manual (dari PositionTracker)
     if tracker:

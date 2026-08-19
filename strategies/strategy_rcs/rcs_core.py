@@ -291,8 +291,12 @@ class RCSEngine:
                 op2_open_price = _get_price_open(pos2[0])
                 
                 if rcs_cfg.op2_mode == "HEDGE":
-                    if state.op1_ticket: remove_tp_from_position(state.op1_ticket)
-                    print(cprint(f"❄️ HEDGE (OP2) Terbuka di {op2_open_price:.5f} ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
+                    if is_multi:
+                        from mt5_client.multi_account_dispatcher import remove_multi_account_tp
+                        remove_multi_account_tp("RCS", symbol, magic_numbers=[rcs_cfg.magic_op1])
+                    else:
+                        if state.op1_ticket: remove_tp_from_position(state.op1_ticket)
+                    print(cprint(f"❄️ HEDGE (OP2) Terbuka di {op2_open_price:.5f} ({symbol}). Beralih ke PHASE_FREEZE. TP OP1 telah dihapus!", Colors.CYAN))
                     state.phase = RCSPhase.FREEZE
                     state.freeze_is_hedge = True
                     enter_freeze(state, rcs_cfg, tracker=self.tracker, symbol=symbol)
@@ -307,7 +311,8 @@ class RCSEngine:
                 print(cprint(f"🎯 OP2 menyentuh TP2 ({symbol})! Menutup sisa posisi OP1...", Colors.GREEN))
                 if state.op1_ticket:
                     if is_multi:
-                        pass # Sisa posisi OP1 akan diproses di multi-account / broker side
+                        from mt5_client.multi_account_dispatcher import close_multi_account_all_positions
+                        close_multi_account_all_positions("RCS", symbol, [rcs_cfg.magic_op1])
                     else:
                         pos1_check = mt5.positions_get(ticket=state.op1_ticket)
                         if pos1_check: close_position_by_ticket(state.op1_ticket)
@@ -334,9 +339,13 @@ class RCSEngine:
         if state.op3_ticket and state.phase != RCSPhase.FREEZE:
             if pos3 and not ord3:
                 state.op3_filled = True
-                if state.op1_ticket: remove_tp_from_position(state.op1_ticket)
-                if state.op2_ticket: remove_tp_from_position(state.op2_ticket)
-                print(cprint(f"❄️ HEDGE (OP3) Terbuka ({symbol}). Beralih ke PHASE_FREEZE.", Colors.CYAN))
+                if is_multi:
+                    from mt5_client.multi_account_dispatcher import remove_multi_account_tp
+                    remove_multi_account_tp("RCS", symbol, magic_numbers=[rcs_cfg.magic_op1, rcs_cfg.magic_op2])
+                else:
+                    if state.op1_ticket: remove_tp_from_position(state.op1_ticket)
+                    if state.op2_ticket: remove_tp_from_position(state.op2_ticket)
+                print(cprint(f"❄️ HEDGE (OP3) Terbuka ({symbol}). Beralih ke PHASE_FREEZE. TP1 & TP2 telah dihapus!", Colors.CYAN))
                 state.phase = RCSPhase.FREEZE
                 state.freeze_is_hedge = True
                 enter_freeze(state, rcs_cfg, tracker=self.tracker, symbol=symbol)
