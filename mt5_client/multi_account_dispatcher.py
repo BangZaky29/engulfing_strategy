@@ -56,16 +56,23 @@ def get_target_accounts(strategy_name: str) -> list[dict]:
 
     return accounts
 
+def _initialize_mt5_worker(mt5_worker, path: str) -> bool:
+    """Helper untuk inisialisasi MT5 worker dengan fallback bertahap untuk mencegah IPC failure."""
+    import os
+    if path and os.path.exists(path):
+        if mt5_worker.initialize(path=path, portable=True, timeout=15000):
+            return True
+        if mt5_worker.initialize(path=path, timeout=15000):
+            return True
+    return mt5_worker.initialize(timeout=15000)
+
 def _worker_audit_account(acc_info: dict) -> dict:
     """Worker sub-process untuk mengaudit dana & kesehatan akun tertentu via portable path."""
     import MetaTrader5 as mt5_worker
     import os
 
     path = acc_info.get("path", "")
-    if path and os.path.exists(path):
-        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
-    else:
-        init_ok = mt5_worker.initialize(timeout=15000)
+    init_ok = _initialize_mt5_worker(mt5_worker, path)
 
     if not init_ok:
         err = mt5_worker.last_error()
@@ -283,10 +290,7 @@ def _worker_execute_account_order(acc_info: dict, strategy_name: str, payload: d
     import os
 
     path = acc_info.get("path", "")
-    if path and os.path.exists(path):
-        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
-    else:
-        init_ok = mt5_worker.initialize(timeout=15000)
+    init_ok = _initialize_mt5_worker(mt5_worker, path)
 
     if not init_ok:
         err = mt5_worker.last_error()
@@ -629,10 +633,7 @@ def _worker_cancel_pending_orders(acc_info: dict, symbol: str, magic_numbers: li
     import os
 
     path = acc_info.get("path", "")
-    if path and os.path.exists(path):
-        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
-    else:
-        init_ok = mt5_worker.initialize(timeout=15000)
+    init_ok = _initialize_mt5_worker(mt5_worker, path)
 
     if not init_ok:
         return 0
@@ -707,10 +708,7 @@ def _worker_remove_position_tp(acc_info: dict, symbol: str, tickets: list[int] |
     import os
 
     path = acc_info.get("path", "")
-    if path and os.path.exists(path):
-        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
-    else:
-        init_ok = mt5_worker.initialize(timeout=15000)
+    init_ok = _initialize_mt5_worker(mt5_worker, path)
 
     if not init_ok:
         return 0
@@ -811,10 +809,7 @@ def _worker_query_account_deals_pnl(acc_info: dict, symbol: str, tickets: list[i
     import time
 
     path = acc_info.get("path", "")
-    if path and os.path.exists(path):
-        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
-    else:
-        init_ok = mt5_worker.initialize(timeout=15000)
+    init_ok = _initialize_mt5_worker(mt5_worker, path)
 
     if not init_ok:
         return {"key": acc_info['key'], "name": acc_info['name'], "login": acc_info['login'], "profit": 0.0, "deals_count": 0}
@@ -970,10 +965,7 @@ def _worker_check_account_tickets_active(acc_info: dict, symbol: str, tickets: l
     import os
 
     path = acc_info.get("path", "")
-    if path and os.path.exists(path):
-        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
-    else:
-        init_ok = mt5_worker.initialize(timeout=15000)
+    init_ok = _initialize_mt5_worker(mt5_worker, path)
 
     if not init_ok:
         return {
@@ -1141,10 +1133,7 @@ def _worker_close_all_positions(acc_info: dict, symbol: str, magic_numbers: list
     import os
 
     path = acc_info.get("path", "")
-    if path and os.path.exists(path):
-        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
-    else:
-        init_ok = mt5_worker.initialize(timeout=15000)
+    init_ok = _initialize_mt5_worker(mt5_worker, path)
 
     if not init_ok:
         return 0
@@ -1258,10 +1247,7 @@ def _worker_get_account_positions_profit(acc_info: dict, symbol: str, magic_numb
     import os
 
     path = acc_info.get("path", "")
-    if path and os.path.exists(path):
-        init_ok = mt5_worker.initialize(path=path, portable=True, timeout=15000)
-    else:
-        init_ok = mt5_worker.initialize(timeout=15000)
+    init_ok = _initialize_mt5_worker(mt5_worker, path)
 
     if not init_ok:
         return 0.0
