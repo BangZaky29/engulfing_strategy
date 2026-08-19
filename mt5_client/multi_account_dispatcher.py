@@ -355,10 +355,29 @@ def _worker_execute_account_order(acc_info: dict, strategy_name: str, payload: d
     # Pasang SL & TP jika ada
     sl_val = payload.get("sl", 0.0)
     tp_val = payload.get("tp", 0.0)
+    tp_dist = payload.get("tp_dist", 0.0)
+
     if sl_val and sl_val > 0:
         req["sl"] = round(sl_val, digits)
-    if tp_val and tp_val > 0:
-        req["tp"] = round(tp_val, digits)
+        
+    if tp_dist and tp_dist > 0 and payload.get("action") == mt5_worker.TRADE_ACTION_DEAL:
+        if order_type == mt5_worker.ORDER_TYPE_BUY:
+            req["tp"] = round(price + tp_dist, digits)
+        else:
+            req["tp"] = round(price - tp_dist, digits)
+    elif tp_val and tp_val > 0:
+        # Directional Guard: Cegah TP berlawanan arah dengan entry market
+        if payload.get("action") == mt5_worker.TRADE_ACTION_DEAL:
+            if order_type == mt5_worker.ORDER_TYPE_BUY and tp_val <= price:
+                safe_tp = price + abs(price - tp_val) if abs(price - tp_val) > 0.1 else price + 0.50
+                req["tp"] = round(safe_tp, digits)
+            elif order_type == mt5_worker.ORDER_TYPE_SELL and tp_val >= price:
+                safe_tp = price - abs(tp_val - price) if abs(tp_val - price) > 0.1 else price - 0.50
+                req["tp"] = round(safe_tp, digits)
+            else:
+                req["tp"] = round(tp_val, digits)
+        else:
+            req["tp"] = round(tp_val, digits)
 
     res = mt5_worker.order_send(req)
 
@@ -379,26 +398,28 @@ def _worker_execute_account_order(acc_info: dict, strategy_name: str, payload: d
             "success": True,
             "ticket": res.order,
             "order": res.order,
-            "price": res.price,
-            "volume": res.volume,
-            "retcode": res.retcode,
-            "comment": res.comment
+            "volume": getattr(res, "volume", volume),
+            "price": getattr(res, "price", price),
+            "comment": getattr(res, "comment", req["comment"]),
+            "retcode": res.retcode
         }
     else:
-        err_comment = res.comment if res else "Unknown Error"
-        retcode = res.retcode if res else -1
+        err_msg = res.comment if res else "Order returned None"
+        ret_code = res.retcode if res else -1
         return {
             "key": acc_info['key'],
             "name": acc_info['name'],
             "login": actual_login,
             "success": False,
-            "error": err_comment,
-            "retcode": retcode,
+            "error": err_msg,
+            "retcode": ret_code,
             "order": None
         }
 
 def _execute_local_account_order(acc_info: dict, strategy_name: str, payload: dict) -> dict:
-    """Mengeksekusi order pada akun primer (ACC1) langsung di thread utama tanpa login switch."""
+    """Mengeksekusi order langsung di thread MT5 utama (khusus ACC1)."""
+    import MetaTrader5 as mt5
+
     symbol = payload.get("symbol", "XAUUSD")
     mt5.symbol_select(symbol, True)
     symbol_info = mt5.symbol_info(symbol)
@@ -456,10 +477,28 @@ def _execute_local_account_order(acc_info: dict, strategy_name: str, payload: di
 
     sl_val = payload.get("sl", 0.0)
     tp_val = payload.get("tp", 0.0)
+    tp_dist = payload.get("tp_dist", 0.0)
+
     if sl_val and sl_val > 0:
         req["sl"] = round(sl_val, digits)
-    if tp_val and tp_val > 0:
-        req["tp"] = round(tp_val, digits)
+        
+    if tp_dist and tp_dist > 0 and payload.get("action") == mt5.TRADE_ACTION_DEAL:
+        if order_type == mt5.ORDER_TYPE_BUY:
+            req["tp"] = round(price + tp_dist, digits)
+        else:
+            req["tp"] = round(price - tp_dist, digits)
+    elif tp_val and tp_val > 0:
+        if payload.get("action") == mt5.TRADE_ACTION_DEAL:
+            if order_type == mt5.ORDER_TYPE_BUY and tp_val <= price:
+                safe_tp = price + abs(price - tp_val) if abs(price - tp_val) > 0.1 else price + 0.50
+                req["tp"] = round(safe_tp, digits)
+            elif order_type == mt5.ORDER_TYPE_SELL and tp_val >= price:
+                safe_tp = price - abs(tp_val - price) if abs(tp_val - price) > 0.1 else price - 0.50
+                req["tp"] = round(safe_tp, digits)
+            else:
+                req["tp"] = round(tp_val, digits)
+        else:
+            req["tp"] = round(tp_val, digits)
 
     res = mt5.order_send(req)
 

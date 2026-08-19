@@ -19,7 +19,7 @@ def get_filling_mode(symbol: str) -> int:
     else:
         return mt5.ORDER_FILLING_RETURN
 
-def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: float, magic_number: int, comment: str, sl: float = 0.0, tp: float = 0.0):
+def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: float, magic_number: int, comment: str, sl: float = 0.0, tp: float = 0.0, tp_dist: float = 0.0):
     """
     Kirim market order (Instant Execution).
     action_str: "BUY" atau "SELL"
@@ -37,6 +37,7 @@ def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: 
             "price": price,
             "sl": float(sl) if sl > 0 else 0.0,
             "tp": float(tp) if tp > 0 else 0.0,
+            "tp_dist": float(tp_dist) if tp_dist > 0 else 0.0,
             "magic": magic_number,
             "comment": comment,
             "order_role": order_role
@@ -47,6 +48,10 @@ def send_market_order_rcs(symbol: str, action_str: str, price: float, lot_size: 
         else:
             print(f"❌ Multi-Account Dispatcher Gagal mengeksekusi order.")
             return None
+
+    # Fallback local calculation jika tp_dist disediakan
+    if tp_dist and tp_dist > 0:
+        tp = price + tp_dist if action_str == "BUY" else price - tp_dist
 
     req = {
         "action": mt5.TRADE_ACTION_DEAL,

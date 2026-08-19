@@ -9,20 +9,21 @@ from strategies.strategy_rcs.rcs_order_manager import send_market_order_rcs, sen
 from utils.colors import cprint, Colors
 import MetaTrader5 as mt5
 
-def calculate_tp1_price(op1_price: float, state: RCSState, config: RCSConfig) -> float:
-    """Hitung letak TP1 berdasarkan % dari Jarak OP1 ke OP2."""
-    direction = state.trigger_direction
-    
-    # Hitung Jarak OP1 ke OP2
+def calculate_tp1_distance(state: RCSState, config: RCSConfig) -> float:
+    """Hitung jarak TP1 (dalam point/price delta) berdasarkan % dari Jarak OP1 ke OP2."""
     dist_op1_op2 = abs(state.op2_level - state.op1_level) if state.op2_level else 0.0
     if dist_op1_op2 == 0.0:
         dist_op1_op2 = state.trigger_risk_range * (config.op2_percent / 100.0)
         
     if config.tp_mode == "PERCENT":
-        # TP1 diukur % dari jarak OP1 ke OP2 (misal 50%)
-        tp_dist = dist_op1_op2 * (config.tp_percent / 100.0)
+        return dist_op1_op2 * (config.tp_percent / 100.0)
     else: # USD
-        tp_dist = dist_op1_op2 * 1.0
+        return dist_op1_op2 * 1.0
+
+def calculate_tp1_price(op1_price: float, state: RCSState, config: RCSConfig) -> float:
+    """Hitung letak TP1 berdasarkan % dari Jarak OP1 ke OP2."""
+    direction = state.trigger_direction
+    tp_dist = calculate_tp1_distance(state, config)
 
     if direction == "BUY":
         return op1_price + tp_dist
@@ -39,6 +40,7 @@ def place_op1_order(symbol: str, current_price: float, state: RCSState, config: 
         
     sl = state.op3_level if config.op3_mode == "SL" else 0.0
     actual_entry_price = current_price if config.op1_entry_mode == "INSTANT_ZERO" else state.op1_level
+    tp_dist = calculate_tp1_distance(state, config)
     tp = calculate_tp1_price(actual_entry_price, state, config)
     state.tp1_price = tp
     
@@ -53,7 +55,8 @@ def place_op1_order(symbol: str, current_price: float, state: RCSState, config: 
             magic_number=config.magic_op1,
             comment="RCS_OP1",
             sl=sl,
-            tp=tp
+            tp=tp,
+            tp_dist=tp_dist
         )
     else: # PERCENT
         order_type = mt5.ORDER_TYPE_BUY_LIMIT if state.trigger_direction == "BUY" else mt5.ORDER_TYPE_SELL_LIMIT
@@ -70,7 +73,11 @@ def place_op1_order(symbol: str, current_price: float, state: RCSState, config: 
         
     if res:
         state.op1_ticket = res.order
-        state.op1_open_price = res.price if config.op1_entry_mode == "INSTANT_ZERO" else state.op1_level
+        state.op1_open_price = res.price if (config.op1_entry_mode == "INSTANT_ZERO" and res.price) else state.op1_level
+        # Perbarui state.tp1_price dengan harga fill riil
+        if config.op1_entry_mode == "INSTANT_ZERO" and res.price:
+            state.tp1_price = calculate_tp1_price(res.price, state, config)
+            tp = state.tp1_price
         
         # Simpan tiket per akun untuk audit multi-akun
         all_results = getattr(res, "all_results", [])
