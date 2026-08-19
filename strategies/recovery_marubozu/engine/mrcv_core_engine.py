@@ -230,37 +230,37 @@ class MRCVEngine:
         rcs_floating = 0.0
         rcs_total_positions = 0
 
-        if is_multi:
-            from mt5_client.multi_account_dispatcher import get_multi_account_positions_profit, check_multi_account_tickets_active
-            rcs_floating = get_multi_account_positions_profit("RCS", self.symbol, self.rcs_magics)
-            ma_status = check_multi_account_tickets_active("RCS", self.symbol, {})
-            rcs_buy = 0
-            rcs_sell = 0
-            for acc_k, acc_v in ma_status.get("accounts", {}).items():
-                for p_id, p_info in acc_v.get("positions_map", {}).items():
-                    rcs_total_positions += 1
-                    p_type = p_info.get("type")
-                    if p_type == mt5.ORDER_TYPE_BUY or p_type == 0: rcs_buy += 1
-                    elif p_type == mt5.ORDER_TYPE_SELL or p_type == 1: rcs_sell += 1
-            if rcs_buy > 0 and rcs_sell > 0:
-                is_rcs_hedge = True
-        else:
-            rcs_positions = mt5.positions_get(symbol=self.symbol)
-            if rcs_positions:
+        if wait_for_hedge:
+            if is_multi:
+                from mt5_client.multi_account_dispatcher import get_multi_account_positions_profit, check_multi_account_tickets_active
+                rcs_floating = get_multi_account_positions_profit("RCS", self.symbol, self.rcs_magics)
+                ma_status = check_multi_account_tickets_active("RCS", self.symbol, {})
                 rcs_buy = 0
                 rcs_sell = 0
-                for p in rcs_positions:
-                    if p.magic in self.rcs_magics:
-                        rcs_floating += p.profit
+                for acc_k, acc_v in ma_status.get("accounts", {}).items():
+                    for p_id, p_info in acc_v.get("positions_map", {}).items():
                         rcs_total_positions += 1
-                        if p.type == mt5.ORDER_TYPE_BUY:
-                            rcs_buy += 1
-                        elif p.type == mt5.ORDER_TYPE_SELL:
-                            rcs_sell += 1
+                        p_type = p_info.get("type")
+                        if p_type == mt5.ORDER_TYPE_BUY or p_type == 0: rcs_buy += 1
+                        elif p_type == mt5.ORDER_TYPE_SELL or p_type == 1: rcs_sell += 1
                 if rcs_buy > 0 and rcs_sell > 0:
                     is_rcs_hedge = True
+            else:
+                rcs_positions = mt5.positions_get(symbol=self.symbol)
+                if rcs_positions:
+                    rcs_buy = 0
+                    rcs_sell = 0
+                    for p in rcs_positions:
+                        if p.magic in self.rcs_magics:
+                            rcs_floating += p.profit
+                            rcs_total_positions += 1
+                            if p.type == mt5.ORDER_TYPE_BUY:
+                                rcs_buy += 1
+                            elif p.type == mt5.ORDER_TYPE_SELL:
+                                rcs_sell += 1
+                    if rcs_buy > 0 and rcs_sell > 0:
+                        is_rcs_hedge = True
                 
-        if wait_for_hedge:
             if not self.last_hedge_status and is_rcs_hedge:
                 self.last_hedge_status = True
                 msg = f"Tuyul RCS mengalami kondisi hedging pada symbol {self.symbol} dengan floating saat ini: ${rcs_floating:.2f}.\n🟢 Mesin *Marubozu Recovery (MRCV)* telah diaktifkan untuk memulai proses *recovery*!"
@@ -275,6 +275,19 @@ class MRCVEngine:
             if not self.last_hedge_status:
                 return
                 
+        mrcv_total_positions = 0
+        if is_multi:
+            from mt5_client.multi_account_dispatcher import check_multi_account_tickets_active
+            ma_mrcv_status = check_multi_account_tickets_active("MRCV", self.symbol, {})
+            for acc_k, acc_v in ma_mrcv_status.get("accounts", {}).items():
+                mrcv_total_positions += len(acc_v.get("positions_map", {}))
+        else:
+            positions = mt5.positions_get(symbol=self.symbol)
+            if positions:
+                for p in positions:
+                    if p.magic in self.mrcv_magics:
+                        mrcv_total_positions += 1
+
         # CEK CLOSE ALL
         if not wait_for_hedge or (wait_for_hedge and self.last_hedge_status):
             mrcv_floating = get_positions_profit(self.symbol, self.mrcv_magics)
@@ -286,7 +299,13 @@ class MRCVEngine:
             op1_lot, _, _ = get_dynamic_op1_lot(fallback_lot=float(os.getenv("MRCV_LOT_OP1", "0.01")))
             max_loss = get_scaled_max_loss(base_max_loss, op1_lot)
 
-            if total_net >= target_profit:
+            has_active_recovery = (
+                self.mrcv_state.phase != MRCVPhase.IDLE
+                or self.mrcv_state.cumulative_profit != 0.0
+                or (rcs_total_positions + mrcv_total_positions) > 0
+            )
+
+            if has_active_recovery and total_net >= target_profit:
                 print(cprint(f"🎉 [MRCV] Target Profit Tercapai! Total Net: {total_net:+.2f} >= {target_profit:+.2f}. Melakukan Close All.", Colors.GREEN))
                 success_msg = (
                     f"🎉 *[RECOVERY SUCCESS - CLOSE ALL]*\n"
@@ -312,7 +331,7 @@ class MRCVEngine:
                 return
 
             is_cutloss_enabled = os.getenv("MRCV_CUTLOSS_ENABLED", "true").lower() == "true"
-            if is_cutloss_enabled and total_net <= max_loss:
+            if has_active_recovery and is_cutloss_enabled and total_net <= max_loss:
                 print(cprint(f"🛑 [MRCV EMERGENCY CUTLOSS] Batas Max Loss Tercapai! Total Net: {total_net:+.2f} <= {max_loss:.2f}. Melakukan Close ALL.", Colors.RED))
                 notify_mrcv_max_loss_close_all(
                     symbol=self.symbol,

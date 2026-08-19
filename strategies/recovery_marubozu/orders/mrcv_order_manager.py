@@ -13,6 +13,9 @@ def close_all_positions(symbol: str, magics: list[int]):
     if os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true":
         from mt5_client.multi_account_dispatcher import close_multi_account_all_positions
         cnt = close_multi_account_all_positions("MRCV", symbol, magics)
+        wait_for_hedge = os.getenv("MRCV_WAIT_FOR_RCS_HEDGE", "true").lower() == "true"
+        if wait_for_hedge:
+            cnt += close_multi_account_all_positions("RCS", symbol, magics)
         print(cprint(f"✅ [MRCV Multi-Account] Close ALL selesai. Total order/posisi ditutup: {cnt}", Colors.GREEN))
         return
 
