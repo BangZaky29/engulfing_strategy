@@ -39,6 +39,10 @@ class MultiPatternScanner:
         self.supabase = get_supabase()
         self.patterns = get_all_patterns()
 
+        # Pastikan seluruh symbol terpilih di Market Watch MT5
+        for sym in self.symbols:
+            mt5.symbol_select(sym, True)
+
         # Notifier
         group_jid = os.getenv("SCANNER_GROUP_JID", "120363410782502082@g.us")
         self.notifier = ScannerNotifier(group_jid)
@@ -59,9 +63,21 @@ class MultiPatternScanner:
         """Scan 1 symbol pada 1 timeframe, jalankan semua pattern dari registry."""
         tf_mt5 = self.TF_MAPPING.get(tf_str, mt5.TIMEFRAME_M5)
 
-        # Ambil 10 candle terakhir
-        rates = mt5.copy_rates_from_pos(symbol, tf_mt5, 1, 10)
+        # Pastikan symbol aktif di Market Watch MT5
+        mt5.symbol_select(symbol, True)
+
+        # Ambil 10 candle terakhir (dengan retry jika history belum di-download oleh terminal MT5)
+        rates = None
+        for _ in range(3):
+            rates = mt5.copy_rates_from_pos(symbol, tf_mt5, 1, 10)
+            if rates is not None and len(rates) >= 10:
+                break
+            time.sleep(0.2)
+
         if rates is None or len(rates) < 10:
+            err = mt5.last_error()
+            count = len(rates) if rates is not None else 0
+            print(cprint(f"⚠️ [SCANNER] Data candle {symbol} {tf_str} tidak cukup/gagal diambil ({count}/10): {err}", Colors.YELLOW))
             return []
 
         c1 = rates[-1]
