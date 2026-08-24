@@ -807,6 +807,7 @@ def _worker_query_account_deals_pnl(acc_info: dict, symbol: str, tickets: list[i
     import MetaTrader5 as mt5_worker
     import os
     import time
+    import datetime
 
     path = acc_info.get("path", "")
     init_ok = _initialize_mt5_worker(mt5_worker, path)
@@ -816,41 +817,66 @@ def _worker_query_account_deals_pnl(acc_info: dict, symbol: str, tickets: list[i
 
     total_pnl = 0.0
     matched_deals = 0
+    delays = [0.2] * 5 + [0.5] * 10 + [1.0] * 10
 
     if tickets:
         for t in tickets:
             t_pnl = 0.0
             found_out = False
-            for _ in range(15):
+            for sleep_sec in delays:
                 deals = mt5_worker.history_deals_get(position=t)
+                if not deals:
+                    deals = mt5_worker.history_deals_get(ticket=t)
                 if deals:
                     for d in deals:
-                        if d.entry == mt5_worker.DEAL_ENTRY_OUT or d.entry == 2:
-                            t_pnl += (d.profit + d.swap + d.commission)
+                        entry = getattr(d, 'entry', -1)
+                        if entry in (mt5_worker.DEAL_ENTRY_OUT, 1, 2, 3):
+                            profit = getattr(d, 'profit', 0.0)
+                            swap = getattr(d, 'swap', 0.0)
+                            comm = getattr(d, 'commission', 0.0)
+                            fee = getattr(d, 'fee', 0.0)
+                            t_pnl += (profit + swap + comm + fee)
                             found_out = True
                     if found_out:
                         break
-                time.sleep(0.2)
+                time.sleep(sleep_sec)
 
             if found_out:
                 total_pnl += t_pnl
                 matched_deals += 1
             else:
-                now = int(time.time())
-                deals = mt5_worker.history_deals_get(now - 86400, now + 3600)
+                now_ts = int(time.time())
+                deals = mt5_worker.history_deals_get(now_ts - 172800, now_ts + 86400)
+                if not deals:
+                    dt_from = datetime.datetime.now() - datetime.timedelta(days=2)
+                    dt_to = datetime.datetime.now() + datetime.timedelta(days=1)
+                    deals = mt5_worker.history_deals_get(dt_from, dt_to)
+
                 if deals:
-                    for d in deals:
-                        if (d.position_id == t or d.order == t) and (d.entry == mt5_worker.DEAL_ENTRY_OUT or d.entry == 2):
-                            total_pnl += (d.profit + d.swap + d.commission)
+                    for d in reversed(deals):
+                        pos_id = getattr(d, 'position_id', 0)
+                        ord_id = getattr(d, 'order', 0)
+                        deal_id = getattr(d, 'deal', 0)
+                        entry = getattr(d, 'entry', -1)
+                        if (pos_id == t or ord_id == t or deal_id == t) and entry in (mt5_worker.DEAL_ENTRY_OUT, 1, 2, 3):
+                            profit = getattr(d, 'profit', 0.0)
+                            swap = getattr(d, 'swap', 0.0)
+                            comm = getattr(d, 'commission', 0.0)
+                            fee = getattr(d, 'fee', 0.0)
+                            total_pnl += (profit + swap + comm + fee)
                             matched_deals += 1
                             break
     else:
-        now = int(time.time())
-        deals = mt5_worker.history_deals_get(now - 3600, now + 3600)
+        now_ts = int(time.time())
+        deals = mt5_worker.history_deals_get(now_ts - 600, now_ts + 60)
         if deals:
             for d in reversed(deals):
-                if d.symbol == symbol and (d.entry == mt5_worker.DEAL_ENTRY_OUT or d.entry == 2):
-                    total_pnl = (d.profit + d.swap + d.commission)
+                if getattr(d, 'symbol', '') == symbol and getattr(d, 'entry', -1) in (mt5_worker.DEAL_ENTRY_OUT, 1, 2, 3):
+                    profit = getattr(d, 'profit', 0.0)
+                    swap = getattr(d, 'swap', 0.0)
+                    comm = getattr(d, 'commission', 0.0)
+                    fee = getattr(d, 'fee', 0.0)
+                    total_pnl = (profit + swap + comm + fee)
                     matched_deals = 1
                     break
 
@@ -869,6 +895,7 @@ def get_multi_account_cycle_profit(strategy_name: str, symbol: str, tickets_per_
     Mengambil real profit tertutup dari SELURUH akun target untuk siklus yang baru saja selesai.
     tickets_per_account: dict misal {"ACC1": [999120865], "ACC3": [999121747]}
     """
+    import datetime
     accounts = get_target_accounts(strategy_name)
     if not accounts:
         return {"accounts": {}, "total_profit": 0.0}
@@ -883,6 +910,7 @@ def get_multi_account_cycle_profit(strategy_name: str, symbol: str, tickets_per_
 
     results_map = {}
     total_profit = 0.0
+    delays = [0.2] * 5 + [0.5] * 10 + [1.0] * 10
 
     # 1. Query ACC1 di thread utama jika ada di target
     if local_acc:
@@ -892,33 +920,57 @@ def get_multi_account_cycle_profit(strategy_name: str, symbol: str, tickets_per_
             for t in p1_tickets:
                 t_pnl = 0.0
                 found_out = False
-                for _ in range(15):
+                for sleep_sec in delays:
                     deals = mt5.history_deals_get(position=t)
+                    if not deals:
+                        deals = mt5.history_deals_get(ticket=t)
                     if deals:
                         for d in deals:
-                            if d.entry == mt5.DEAL_ENTRY_OUT or d.entry == 2:
-                                t_pnl += (d.profit + d.swap + d.commission)
+                            entry = getattr(d, 'entry', -1)
+                            if entry in (mt5.DEAL_ENTRY_OUT, 1, 2, 3):
+                                profit = getattr(d, 'profit', 0.0)
+                                swap = getattr(d, 'swap', 0.0)
+                                comm = getattr(d, 'commission', 0.0)
+                                fee = getattr(d, 'fee', 0.0)
+                                t_pnl += (profit + swap + comm + fee)
                                 found_out = True
                         if found_out:
                             break
-                    time.sleep(0.2)
+                    time.sleep(sleep_sec)
                 if found_out:
                     p1_pnl += t_pnl
                 else:
-                    now = int(time.time())
-                    deals = mt5.history_deals_get(now - 86400, now + 3600)
+                    now_ts = int(time.time())
+                    deals = mt5.history_deals_get(now_ts - 172800, now_ts + 86400)
+                    if not deals:
+                        dt_from = datetime.datetime.now() - datetime.timedelta(days=2)
+                        dt_to = datetime.datetime.now() + datetime.timedelta(days=1)
+                        deals = mt5.history_deals_get(dt_from, dt_to)
+
                     if deals:
-                        for d in deals:
-                            if (d.position_id == t or d.order == t) and (d.entry == mt5.DEAL_ENTRY_OUT or d.entry == 2):
-                                p1_pnl += (d.profit + d.swap + d.commission)
+                        for d in reversed(deals):
+                            pos_id = getattr(d, 'position_id', 0)
+                            ord_id = getattr(d, 'order', 0)
+                            deal_id = getattr(d, 'deal', 0)
+                            entry = getattr(d, 'entry', -1)
+                            if (pos_id == t or ord_id == t or deal_id == t) and entry in (mt5.DEAL_ENTRY_OUT, 1, 2, 3):
+                                profit = getattr(d, 'profit', 0.0)
+                                swap = getattr(d, 'swap', 0.0)
+                                comm = getattr(d, 'commission', 0.0)
+                                fee = getattr(d, 'fee', 0.0)
+                                p1_pnl += (profit + swap + comm + fee)
                                 break
         else:
-            now = int(time.time())
-            deals = mt5.history_deals_get(now - 3600, now + 3600)
+            now_ts = int(time.time())
+            deals = mt5.history_deals_get(now_ts - 600, now_ts + 60)
             if deals:
                 for d in reversed(deals):
-                    if d.symbol == symbol and (d.entry == mt5.DEAL_ENTRY_OUT or d.entry == 2):
-                        p1_pnl = (d.profit + d.swap + d.commission)
+                    if getattr(d, 'symbol', '') == symbol and getattr(d, 'entry', -1) in (mt5.DEAL_ENTRY_OUT, 1, 2, 3):
+                        profit = getattr(d, 'profit', 0.0)
+                        swap = getattr(d, 'swap', 0.0)
+                        comm = getattr(d, 'commission', 0.0)
+                        fee = getattr(d, 'fee', 0.0)
+                        p1_pnl = (profit + swap + comm + fee)
                         break
 
         results_map[local_acc['key']] = {

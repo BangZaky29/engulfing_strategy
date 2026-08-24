@@ -1,0 +1,30 @@
+{
+  "detected_keys": [
+    "XAUUSD_D1_1787270400_Engulfing",
+    "XAUUSD_M5_1787581500_Engulfing",
+    "XAUUSD_M5_1787581200_Engulfing"
+  ],
+  "active_triggers": {
+    "XAUUSD_D1_Engulfing": [
+      "XAUUSD",
+      "D1",
+      "Engulfing",
+      "BUY",
+      {
+        "body_pct": 68.0,
+        "c1_pips": 9398,
+        "candle_ts": 1787270400
+      },
+      1787270400
+    ]
+  },
+  "last_candle_time": {
+    "XAUUSD_M5": 1787582400,
+    "XAUUSD_M15": 1787581800,
+    "XAUUSD_M30": 1787580000,
+    "XAUUSD_H1": 1787576400,
+    "XAUUSD_H4": 1787558400,
+    "XAUUSD_D1": 1787270400
+  },
+  "updated_at": "2026-08-24T18:45:42.971142"
+}
