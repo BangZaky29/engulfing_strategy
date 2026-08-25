@@ -1,30 +1,117 @@
 {
   "detected_keys": [
-    "XAUUSD_D1_1787270400_Engulfing",
+    "XAUUSD_M5_1787605500_Engulfing",
+    "XAUUSD_M5_1787637900_Engulfing",
+    "XAUUSD_M5_1787624100_SameCandle",
+    "XAUUSD_H4_1787572800_Engulfing",
+    "XAUUSD_M5_1787609700_Marubozu",
+    "XAUUSD_M5_1787606400_Engulfing",
+    "XAUUSD_M15_1787633100_Engulfing",
+    "XAUUSD_M5_1787615100_Engulfing",
+    "XAUUSD_M5_1787645700_Marubozu",
+    "XAUUSD_M15_1787634900_Marubozu",
+    "XAUUSD_M30_1787596200_Engulfing",
+    "XAUUSD_M5_1787604300_Marubozu",
+    "XAUUSD_M30_1787644800_Engulfing",
+    "XAUUSD_M5_1787627700_Marubozu",
+    "XAUUSD_M5_1787607000_Engulfing",
+    "XAUUSD_M15_1787600700_Engulfing",
+    "XAUUSD_H1_1787608800_Engulfing",
     "XAUUSD_M5_1787581500_Engulfing",
-    "XAUUSD_M5_1787581200_Engulfing"
+    "XAUUSD_M5_1787642100_Engulfing",
+    "XAUUSD_M15_1787644800_Engulfing",
+    "XAUUSD_M5_1787631600_Marubozu",
+    "XAUUSD_M30_1787630400_Engulfing",
+    "XAUUSD_M5_1787639700_Engulfing",
+    "XAUUSD_M15_1787642100_Engulfing",
+    "XAUUSD_M5_1787634900_Engulfing",
+    "XAUUSD_M15_1787602500_Engulfing",
+    "XAUUSD_M15_1787641200_Engulfing",
+    "XAUUSD_M5_1787624700_Marubozu",
+    "XAUUSD_M5_1787581200_Engulfing",
+    "XAUUSD_H1_1787594400_Engulfing",
+    "XAUUSD_M5_1787595900_Engulfing",
+    "XAUUSD_M5_1787635800_Engulfing",
+    "XAUUSD_H1_1787644800_Engulfing",
+    "XAUUSD_M5_1787610900_Engulfing",
+    "XAUUSD_M5_1787626800_Engulfing",
+    "XAUUSD_M5_1787609700_Engulfing",
+    "XAUUSD_M5_1787639100_Engulfing",
+    "XAUUSD_M15_1787635800_Engulfing",
+    "XAUUSD_H4_1787630400_Engulfing",
+    "XAUUSD_M5_1787649600_Engulfing",
+    "XAUUSD_M5_1787598000_Engulfing",
+    "XAUUSD_M30_1787648400_Engulfing",
+    "XAUUSD_M5_1787612400_Engulfing",
+    "XAUUSD_M15_1787609700_Engulfing",
+    "XAUUSD_M5_1787611500_Marubozu",
+    "XAUUSD_M5_1787607600_Engulfing",
+    "XAUUSD_M5_1787649300_Engulfing",
+    "XAUUSD_M5_1787646600_Engulfing",
+    "XAUUSD_M15_1787621400_Engulfing",
+    "XAUUSD_M5_1787621400_Engulfing",
+    "XAUUSD_M5_1787615700_Engulfing",
+    "XAUUSD_M5_1787623500_SameCandle",
+    "XAUUSD_M5_1787623800_SameCandle",
+    "XAUUSD_M15_1787628600_Engulfing",
+    "XAUUSD_M5_1787606100_Engulfing",
+    "XAUUSD_H1_1787619600_Marubozu",
+    "XAUUSD_M15_1787596200_Engulfing",
+    "XAUUSD_M5_1787603700_Engulfing",
+    "XAUUSD_M5_1787644800_Engulfing",
+    "XAUUSD_M30_1787599800_Engulfing",
+    "XAUUSD_M5_1787637000_Engulfing",
+    "XAUUSD_M5_1787647200_Engulfing",
+    "XAUUSD_H1_1787619600_Engulfing",
+    "XAUUSD_M15_1787635800_Marubozu",
+    "XAUUSD_H1_1787630400_Engulfing",
+    "XAUUSD_M15_1787615100_Engulfing"
   ],
   "active_triggers": {
-    "XAUUSD_D1_Engulfing": [
+    "XAUUSD_H4_Engulfing": [
       "XAUUSD",
-      "D1",
+      "H4",
+      "Engulfing",
+      "SELL",
+      {
+        "body_pct": 82.7,
+        "c1_pips": 5977,
+        "candle_ts": 1787630400
+      },
+      1787630400
+    ],
+    "XAUUSD_H1_Engulfing": [
+      "XAUUSD",
+      "H1",
       "Engulfing",
       "BUY",
       {
-        "body_pct": 68.0,
-        "c1_pips": 9398,
-        "candle_ts": 1787270400
+        "body_pct": 72.3,
+        "c1_pips": 1919,
+        "candle_ts": 1787644800
       },
-      1787270400
+      1787644800
+    ],
+    "XAUUSD_M30_Engulfing": [
+      "XAUUSD",
+      "M30",
+      "Engulfing",
+      "BUY",
+      {
+        "body_pct": 58.6,
+        "c1_pips": 875,
+        "candle_ts": 1787648400
+      },
+      1787648400
     ]
   },
   "last_candle_time": {
-    "XAUUSD_M5": 1787582400,
-    "XAUUSD_M15": 1787581800,
-    "XAUUSD_M30": 1787580000,
-    "XAUUSD_H1": 1787576400,
-    "XAUUSD_H4": 1787558400,
-    "XAUUSD_D1": 1787270400
+    "XAUUSD_M5": 1787649900,
+    "XAUUSD_M15": 1787649300,
+    "XAUUSD_M30": 1787648400,
+    "XAUUSD_H1": 1787644800,
+    "XAUUSD_H4": 1787630400,
+    "XAUUSD_D1": 1787529600
   },
-  "updated_at": "2026-08-24T18:45:42.971142"
+  "updated_at": "2026-08-25T13:30:03.762316"
 }
