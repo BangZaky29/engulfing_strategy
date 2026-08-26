@@ -193,6 +193,9 @@ class RCSEngine:
         state.trigger_spread_pts = spread
         state.save_to_file(symbol)
         
+        # REALTIME LOT UPDATE: Update dana dan lot secara realtime persis sebelum menembakkan trigger (OP1/OP2/OP3)
+        rcs_cfg.update_dynamic_lots(symbol)
+        
         current_price = tick.ask if direction == "BUY" else tick.bid
         if place_op1_order(symbol, current_price, state, rcs_cfg):
             state.op1_filled = True
