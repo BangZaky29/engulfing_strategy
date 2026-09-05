@@ -2,25 +2,28 @@ import os
 import time
 from dotenv import load_dotenv
 from config.mt5_config import MT5Config
-from mt5_client.connection import init_mt5_connection
+from mt5_client.connection import init_mt5
 from mt5_client.position_tracker.tracker import PositionTracker
 from strategies.sniperStrategy.sniper_core import SniperEngine
 from utils.colors import cprint, Colors
 
 def main():
+    import sys, io
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
     load_dotenv()
     print(cprint("🚀 Memulai Standalone Sniper Watchdog Engine...", Colors.CYAN))
     
     mt5_cfg = MT5Config()
-    if not init_mt5_connection(mt5_cfg.terminal_path):
+    if not init_mt5(mt5_cfg, "SNIPER"):
         print(cprint("❌ Gagal terhubung ke MT5. Exiting...", Colors.RED))
         return
 
     symbols_str = os.getenv("SNIPER_SYMBOL", "XAUUSD")
     symbols = [s.strip() for s in symbols_str.split(",") if s.strip()]
 
-    tracker = PositionTracker(symbols)
-    tracker.sync_all_positions()
+    tracker = PositionTracker()
 
     engine = SniperEngine(symbols, tracker)
 
@@ -30,7 +33,6 @@ def main():
 
     try:
         while True:
-            tracker.sync_all_positions()
             for symbol in symbols:
                 engine.process_tick(symbol)
             time.sleep(2)

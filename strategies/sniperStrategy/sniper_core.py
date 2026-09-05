@@ -3,7 +3,7 @@ from typing import Dict, List, Any
 import os
 
 from config.sniper_config import SniperConfig
-from indicatorInfo.sniperInfo.sniper_state import read_sniper_trigger, get_sniper_trigger_age_seconds, mark_sniper_consumed
+from strategies.strategy_rcs.sniper_trigger_reader import read_sniper_trigger, get_sniper_trigger_age_seconds, mark_sniper_consumed
 from mt5_client.position_tracker.tracker import PositionTracker
 from strategies.strategy_rcs.rcs_order_manager import send_market_order_rcs, send_pending_order_rcs, close_position_by_ticket, cancel_pending_order_rcs
 from strategies.sniperStrategy.sniper_state import SniperStrategyState
