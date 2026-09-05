@@ -39,7 +39,24 @@ class SniperConfig:
         default_factory=lambda: os.getenv("SNIPER_TF_CONFIRM", "M5")
     )
     candle_count: int = field(
-        default_factory=lambda: int(os.getenv("SNIPER_CANDLE_COUNT", "50"))
+        default_factory=lambda: int(os.getenv("SNIPER_CANDLE_COUNT", "150"))
+    )
+
+    # --- EMA Filter ---
+    ema_filter_primary_enabled: bool = field(
+        default_factory=lambda: os.getenv("SNIPER_EMA_FILTER_PRIMARY_ENABLED", "true").lower() == "true"
+    )
+    ema_filter_confirm_enabled: bool = field(
+        default_factory=lambda: os.getenv("SNIPER_EMA_FILTER_CONFIRM_ENABLED", "true").lower() == "true"
+    )
+    ema_period: int = field(
+        default_factory=lambda: int(os.getenv("SNIPER_EMA_PERIOD", "20"))
+    )
+    ema_min_dist_pts: int = field(
+        default_factory=lambda: int(os.getenv("SNIPER_EMA_MIN_DIST_PTS", "0"))
+    )
+    ema_max_dist_pts: int = field(
+        default_factory=lambda: int(os.getenv("SNIPER_EMA_MAX_DIST_PTS", "200"))
     )
 
     # --- Lot & Execution ---
@@ -60,6 +77,21 @@ class SniperConfig:
     group_jid: str = field(
         default_factory=lambda: os.getenv(
             "SNIPER_GROUP_JID", "120363431394730386@g.us"
+        )
+    )
+    op_group_jid: str = field(
+        default_factory=lambda: os.getenv(
+            "PRIVATE_JID", "120363406387314492@g.us"
+        )
+    )
+    profit_group_jid: str = field(
+        default_factory=lambda: os.getenv(
+            "PROFIT_SIGNAL", "120363426323493032@g.us"
+        )
+    )
+    loss_group_jid: str = field(
+        default_factory=lambda: os.getenv(
+            "LOSS_SIGNAL", "120363408479494192@g.us"
         )
     )
 

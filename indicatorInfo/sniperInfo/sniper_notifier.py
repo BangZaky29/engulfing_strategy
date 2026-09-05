@@ -11,11 +11,13 @@ from utils.colors import cprint, Colors
 from database.supabase_client import execute_supabase
 
 
+from config.sniper_config import SniperConfig
+
 class SniperNotifier:
     """Handle pengiriman notifikasi Sniper ke WA Group via wa_outbox."""
 
-    def __init__(self, group_jid: str):
-        self.group_jid = group_jid
+    def __init__(self, config: SniperConfig):
+        self.config = config
         self._sent_dedupe_keys = set()
         self.last_sent_time = 0.0
 
@@ -60,11 +62,62 @@ class SniperNotifier:
             f"   {tf_confirm} tidak mengkonfirmasi sebelum {tf_primary} candle baru.\n"
             f"   🔄 Reset — menunggu trigger {tf_primary} berikutnya.\n"
             f"\n"
-            f"⏰ {datetime.now().strftime('%H:%M WIB')}"
+            f"⏰ {datetime.now().strftime('%H:%M WIB')}\n\n"
+            f"[SNIPER]"
         )
-        self._send(message, f"sniper_expired_{symbol}_{int(time.time())}")
+        self._send(message, f"sniper_expired_{symbol}_{int(time.time())}", self.config.group_jid)
 
-    def _send(self, message: str, dedupe_key: str):
+    def notify_startup(self, acc_info: dict, symbols: list):
+        """Kirim notifikasi saat bot sniper menyala."""
+        sym_str = ", ".join(symbols)
+        msg = (
+            f"🚀 *SNIPER ENGINE STARTED*\n"
+            f"Akun: {acc_info.get('name', 'Unknown')}\n"
+            f"Saldo: ${acc_info.get('balance', 0):.2f}\n"
+            f"Symbols: {sym_str}\n"
+            f"TF: {self.config.tf_primary} → {self.config.tf_confirm}\n"
+            f"Entry: {self.config.entry_percent}%\n"
+            f"TP: {self.config.tp_percent}%\n"
+            f"EMA Filter: M30={'ON' if self.config.ema_filter_primary_enabled else 'OFF'}, M5={'ON' if self.config.ema_filter_confirm_enabled else 'OFF'}\n\n"
+            f"⏰ {datetime.now().strftime('%H:%M WIB')}\n\n"
+            f"[SNIPER]"
+        )
+        self._send(msg, f"sniper_startup_{int(time.time())}", self.config.group_jid)
+
+    def notify_op_signal(self, symbol: str, direction: str, ticket: int, entry_price: float, sl: float, tp: float):
+        """Kirim notifikasi saat pending order dipasang atau limit tersentuh."""
+        emoji = "🟢" if direction == "BUY" else "🔴"
+        msg = (
+            f"🛒 *SNIPER OP SIGNAL*\n"
+            f"   📌 *{symbol}* - {direction} {emoji}\n"
+            f"   Ticket: #{ticket}\n"
+            f"   Entry: {entry_price:.5f}\n"
+            f"   SL: {sl:.5f}\n"
+            f"   TP: {tp:.5f}\n\n"
+            f"⏰ {datetime.now().strftime('%H:%M WIB')}\n\n"
+            f"[SNIPER]"
+        )
+        self._send(msg, f"sniper_op_{ticket}_{int(time.time())}", self.config.op_group_jid)
+
+    def notify_profit_loss(self, symbol: str, ticket: int, profit: float, pips: int, img_url: str):
+        """Kirim notifikasi saat order diclose (SL/TP) beserta gambar."""
+        is_profit = profit > 0
+        status_str = "PROFIT 🤑" if is_profit else "LOSS 😭"
+        emoji = "📈" if is_profit else "📉"
+        
+        msg = (
+            f"{emoji} *SNIPER {status_str}*\n"
+            f"   📌 *{symbol}*\n"
+            f"   Ticket: #{ticket}\n"
+            f"   Hasil: ${profit:.2f} ({pips} pts)\n\n"
+            f"📷 Chart: {img_url if img_url else 'No Image'}\n\n"
+            f"⏰ {datetime.now().strftime('%H:%M WIB')}\n\n"
+            f"[SNIPER]"
+        )
+        target_jid = self.config.profit_group_jid if is_profit else self.config.loss_group_jid
+        self._send(msg, f"sniper_close_{ticket}_{int(time.time())}", target_jid)
+
+    def _send(self, message: str, dedupe_key: str, target_jid: str):
         """Kirim pesan ke WA via Supabase wa_outbox."""
         # Cooldown minimal 5 detik
         now = time.time()
@@ -81,7 +134,7 @@ class SniperNotifier:
         payload = {
             "source_table": "sniper_system",
             "event_type": "SNIPER_TRIGGER",
-            "group_jid": self.group_jid,
+            "group_jid": target_jid,
             "message_type": "TEXT",
             "message": message,
             "dedupe_key": full_key,
@@ -93,7 +146,7 @@ class SniperNotifier:
             )
             self.last_sent_time = now
             self._sent_dedupe_keys.add(full_key)
-            print(cprint(f"📲 [SNIPER] Notifikasi terkirim ke {self.group_jid}", Colors.GREEN))
+            print(cprint(f"📲 [SNIPER] Notifikasi terkirim ke {target_jid}", Colors.GREEN))
         except Exception as e:
             err_str = str(e)
             if "23505" in err_str or "duplicate" in err_str.lower():

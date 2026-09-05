@@ -48,7 +48,7 @@ class SniperMonitor:
 
     def __init__(self):
         self.config = SniperConfig.from_env()
-        self.notifier = SniperNotifier(self.config.group_jid)
+        self.notifier = SniperNotifier(self.config)
 
         # State per symbol
         self.states: dict[str, SniperState] = {
@@ -116,15 +116,23 @@ class SniperMonitor:
         if state.phase == SniperPhase.IDLE and primary_changed:
             direction = detect_engulfing_murni(primary_candle, source="scanner")
             if direction:
-                state.set_primary_trigger(direction, primary_ts)
-                print(cprint(
-                    f"🔫 [{symbol}] {self.config.tf_primary} Engulfing Murni {direction} "
-                    f"terdeteksi — Menunggu {self.config.tf_confirm} konfirmasi...",
-                    Colors.CYAN,
-                ))
-                self.notifier.notify_primary_trigger(
-                    symbol, direction, self.config.tf_primary, self.config.tf_confirm
-                )
+                # EMA Filter (Primary M30)
+                if self.config.ema_filter_primary_enabled:
+                    passed, reason = self._check_ema_filter(primary_candle, direction)
+                    if not passed:
+                        print(cprint(f"⏩ [{symbol}] {self.config.tf_primary} Engulfing {direction} diabaikan (EMA Filter): {reason}", Colors.YELLOW))
+                        direction = None
+                
+                if direction:
+                    state.set_primary_trigger(direction, primary_ts)
+                    print(cprint(
+                        f"🔫 [{symbol}] {self.config.tf_primary} Engulfing Murni {direction} "
+                        f"terdeteksi — Menunggu {self.config.tf_confirm} konfirmasi...",
+                        Colors.CYAN,
+                    ))
+                    self.notifier.notify_primary_trigger(
+                        symbol, direction, self.config.tf_primary, self.config.tf_confirm
+                    )
 
         # ============================
         # 2. POLL CONFIRM TF (M5)
@@ -151,8 +159,16 @@ class SniperMonitor:
         # Cek engulfing murni di confirm TF
         direction = detect_engulfing_murni(confirm_candle, source="scanner")
         if direction and direction == state.primary_direction:
-            # ✅ CONFIRMED! M30 + M5 sinkron engulfing murni
-            state.set_confirmed(direction, confirm_ts)
+            # EMA Filter (Confirm M5)
+            if self.config.ema_filter_confirm_enabled:
+                passed, reason = self._check_ema_filter(confirm_candle, direction)
+                if not passed:
+                    print(cprint(f"⏩ [{symbol}] {self.config.tf_confirm} Engulfing {direction} diabaikan (EMA Filter): {reason}", Colors.YELLOW))
+                    direction = None
+            
+            if direction:
+                # ✅ CONFIRMED! M30 + M5 sinkron engulfing murni
+                state.set_confirmed(direction, confirm_ts)
 
             print(cprint(
                 f"🎯 SNIPER | {symbol} {self.config.tf_primary}-{self.config.tf_confirm} "
@@ -184,22 +200,37 @@ class SniperMonitor:
 
     def _get_candle_data(self, symbol: str, tf_str: str) -> dict | None:
         """
-        Ambil data 2 candle terakhir yang sudah close dari MT5.
+        Ambil data candle yang sudah close dari MT5 dan hitung EMA jika perlu.
         Format output kompatibel dengan murni_detector (source='scanner').
         """
         tf_mt5 = TF_MAPPING.get(tf_str, mt5.TIMEFRAME_M5)
 
-        rates = mt5.copy_rates_from_pos(symbol, tf_mt5, 1, 3)
+        is_ema_needed_here = (tf_str == self.config.tf_primary and self.config.ema_filter_primary_enabled) or \
+                             (tf_str == self.config.tf_confirm and self.config.ema_filter_confirm_enabled)
+        
+        fetch_count = self.config.candle_count if is_ema_needed_here else 3
+        rates = mt5.copy_rates_from_pos(symbol, tf_mt5, 1, fetch_count)
         if rates is None or len(rates) < 2:
             return None
 
         # C1 = candle terakhir yang sudah close, C2 = sebelumnya
         c1 = rates[-1]
         c2 = rates[-2]
+        
+        # Hitung EMA
+        ema_now = 0.0
+        if is_ema_needed_here and len(rates) >= self.config.ema_period:
+            import pandas as pd
+            df = pd.DataFrame(rates)
+            ema_series = df["close"].ewm(span=self.config.ema_period, adjust=False).mean()
+            ema_now = float(ema_series.iloc[-1])
 
         c1_range = c1["high"] - c1["low"]
         body = abs(c1["close"] - c1["open"])
         body_pct = (body / c1_range * 100) if c1_range > 0 else 0
+        
+        info = mt5.symbol_info(symbol)
+        point = info.point if info else 0.0001
 
         return {
             "close_": float(c1["close"]),
@@ -212,4 +243,39 @@ class SniperMonitor:
             "c2_low": float(c2["low"]),
             "body_pct": body_pct,
             "candle_ts": int(c1["time"]),
+            "ema_now": ema_now,
+            "point": point
         }
+
+    def _check_ema_filter(self, candle: dict, direction: str) -> tuple[bool, str]:
+        c1_open = candle["open_"]
+        c1_close = candle["close_"]
+        ema = candle["ema_now"]
+        point = candle["point"]
+        
+        if ema == 0.0:
+            return False, "EMA belum terhitung"
+            
+        dist_open_ema = int(round(abs(c1_open - ema) / point)) if point > 0 else 0
+        
+        # Opsi B: Body Only - Open & Close tidak boleh kena EMA.
+        if direction == "BUY":
+            # BUY: Trend Bullish -> Candle body harus murni di ATAS EMA
+            if c1_open <= ema:
+                return False, f"Open C1 ({c1_open}) menyentuh/berada di bawah EMA ({ema:.5f})"
+            if c1_close <= ema:
+                return False, f"Close C1 ({c1_close}) menyentuh/berada di bawah EMA ({ema:.5f})"
+        else:
+            # SELL: Trend Bearish -> Candle body harus murni di BAWAH EMA
+            if c1_open >= ema:
+                return False, f"Open C1 ({c1_open}) menyentuh/berada di atas EMA ({ema:.5f})"
+            if c1_close >= ema:
+                return False, f"Close C1 ({c1_close}) menyentuh/berada di atas EMA ({ema:.5f})"
+                
+        # Validasi Jarak EMA
+        if dist_open_ema < self.config.ema_min_dist_pts:
+            return False, f"Jarak Open-EMA ({dist_open_ema} pts) < min ({self.config.ema_min_dist_pts})"
+        if dist_open_ema > self.config.ema_max_dist_pts:
+            return False, f"Jarak Open-EMA ({dist_open_ema} pts) > max ({self.config.ema_max_dist_pts})"
+            
+        return True, "OK"

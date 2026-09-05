@@ -11,6 +11,8 @@ from config.rcs_config import RCSConfig
 from mt5_client.position_tracker.models import PositionSnapshot
 from utils.colors import cprint, Colors
 
+from indicatorInfo.sniperInfo.sniper_notifier import SniperNotifier
+
 class SniperEngine:
     def __init__(self, symbols: List[str], tracker: PositionTracker):
         self.symbols = symbols
@@ -18,6 +20,7 @@ class SniperEngine:
         self.config: SniperConfig = SniperConfig.from_env()
         self.states: Dict[str, SniperStrategyState] = {sym: SniperStrategyState.load(sym) for sym in symbols}
         self.last_m5_times: Dict[str, int] = {sym: 0 for sym in symbols}
+        self.notifier = SniperNotifier(self.config)
 
     def process_tick(self, symbol: str) -> None:
         if not self.config.strategy_enabled:
@@ -72,6 +75,7 @@ class SniperEngine:
                 pos = mt5.positions_get(ticket=state.active_ticket)
                 if pos and len(pos) > 0:
                     close_position_by_ticket(state.active_ticket, "SNIPER_CUTLOSS")
+                    self._handle_closed_trade(symbol, state)
                 else:
                     # Mungkin masih pending limit
                     cancel_pending_order_rcs(state.active_ticket)
@@ -98,7 +102,71 @@ class SniperEngine:
         ord = mt5.orders_get(ticket=state.active_ticket)
         if (not pos or len(pos) == 0) and (not ord or len(ord) == 0):
             # Sudah closed (TP kena atau manual)
+            self._handle_closed_trade(symbol, state)
             state.reset()
+
+    def _handle_closed_trade(self, symbol: str, state: SniperStrategyState):
+        """Ambil screenshot dan profit saat posisi tertutup, lalu kirim ke WA."""
+        ticket = state.active_ticket
+        deals = mt5.history_deals_get(position=ticket)
+        if not deals:
+            return
+            
+        profit = sum(d.profit + d.commission + d.swap for d in deals)
+        
+        info = mt5.symbol_info(symbol)
+        pips = 0
+        if info and info.point > 0:
+            open_price = state.trigger_price
+            close_price = deals[-1].price if deals else open_price
+            diff = close_price - open_price
+            if state.trigger_direction == "SELL":
+                diff = open_price - close_price
+            pips = int(round(diff / info.point))
+            
+        img_url = ""
+        # Screenshot
+        from mt5_client.visualizer import generate_screenshot
+        from config.mt5_config import EMAConfig, MT5Config
+        from database.supabase_storage import upload_screenshot
+        from mt5_client.trade_monitor.session_utils import get_indonesian_date_str
+        import os
+        
+        try:
+            mt5_cfg = MT5Config()
+            tf_const = mt5_cfg.get_mt5_timeframe(self.config.tf_confirm)
+            rates = mt5.copy_rates_from_pos(symbol, tf_const, 0, 30)
+            if rates is not None and len(rates) > 0:
+                TEMP_DIR = "temp_screenshots"
+                new_filename = f"{state.trigger_direction}_SNIPER_{symbol}_{ticket}.png"
+                new_path = os.path.join(TEMP_DIR, new_filename)
+                
+                img_path = generate_screenshot(
+                    rates=rates,
+                    ticket_id=ticket,
+                    op_price=state.trigger_price,
+                    sl_price=0.0,
+                    tp_price=0.0,
+                    ema_cfg=EMAConfig(),
+                    mode=state.trigger_direction,
+                    tf_label=self.config.tf_confirm,
+                    output_dir=TEMP_DIR,
+                    num_candles=30
+                )
+                if img_path and os.path.exists(img_path):
+                    os.rename(img_path, new_path)
+                    folder_date = get_indonesian_date_str().replace('/', '-')
+                    success, uploaded_url = upload_screenshot(new_path, "sniper_trades", folder_date, new_filename)
+                    if success:
+                        img_url = uploaded_url
+                    try:
+                        os.remove(new_path)
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(cprint(f"⚠️ Gagal generate SS Sniper: {e}", Colors.YELLOW))
+            
+        self.notifier.notify_profit_loss(symbol, ticket, profit, pips, img_url)
 
     def _check_basket_recovery(self, symbol: str, snapshot: PositionSnapshot, sniper_state: SniperStrategyState) -> None:
         """Cek apakah kombinasi floating RCS Hedging + Sniper sudah mencapai +$2"""
@@ -240,4 +308,5 @@ class SniperEngine:
             state.save()
 
             print(cprint(f"✅ [{symbol}] SNIPER STRATEGY Berhasil! Ticket: {state.active_ticket}", Colors.GREEN))
+            self.notifier.notify_op_signal(symbol, direction, state.active_ticket, state.trigger_price, 0.0, tp_price)
             mark_sniper_consumed("SNIPER_STRATEGY")
