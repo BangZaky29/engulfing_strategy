@@ -3,7 +3,7 @@ import time
 from dotenv import load_dotenv
 from config.mt5_config import MT5Config
 from mt5_client.connection import init_mt5_connection
-from strategies.strategy_rcs.position_tracker import PositionTracker
+from mt5_client.position_tracker.tracker import PositionTracker
 from strategies.sniperStrategy.sniper_core import SniperEngine
 from utils.colors import cprint, Colors
 

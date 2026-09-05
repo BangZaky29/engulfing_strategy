@@ -4,10 +4,11 @@ import os
 
 from config.sniper_config import SniperConfig
 from indicatorInfo.sniperInfo.sniper_state import read_sniper_trigger, get_sniper_trigger_age_seconds, mark_sniper_consumed
-from strategies.strategy_rcs.position_tracker import PositionTracker
+from mt5_client.position_tracker.tracker import PositionTracker
 from strategies.strategy_rcs.rcs_order_manager import send_market_order_rcs, send_pending_order_rcs, close_position_by_ticket, cancel_pending_order_rcs
 from strategies.sniperStrategy.sniper_state import SniperStrategyState
-from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
+from config.rcs_config import RCSConfig
+from mt5_client.position_tracker.models import PositionSnapshot
 from utils.colors import cprint, Colors
 
 class SniperEngine:
@@ -26,9 +27,11 @@ class SniperEngine:
         
         # Basket Recovery Check
         if self.config.help_rcs_recovery:
-            rcs_state = RCSState.load(symbol)
-            if rcs_state.phase == RCSPhase.FREEZE and rcs_state.op3_filled:
-                self._check_basket_recovery(symbol, rcs_state, state)
+            snapshot = self.tracker.poll_positions(symbol)
+            rcs_cfg = RCSConfig.from_env()
+            is_rcs_hedging = any(p.magic_number == rcs_cfg.magic_op3 for p in snapshot.system_positions)
+            if is_rcs_hedging:
+                self._check_basket_recovery(symbol, snapshot, state)
 
         # Cek Cutloss SL / Close All / Expiration
         if state.active_ticket is not None:
@@ -97,43 +100,36 @@ class SniperEngine:
             # Sudah closed (TP kena atau manual)
             state.reset()
 
-    def _check_basket_recovery(self, symbol: str, rcs_state: RCSState, sniper_state: SniperStrategyState) -> None:
+    def _check_basket_recovery(self, symbol: str, snapshot: PositionSnapshot, sniper_state: SniperStrategyState) -> None:
         """Cek apakah kombinasi floating RCS Hedging + Sniper sudah mencapai +$2"""
         total_pnl = 0.0
         tickets_to_close = []
+        rcs_cfg = RCSConfig.from_env()
 
-        # PnL RCS
-        for tkt in [rcs_state.op1_ticket, rcs_state.op2_ticket, rcs_state.op3_ticket]:
-            if tkt:
-                pos = mt5.positions_get(ticket=tkt)
-                if pos and len(pos) > 0:
-                    total_pnl += pos[0].profit
-                    tickets_to_close.append(tkt)
-
-        # PnL Sniper
-        if sniper_state.active_ticket:
-            pos = mt5.positions_get(ticket=sniper_state.active_ticket)
-            if pos and len(pos) > 0:
-                total_pnl += pos[0].profit
-                tickets_to_close.append(sniper_state.active_ticket)
+        # PnL RCS & Sniper dari PositionSnapshot
+        for pos in snapshot.system_positions:
+            if pos.magic_number in [rcs_cfg.magic_op1, rcs_cfg.magic_op2, rcs_cfg.magic_op3, self.config.magic_number]:
+                total_pnl += pos.net_profit
+                tickets_to_close.append(pos.ticket)
 
         if len(tickets_to_close) > 0 and total_pnl >= 2.0:
             print(cprint(f"🏆 [{symbol}] BASKET RECOVERY TERCAPAI! Total PnL: ${total_pnl:.2f} >= $2.00", Colors.GREEN))
             for tkt in tickets_to_close:
                 close_position_by_ticket(tkt, "BASKET_RECOVERY_SNIPER")
             
-            # Reset RCS dan Sniper
-            rcs_state.reset(symbol)
+            # Reset Sniper
             sniper_state.reset()
             self.tracker.clear_closed_manual(symbol)
+            # Catatan: RCS State tidak perlu direset manual di sini. Watchdog RCS 
+            # akan melihat OP3 (dan OP lainnya) sudah tertutup sehingga melakukan Unfreeze otomatis.
             print(cprint(f"✅ [{symbol}] Semua posisi Hedging RCS & Sniper telah dibersihkan.", Colors.GREEN))
 
     def _check_and_execute_trigger(self, symbol: str, state: SniperStrategyState) -> None:
         snapshot = self.tracker.poll_positions(symbol)
         
         # Cek status RCS
-        rcs_state = RCSState.load(symbol)
-        is_rcs_hedging = rcs_state.phase == RCSPhase.FREEZE and rcs_state.op3_filled
+        rcs_cfg = RCSConfig.from_env()
+        is_rcs_hedging = any(p.magic_number == rcs_cfg.magic_op3 for p in snapshot.system_positions)
 
         # Mesin Sniper mandiri tidak mengeksekusi jika ADA OP APAPUN di sistem.
         # Pengecualian: Jika saklar SNIPER_HELP_RCS_RECOVERY nyala dan RCS sedang Hedging, boleh mengeksekusi.
