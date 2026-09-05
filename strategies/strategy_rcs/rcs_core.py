@@ -31,6 +31,14 @@ from strategies.strategy_rcs.rcs_notifier import (
     notify_result, notify_system_status, notify_company_target_reached_rcs
 )
 
+# -- Sniper Recovery --
+from strategies.strategy_rcs.sniper_trigger_reader import (
+    read_sniper_trigger,
+    mark_sniper_consumed,
+    get_sniper_trigger_age_seconds,
+)
+from config.sniper_config import SniperConfig
+
 from utils.colors import cprint, Colors
 
 
@@ -48,6 +56,18 @@ class RCSEngine:
         
         self.states: Dict[str, RCSState] = {sym: RCSState() for sym in symbols}
         self.last_candle_times: Dict[str, Any] = {sym: None for sym in symbols}
+
+        # Sniper Config (untuk recovery saat FREEZE)
+        self.sniper_cfg: Optional[SniperConfig] = None
+        self.sniper_recovery_tickets: Dict[str, List[int]] = {sym: [] for sym in symbols}
+        self._sniper_block_logged: Dict[str, bool] = {sym: False for sym in symbols}
+        try:
+            cfg = SniperConfig.from_env()
+            if cfg.enabled:
+                self.sniper_cfg = cfg
+                print(cprint(f"🔫 [SNIPER RECOVERY] Aktif di RCS | Lot: {cfg.lot_size} | Magic: {cfg.magic_number}", Colors.CYAN))
+        except Exception as e:
+            print(cprint(f"⚠️ [SNIPER] Gagal load SniperConfig: {e}", Colors.YELLOW))
         
     def get_state(self, symbol: str) -> RCSState:
         return self.states[symbol]
@@ -355,7 +375,24 @@ class RCSEngine:
                 notify_freeze(symbol, state.freeze_start_floating_usd, rcs_cfg)
 
     def _handle_freeze_phase(self, symbol: str, state: RCSState, rcs_cfg: RCSConfig) -> None:
+        # === SNIPER RECOVERY CHECK (hanya saat OP3 terbuka / hedging aktif) ===
+        if self.sniper_cfg and state.op3_filled and state.freeze_is_hedge:
+            self._check_sniper_recovery(symbol, state, rcs_cfg)
+
         if check_unfreeze(symbol, state, rcs_cfg, tracker=self.tracker):
+            # --- CANCEL PENDING SNIPER ORDERS ---
+            if self.sniper_cfg and symbol in self.sniper_recovery_tickets:
+                import os
+                is_multi = os.getenv("MULTI_ACCOUNT_ENABLED", "false").lower() == "true"
+                if is_multi:
+                    from mt5_client.multi_account_dispatcher import cancel_multi_account_pending_orders
+                    cancel_multi_account_pending_orders("RCS", symbol, [self.sniper_cfg.magic_number])
+                else:
+                    from strategies.strategy_rcs.rcs_order_manager import cancel_pending_order_rcs
+                    for tkt in self.sniper_recovery_tickets[symbol]:
+                        cancel_pending_order_rcs(tkt)
+                self.sniper_recovery_tickets[symbol] = []
+
             profit, recovery = calculate_recovery(symbol, state, rcs_cfg, tracker=self.tracker)
             print(cprint(f"☀️ UNFREEZE! Semua posisi telah ditutup ({symbol}). Recovery: ${recovery:.2f}", Colors.GREEN))
             
@@ -371,3 +408,180 @@ class RCSEngine:
             notify_result(symbol, "Unfreeze Selesai", profit, recovery, rcs_cfg, state=state, multi_pnl_data=multi_pnl_data)
             state.reset(symbol)
             self.tracker.clear_closed_manual(symbol)
+
+    def _check_sniper_recovery(self, symbol: str, state: RCSState, rcs_cfg: RCSConfig) -> None:
+        """
+        Cek apakah ada trigger Sniper (Engulfing Murni M30+M5) yang siap
+        digunakan untuk recovery saat RCS dalam PHASE_FREEZE (OP3 terbuka).
+        
+        Ketentuan:
+        1. RCS harus dalam PHASE_FREEZE dengan OP3 filled (hedging aktif)
+        2. Sniper trigger file harus ada dan belum consumed
+        3. TIDAK ADA OP manual aktif — jika ada, recovery di-block
+        4. Arah OP recovery mengikuti arah Sniper (BUY/SELL)
+        5. Lot recovery menggunakan SNIPER_LOT_SIZE dari .env
+        """
+        if not self.sniper_cfg or not getattr(self.sniper_cfg, 'rcs_use_recovery', False):
+            return
+
+        sniper_trigger = read_sniper_trigger(symbol)
+        if not sniper_trigger:
+            return
+
+        direction = sniper_trigger.get("direction")
+        tf_primary = sniper_trigger.get("tf_primary", "M30")
+        tf_confirm = sniper_trigger.get("tf_confirm", "M5")
+
+        if not direction:
+            return
+
+        # Validasi umur trigger: maksimal 300 detik (5 menit / 1 candle M5).
+        # Jika sinyal terjadi saat belum ada hedging (hanya info), sinyal lama tidak akan ditembakkan.
+        age_sec = get_sniper_trigger_age_seconds(sniper_trigger)
+        if age_sec > 300:
+            return
+
+        # Cek OP Manual blocking
+        has_manual = self.tracker.has_manual_positions(symbol)
+        snapshot = self.tracker.poll_positions(symbol)
+        has_hanging_manual = (snapshot.manual_count > 0)
+
+        if has_manual or has_hanging_manual:
+            if not self._sniper_block_logged.get(symbol, False):
+                print(cprint(
+                    f"⚠️ [{symbol}] SNIPER Recovery BLOCKED: Ada {snapshot.manual_count} OP manual aktif.\n"
+                    f"   Recovery dengan Sniper tidak bisa dilakukan sampai OP manual tertutup.",
+                    Colors.YELLOW,
+                ))
+                self._sniper_block_logged[symbol] = True
+            return
+
+        # Reset block log jika manual sudah clear
+        self._sniper_block_logged[symbol] = False
+
+        # === EXECUTE SNIPER RECOVERY ===
+        sniper_lot = self.sniper_cfg.lot_size
+        sniper_magic = self.sniper_cfg.magic_number
+        tp_percent = getattr(self.sniper_cfg, 'tp_percent', 50.0)
+        entry_percent = getattr(self.sniper_cfg, 'entry_percent', 20.0)
+
+        # Ambil harga terkini
+        tick = mt5.symbol_info_tick(symbol)
+        if not tick:
+            print(cprint(f"⚠️ [{symbol}] SNIPER Recovery: Gagal ambil tick.", Colors.RED))
+            return
+
+        current_price = tick.ask if direction == "BUY" else tick.bid
+        emoji = "🟢" if direction == "BUY" else "🔴"
+
+        # --- Hitung TP dan OP berdasarkan persentase risk range M5 ---
+        tp_price = 0.0
+        tp_dist = 0.0
+        op_level = current_price
+        c1_high = sniper_trigger.get("m5_high", 0.0)
+        c1_low = sniper_trigger.get("m5_low", 0.0)
+        c1_close = sniper_trigger.get("m5_close", 0.0)
+
+        if c1_high > 0 and c1_low > 0:
+            risk_range = (c1_close - c1_low) if direction == "BUY" else (c1_high - c1_close)
+            tp_dist = risk_range * (tp_percent / 100.0)
+            op_dist_entry = risk_range * (entry_percent / 100.0)
+            
+            if direction == "BUY":
+                op_level = c1_close - op_dist_entry
+                tp_price = op_level + tp_dist
+            else:
+                op_level = c1_close + op_dist_entry
+                tp_price = op_level - tp_dist
+
+        # Cek apakah harus eksekusi Market (karena harga sudah kelewat Limit) atau pasang Limit Order
+        use_market = False
+        if direction == "BUY" and current_price <= op_level:
+            use_market = True
+        elif direction == "SELL" and current_price >= op_level:
+            use_market = True
+
+        print(cprint(
+            f"\n💥 [{symbol}] SNIPER RECOVERY FIRING!\n"
+            f"   ├── Trigger  : {tf_primary}-{tf_confirm} Engulfing Murni {emoji} {direction}\n"
+            f"   ├── Lot      : {sniper_lot}\n"
+            f"   ├── Price/Lim: {current_price:.5f} / {op_level:.5f}\n"
+            f"   ├── TP ({tp_percent}%) : {tp_price:.5f}\n"
+            f"   └── Magic    : {sniper_magic}",
+            Colors.GREEN,
+        ))
+
+        from strategies.strategy_rcs.rcs_order_manager import send_market_order_rcs, send_pending_order_rcs
+        if use_market:
+            res = send_market_order_rcs(
+                symbol=symbol,
+                action_str=direction,
+                price=current_price,
+                lot_size=sniper_lot,
+                magic_number=sniper_magic,
+                comment="SNIPER_RECOVERY",
+                tp=tp_price,
+                tp_dist=tp_dist
+            )
+        else:
+            order_type = mt5.ORDER_TYPE_BUY_LIMIT if direction == "BUY" else mt5.ORDER_TYPE_SELL_LIMIT
+            res = send_pending_order_rcs(
+                symbol=symbol,
+                order_type=order_type,
+                price=op_level,
+                lot_size=sniper_lot,
+                magic_number=sniper_magic,
+                comment="SNIPER_RECOVERY",
+                sl=0.0,
+                tp=tp_price
+            )
+
+        if res:
+            ticket = res.order
+            fill_price = res.price if (use_market and res.price) else op_level
+            self.sniper_recovery_tickets[symbol].append(ticket)
+
+            # Register ke PositionTracker
+            self.tracker.register_system_ticket(
+                symbol, ticket, "SNIPER", sniper_magic, direction, sniper_lot, fill_price
+            )
+
+            print(cprint(
+                f"✅ [{symbol}] SNIPER RECOVERY Berhasil! Tkt: {ticket} | Price: {fill_price:.5f} | Lot: {sniper_lot}",
+                Colors.GREEN,
+            ))
+
+            # Mark trigger sebagai consumed
+            mark_sniper_consumed("RCS")
+
+            # Kirim notifikasi WA ke SNIPER INFO group
+            try:
+                from database.supabase_client import execute_supabase
+                import hashlib
+                dedupe_raw = f"sniper_recovery_{symbol}_{direction}_{int(time.time())}"
+                dedupe_key = f"sniper_{hashlib.md5(dedupe_raw.encode()).hexdigest()[:16]}"
+                message = (
+                    f"💥 *SNIPER RECOVERY EXECUTED!*\n"
+                    f"   📌 *{symbol}*\n"
+                    f"   {emoji} {direction} | Lot: {sniper_lot}\n"
+                    f"   💰 Fill Price: {fill_price:.5f}\n"
+                    f"   🎫 Ticket: {ticket}\n"
+                    f"   🔫 Trigger: {tf_primary}-{tf_confirm} Engulfing Murni\n"
+                    f"\n"
+                    f"⏰ {datetime.datetime.now().strftime('%H:%M WIB')}"
+                )
+                execute_supabase(lambda sb: sb.table("wa_outbox").insert({
+                    "source_table": "sniper_system",
+                    "event_type": "SNIPER_RECOVERY",
+                    "group_jid": self.sniper_cfg.group_jid,
+                    "message_type": "TEXT",
+                    "message": message,
+                    "dedupe_key": dedupe_key,
+                }).execute())
+                print(cprint(f"📲 [SNIPER] Notifikasi recovery terkirim ke {self.sniper_cfg.group_jid}", Colors.GREEN))
+            except Exception as e:
+                err_str = str(e)
+                if "23505" not in err_str and "duplicate" not in err_str.lower():
+                    print(cprint(f"⚠️ [SNIPER] Gagal kirim notif recovery WA: {e}", Colors.YELLOW))
+        else:
+            print(cprint(f"❌ [{symbol}] SNIPER RECOVERY Gagal! Order tidak tereksekusi.", Colors.RED))

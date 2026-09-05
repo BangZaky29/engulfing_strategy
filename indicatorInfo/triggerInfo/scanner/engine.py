@@ -52,6 +52,17 @@ class MultiPatternScanner:
         group_jid = os.getenv("SCANNER_GROUP_JID", "120363410782502082@g.us")
         self.notifier = ScannerNotifier(group_jid)
 
+        # --- Sniper Monitor (Dual TF Engulfing Murni) ---
+        self.sniper = None
+        try:
+            from config.sniper_config import SniperConfig
+            sniper_cfg = SniperConfig.from_env()
+            if sniper_cfg.enabled:
+                from indicatorInfo.sniperInfo.sniper_monitor import SniperMonitor
+                self.sniper = SniperMonitor()
+        except Exception as e:
+            print(cprint(f"⚠️ [SNIPER] Gagal inisialisasi SniperMonitor: {e}", Colors.YELLOW))
+
         # ============================================================
         # STATE MANAGEMENT - Ironclad Deduplication
         # ============================================================
@@ -303,6 +314,13 @@ class MultiPatternScanner:
                                 new_triggers_this_cycle.append((sym, tf, pattern_name, direction, details))
                         except Exception as e:
                             print(cprint(f"⚠️ Error scanning {sym} {tf}: {e}", Colors.YELLOW))
+
+                # === SNIPER DUAL-TF MONITOR ===
+                if self.sniper:
+                    try:
+                        self.sniper.tick()
+                    except Exception as sniper_err:
+                        print(cprint(f"⚠️ [SNIPER] Exception di sniper tick: {sniper_err}", Colors.YELLOW))
 
                 # Kirim pesan HANYA jika ada trigger BARU atau EXPIRED
                 has_new = len(new_triggers_this_cycle) > 0
