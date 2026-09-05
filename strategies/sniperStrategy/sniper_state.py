@@ -13,6 +13,7 @@ class SniperStrategyState:
     trigger_price: float = 0.0
     c1_low: float = 0.0
     c1_high: float = 0.0
+    trigger_time: int = 0
 
     def save(self):
         try:
@@ -27,7 +28,8 @@ class SniperStrategyState:
                 "trigger_direction": self.trigger_direction,
                 "trigger_price": self.trigger_price,
                 "c1_low": self.c1_low,
-                "c1_high": self.c1_high
+                "c1_high": self.c1_high,
+                "trigger_time": self.trigger_time
             }
             
             with open(SNIPER_STATE_FILE, "w") as f:
@@ -49,7 +51,8 @@ class SniperStrategyState:
                             trigger_direction=sym_data.get("trigger_direction"),
                             trigger_price=sym_data.get("trigger_price", 0.0),
                             c1_low=sym_data.get("c1_low", 0.0),
-                            c1_high=sym_data.get("c1_high", 0.0)
+                            c1_high=sym_data.get("c1_high", 0.0),
+                            trigger_time=sym_data.get("trigger_time", 0)
                         )
         except Exception:
             pass
@@ -61,4 +64,5 @@ class SniperStrategyState:
         self.trigger_price = 0.0
         self.c1_low = 0.0
         self.c1_high = 0.0
+        self.trigger_time = 0
         self.save()

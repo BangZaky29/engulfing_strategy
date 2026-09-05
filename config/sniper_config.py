@@ -17,8 +17,11 @@ class SniperConfig:
     strategy_enabled: bool = field(
         default_factory=lambda: os.getenv("SNIPER_STRATEGY_ENABLED", "false").lower() == "true"
     )
-    rcs_use_recovery: bool = field(
-        default_factory=lambda: os.getenv("RCS_USE_SNIPER_RECOVERY", "false").lower() == "true"
+    help_rcs_recovery: bool = field(
+        default_factory=lambda: os.getenv("SNIPER_HELP_RCS_RECOVERY", "false").lower() == "true"
+    )
+    max_pending_candles: int = field(
+        default_factory=lambda: int(os.getenv("SNIPER_MAX_PENDING_CANDLES", "2"))
     )
     symbols: list = field(
         default_factory=lambda: [

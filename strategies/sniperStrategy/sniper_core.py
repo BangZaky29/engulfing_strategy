@@ -7,6 +7,7 @@ from indicatorInfo.sniperInfo.sniper_state import read_sniper_trigger, get_snipe
 from strategies.strategy_rcs.position_tracker import PositionTracker
 from strategies.strategy_rcs.rcs_order_manager import send_market_order_rcs, send_pending_order_rcs, close_position_by_ticket, cancel_pending_order_rcs
 from strategies.sniperStrategy.sniper_state import SniperStrategyState
+from strategies.strategy_rcs.rcs_state import RCSState, RCSPhase
 from utils.colors import cprint, Colors
 
 class SniperEngine:
@@ -23,7 +24,13 @@ class SniperEngine:
 
         state = self.states[symbol]
         
-        # Cek Cutloss SL / Close All
+        # Basket Recovery Check
+        if self.config.help_rcs_recovery:
+            rcs_state = RCSState.load(symbol)
+            if rcs_state.phase == RCSPhase.FREEZE and rcs_state.op3_filled:
+                self._check_basket_recovery(symbol, rcs_state, state)
+
+        # Cek Cutloss SL / Close All / Expiration
         if state.active_ticket is not None:
             self._check_cutloss_sl(symbol, state)
             return  # Tunggu sampai clear sebelum proses trigger baru
@@ -69,20 +76,70 @@ class SniperEngine:
                 print(cprint(f"✅ [{symbol}] SNIPER ORDER/POS {state.active_ticket} DITUTUP.", Colors.GREEN))
                 state.reset()
 
+            # Cek Expiration Max Pending Candles
+            if state.trigger_time > 0:
+                candles_passed = (current_m5_time - state.trigger_time) / 300
+                if candles_passed > self.config.max_pending_candles:
+                    ord = mt5.orders_get(ticket=state.active_ticket)
+                    if ord and len(ord) > 0: # Masih berupa pending order
+                        print(cprint(f"⌛ [{symbol}] SNIPER LIMIT EXPIRED! > {self.config.max_pending_candles} Candle M5 berlalu.", Colors.YELLOW))
+                        cancel_pending_order_rcs(state.active_ticket)
+                        print(cprint(f"✅ [{symbol}] SNIPER PENDING ORDER {state.active_ticket} DIBATALKAN.", Colors.GREEN))
+                        state.reset()
+                        return
+
             self.last_m5_times[symbol] = current_m5_time
 
         # Validasi manual apakah posisi sudah diclose oleh TP/SL MT5 asli
         pos = mt5.positions_get(ticket=state.active_ticket)
         ord = mt5.orders_get(ticket=state.active_ticket)
         if (not pos or len(pos) == 0) and (not ord or len(ord) == 0):
-            # Sudah closed (TP kena)
+            # Sudah closed (TP kena atau manual)
             state.reset()
 
+    def _check_basket_recovery(self, symbol: str, rcs_state: RCSState, sniper_state: SniperStrategyState) -> None:
+        """Cek apakah kombinasi floating RCS Hedging + Sniper sudah mencapai +$2"""
+        total_pnl = 0.0
+        tickets_to_close = []
+
+        # PnL RCS
+        for tkt in [rcs_state.op1_ticket, rcs_state.op2_ticket, rcs_state.op3_ticket]:
+            if tkt:
+                pos = mt5.positions_get(ticket=tkt)
+                if pos and len(pos) > 0:
+                    total_pnl += pos[0].profit
+                    tickets_to_close.append(tkt)
+
+        # PnL Sniper
+        if sniper_state.active_ticket:
+            pos = mt5.positions_get(ticket=sniper_state.active_ticket)
+            if pos and len(pos) > 0:
+                total_pnl += pos[0].profit
+                tickets_to_close.append(sniper_state.active_ticket)
+
+        if len(tickets_to_close) > 0 and total_pnl >= 2.0:
+            print(cprint(f"🏆 [{symbol}] BASKET RECOVERY TERCAPAI! Total PnL: ${total_pnl:.2f} >= $2.00", Colors.GREEN))
+            for tkt in tickets_to_close:
+                close_position_by_ticket(tkt, "BASKET_RECOVERY_SNIPER")
+            
+            # Reset RCS dan Sniper
+            rcs_state.reset(symbol)
+            sniper_state.reset()
+            self.tracker.clear_closed_manual(symbol)
+            print(cprint(f"✅ [{symbol}] Semua posisi Hedging RCS & Sniper telah dibersihkan.", Colors.GREEN))
+
     def _check_and_execute_trigger(self, symbol: str, state: SniperStrategyState) -> None:
-        # Mesin Sniper mandiri tidak mengeksekusi jika ADA OP APAPUN di sistem.
         snapshot = self.tracker.poll_positions(symbol)
+        
+        # Cek status RCS
+        rcs_state = RCSState.load(symbol)
+        is_rcs_hedging = rcs_state.phase == RCSPhase.FREEZE and rcs_state.op3_filled
+
+        # Mesin Sniper mandiri tidak mengeksekusi jika ADA OP APAPUN di sistem.
+        # Pengecualian: Jika saklar SNIPER_HELP_RCS_RECOVERY nyala dan RCS sedang Hedging, boleh mengeksekusi.
         if snapshot.system_count > 0 or snapshot.manual_count > 0:
-            return
+            if not (self.config.help_rcs_recovery and is_rcs_hedging and snapshot.manual_count == 0):
+                return
 
         sniper_trigger = read_sniper_trigger(symbol)
         if not sniper_trigger:
@@ -180,6 +237,10 @@ class SniperEngine:
             state.trigger_price = res.price if (use_market and res.price) else op_level
             state.c1_low = c1_low
             state.c1_high = c1_high
+            
+            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, 1)
+            state.trigger_time = int(rates[0]['time']) if rates else int(tick.time)
+            
             state.save()
 
             print(cprint(f"✅ [{symbol}] SNIPER STRATEGY Berhasil! Ticket: {state.active_ticket}", Colors.GREEN))
