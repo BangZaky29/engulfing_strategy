@@ -35,7 +35,7 @@ class SniperNotifier:
             f"\n"
             f"⏰ {datetime.now().strftime('%H:%M WIB')}"
         )
-        self._send(message, f"sniper_primary_{symbol}_{direction}_{int(time.time())}")
+        self._send(message, f"sniper_primary_{symbol}_{direction}_{int(time.time())}", self.config.group_jid)
 
     def notify_confirmed(self, symbol: str, direction: str, tf_primary: str, tf_confirm: str):
         """
@@ -50,7 +50,7 @@ class SniperNotifier:
             f"\n"
             f"⏰ {datetime.now().strftime('%H:%M WIB')}"
         )
-        self._send(message, f"sniper_confirmed_{symbol}_{direction}_{int(time.time())}")
+        self._send(message, f"sniper_confirmed_{symbol}_{direction}_{int(time.time())}", self.config.group_jid)
 
     def notify_expired(self, symbol: str, tf_primary: str, tf_confirm: str):
         """
